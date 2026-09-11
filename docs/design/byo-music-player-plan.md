@@ -8,7 +8,7 @@ Scaffold, local DB, secure credential storage, and the two source interfaces
 built against these. All five tasks touch disjoint files and can run fully
 in parallel.
 
-- [ ] T1.1 Scaffold Expo (TypeScript) app, iOS bundle id, EAS dev client build config — see `app/` — depends: none
+- [x] T1.1 Scaffold Expo (TypeScript) app, iOS bundle id, EAS dev client build config — see `app/` — depends: none
 - [ ] T1.2 SQLite schema + data access layer: tracks, albums, artists, playlists, playlist_tracks, providers, import_sources — see `src/db` — depends: none
 - [ ] T1.3 Keychain credential service: generic get/set/delete secret by key, used by all provider and import-source adapters — see `src/services/credentials` — depends: none
 - [ ] T1.4 `CloudProvider` TypeScript interface (listFiles, getMetadata, getStreamUrl, testConnection) + provider registry — see `src/providers/types.ts` — depends: none
