@@ -5,6 +5,17 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: 6.29.3
+  AWSSDKSwift:
+    url: https://github.com/awslabs/aws-sdk-swift
+    from: 1.2.0
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 8.0.0
+
 targets:
   BringYourOwnMusic:
     type: application
@@ -13,6 +24,13 @@ targets:
       - path: Sources
     resources:
       - path: Resources
+    dependencies:
+      - package: GRDB
+        product: GRDB
+      - package: AWSSDKSwift
+        product: AWSS3
+      - package: GoogleSignIn
+        product: GoogleSignIn
     info:
       path: Sources/App/Info.plist
       properties:
