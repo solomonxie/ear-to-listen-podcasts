@@ -14,7 +14,7 @@ in parallel.
 - [x] T1.4 `CloudProvider` protocol (listFiles, getMetadata, getStreamURL, testConnection) + provider registry — see `Sources/Providers/Provider.swift` — depends: none
 - [x] T1.5 `PlaylistImportSource` protocol (authenticate, listPlaylists, getPlaylistTracks) + registry — see `Sources/Importers/ImportSource.swift` — depends: none
 - [x] T1.6 Add SPM dependencies to `project.yml` (GRDB.swift, aws-sdk-swift/AWSS3, GoogleSignIn-iOS) — see `project.yml` — depends: none
-- [ ] T1.7 String Catalog foundation: `Resources/Localizable.xcstrings` (English source + Mandarin/zh-Hans), wire existing scaffold text through it — see `Resources/Localizable.xcstrings` — depends: none
+- [x] T1.7 String Catalog foundation: `Resources/Localizable.xcstrings` (English source + Mandarin/zh-Hans), wire existing scaffold text through it — see `Resources/Localizable.xcstrings` — depends: none
 
 ## Phase 2: Provider adapters & playback engine
 Adapters implement the Phase 1 protocols against real backends; the playback
