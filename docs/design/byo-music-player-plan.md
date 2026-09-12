@@ -9,11 +9,11 @@ built against these. All six tasks touch disjoint files and can run fully
 in parallel.
 
 - [x] T1.1 XcodeGen `project.yml` + app entry point (SwiftUI `App`, empty root view), iOS bundle id, background-audio capability — see `project.yml`, `Sources/App` — depends: none
-- [ ] T1.2 GRDB schema + migrations: tracks, albums, artists, playlists, playlist_tracks, providers, import_sources; FTS5 for search — see `Sources/DB` — depends: none
-- [ ] T1.3 Keychain credential service: generic get/set/delete secret by key, used by all provider and import-source adapters — see `Sources/Services/Credentials` — depends: none
-- [ ] T1.4 `CloudProvider` protocol (listFiles, getMetadata, getStreamURL, testConnection) + provider registry — see `Sources/Providers/Provider.swift` — depends: none
-- [ ] T1.5 `PlaylistImportSource` protocol (authenticate, listPlaylists, getPlaylistTracks) + registry — see `Sources/Importers/ImportSource.swift` — depends: none
-- [ ] T1.6 Add SPM dependencies to `project.yml` (GRDB.swift, aws-sdk-swift/AWSS3, GoogleSignIn-iOS) — see `project.yml` — depends: none
+- [x] T1.2 GRDB schema + migrations: tracks, albums, artists, playlists, playlist_tracks, providers, import_sources; FTS5 for search — see `Sources/DB` — depends: none
+- [x] T1.3 Keychain credential service: generic get/set/delete secret by key, used by all provider and import-source adapters — see `Sources/Services/Credentials` — depends: none
+- [x] T1.4 `CloudProvider` protocol (listFiles, getMetadata, getStreamURL, testConnection) + provider registry — see `Sources/Providers/Provider.swift` — depends: none
+- [x] T1.5 `PlaylistImportSource` protocol (authenticate, listPlaylists, getPlaylistTracks) + registry — see `Sources/Importers/ImportSource.swift` — depends: none
+- [x] T1.6 Add SPM dependencies to `project.yml` (GRDB.swift, aws-sdk-swift/AWSS3, GoogleSignIn-iOS) — see `project.yml` — depends: none
 
 ## Phase 2: Provider adapters & playback engine
 Adapters implement the Phase 1 protocols against real backends; the playback

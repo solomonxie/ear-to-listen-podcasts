@@ -127,3 +127,7 @@ ones for manual fix.
   playlist-read scopes work without one before building T-level UI around it.
 - No CI/simulator automation set up yet — builds/tests run locally via
   `xcodebuild`; revisit if this becomes a bottleneck.
+- `aws-sdk-swift`'s `smithy-swift` dependency ships a build-tool plugin that
+  Xcode must trust before it can run; opening the project in Xcode.app shows
+  a one-time "Trust & Enable" prompt, CLI builds need
+  `-skipPackagePluginValidation` until that trust is recorded.

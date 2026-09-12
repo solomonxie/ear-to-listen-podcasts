@@ -1,0 +1,16 @@
+import Foundation
+import GRDB
+
+final class DatabaseManager {
+    static let shared = DatabaseManager()
+
+    let dbQueue: DatabaseQueue
+
+    private init() {
+        let directory = URL.applicationSupportDirectory
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let dbURL = directory.appending(path: "byomusic.sqlite")
+        dbQueue = try! DatabaseQueue(path: dbURL.path)
+        try! Migrations.migrator().migrate(dbQueue)
+    }
+}
