@@ -42,7 +42,6 @@ struct S3Provider: CloudProvider {
             let output = try await client.listObjectsV2(input: ListObjectsV2Input(
                 bucket: bucket,
                 continuationToken: continuationToken,
-                delimiter: "/",
                 prefix: folderID
             ))
             for object in output.contents ?? [] {

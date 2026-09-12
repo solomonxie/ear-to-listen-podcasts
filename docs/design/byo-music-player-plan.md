@@ -24,29 +24,29 @@ Drive/Dropbox/OneDrive, WebDAV, and Apple Music import are all backlogged
 (see bottom of this file); Spotify import ships alongside S3.
 
 - [x] T2.1 S3Provider adapter: access key/secret auth, list objects, presigned URL generation via `AWSS3` — see `Sources/Providers/S3` — depends: T1.4, T1.6
-- [ ] T2.2 Playback engine: `AVQueuePlayer` setup, queue, background audio session, `MPNowPlayingInfoCenter`/`MPRemoteCommandCenter` for lock-screen/Control Center — see `Sources/Playback` — depends: T1.1
-- [ ] T2.3 SpotifyImportSource adapter: OAuth (Authorization Code + PKCE via `ASWebAuthenticationSession`), list playlists, fetch tracks via Spotify Web API — see `Sources/Importers/Spotify` — depends: T1.5
-- [ ] T2.4 Fuzzy track matcher: normalize + compare imported track metadata against local library, confidence score, unmatched list — see `Sources/Importers/Matcher.swift` — depends: T1.2
+- [x] T2.2 Playback engine: `AVQueuePlayer` setup, queue, background audio session, `MPNowPlayingInfoCenter`/`MPRemoteCommandCenter` for lock-screen/Control Center — see `Sources/Playback` — depends: T1.1
+- [x] T2.3 SpotifyImportSource adapter: OAuth (Authorization Code + PKCE via `ASWebAuthenticationSession`), list playlists, fetch tracks via Spotify Web API — see `Sources/Importers/Spotify` — depends: T1.5
+- [x] T2.4 Fuzzy track matcher: normalize + compare imported track metadata against local library, confidence score, unmatched list — see `Sources/Importers/Matcher.swift` — depends: T1.2
 
 ## Phase 3: Settings UI & library sync
 Settings needs working adapters + Keychain to configure and test real
 credentials; the sync engine needs the DB + adapters to populate the library.
 Independent view/files, can run in parallel.
 
-- [ ] T3.1 Settings screen: add/edit/remove provider credentials, test-connection action, active-source multi-select — see `Sources/Screens/Settings` — depends: T1.3, T2.1
-- [ ] T3.2 Library sync engine: list files from active providers, extract tag metadata (AVAsset/ID3), upsert into GRDB — see `Sources/Library/Sync.swift` — depends: T1.2, T2.1
+- [x] T3.1 Settings screen: add/edit/remove provider credentials, test-connection action, active-source multi-select — see `Sources/Screens/Settings` — depends: T1.3, T2.1
+- [x] T3.2 Library sync engine: list files from active providers, extract tag metadata (AVAsset/ID3), upsert into GRDB — see `Sources/Library/Sync.swift` — depends: T1.2, T2.1
 
 ## Phase 4: Core screens
 The Spotify/YouTube-Music-style UI, built once there's a populated library
 and a working player to drive it. Each screen is its own SwiftUI view tree,
 safe to parallelize.
 
-- [ ] T4.1 Library browse (Artists/Albums/Tracks tabs, pull-to-refresh triggers sync) — see `Sources/Screens/Library` — depends: T3.2
-- [ ] T4.2 Search screen (GRDB FTS5 query over local index) — see `Sources/Screens/Search` — depends: T3.2
-- [ ] T4.3 Now Playing screen (art, progress, transport controls) — see `Sources/Screens/NowPlaying` — depends: T2.2
-- [ ] T4.4 Queue screen (up-next list, reorder) — see `Sources/Screens/Queue` — depends: T2.2
-- [ ] T4.5 Playlists (create/edit, add/remove tracks) — see `Sources/Screens/Playlists` — depends: T1.2, T4.1
-- [ ] T4.6 Playlist import screen: connect Spotify, pick playlists to import, review/confirm fuzzy-matched + unmatched tracks — see `Sources/Screens/ImportPlaylists` — depends: T2.3, T2.4, T4.5
+- [x] T4.1 Library browse (Artists/Albums/Tracks tabs, pull-to-refresh triggers sync) — see `Sources/Screens/Library` — depends: T3.2
+- [x] T4.2 Search screen (GRDB FTS5 query over local index) — see `Sources/Screens/Search` — depends: T3.2
+- [x] T4.3 Now Playing screen (art, progress, transport controls) — see `Sources/Screens/NowPlaying` — depends: T2.2
+- [x] T4.4 Queue screen (up-next list, reorder) — see `Sources/Screens/Queue` — depends: T2.2
+- [x] T4.5 Playlists (create/edit, add/remove tracks) — see `Sources/Screens/Playlists` — depends: T1.2, T4.1
+- [x] T4.6 Playlist import screen: connect Spotify, pick playlists to import, review/confirm fuzzy-matched + unmatched tracks — see `Sources/Screens/ImportPlaylists` — depends: T2.3, T2.4, T4.5
 
 ## Phase 5: Offline cache & release polish
 Hardening once the core app works end-to-end: reduces re-fetching, handles

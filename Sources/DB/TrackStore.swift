@@ -34,6 +34,12 @@ struct TrackStore {
         try dbQueue.read { db in try Track.fetchOne(db, key: id) }
     }
 
+    func find(providerID: String, filePath: String) throws -> Track? {
+        try dbQueue.read { db in
+            try Track.filter(Column("providerID") == providerID && Column("filePath") == filePath).fetchOne(db)
+        }
+    }
+
     func search(_ query: String) throws -> [Track] {
         guard !query.isEmpty else { return [] }
         return try dbQueue.read { db in
