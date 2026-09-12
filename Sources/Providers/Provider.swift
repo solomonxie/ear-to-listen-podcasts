@@ -29,18 +29,20 @@ protocol CloudProvider {
     func testConnection() async -> ConnectionTestResult
 }
 
-final class CloudProviderRegistry {
+final class CloudProviderRegistry: @unchecked Sendable {
     static let shared = CloudProviderRegistry()
 
+    private let lock = NSLock()
     private var factories: [String: (CloudProviderConfig) -> CloudProvider] = [:]
 
     func register(type: String, factory: @escaping (CloudProviderConfig) -> CloudProvider) {
-        factories[type] = factory
+        lock.withLock { factories[type] = factory }
     }
 
     func makeProvider(for config: CloudProviderConfig) -> CloudProvider? {
-        factories[config.type]?(config)
+        let factory = lock.withLock { factories[config.type] }
+        return factory?(config)
     }
 
-    var registeredTypes: [String] { Array(factories.keys) }
+    var registeredTypes: [String] { lock.withLock { Array(factories.keys) } }
 }
