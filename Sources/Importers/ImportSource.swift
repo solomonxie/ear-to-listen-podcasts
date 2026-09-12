@@ -23,18 +23,19 @@ protocol PlaylistImportSource {
     func tracks(forPlaylistID playlistID: String) async throws -> [ImportedTrack]
 }
 
-final class PlaylistImportSourceRegistry {
+final class PlaylistImportSourceRegistry: @unchecked Sendable {
     static let shared = PlaylistImportSourceRegistry()
 
+    private let lock = NSLock()
     private var sources: [String: PlaylistImportSource] = [:]
 
     func register(_ source: PlaylistImportSource) {
-        sources[source.type] = source
+        lock.withLock { sources[source.type] = source }
     }
 
     func source(forType type: String) -> PlaylistImportSource? {
-        sources[type]
+        lock.withLock { sources[type] }
     }
 
-    var registeredTypes: [String] { Array(sources.keys) }
+    var registeredTypes: [String] { lock.withLock { Array(sources.keys) } }
 }
