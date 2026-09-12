@@ -28,6 +28,8 @@ targets:
         product: GRDB
       - package: AWSSDKSwift
         product: AWSS3
+      - package: AWSSDKSwift
+        product: AWSSDKIdentity
       - package: GoogleSignIn
         product: GoogleSignIn
     info:

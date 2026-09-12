@@ -23,7 +23,7 @@ Phase 1 lands. S3 is the only storage provider being built now — Google
 Drive/Dropbox/OneDrive, WebDAV, and Apple Music import are all backlogged
 (see bottom of this file); Spotify import ships alongside S3.
 
-- [ ] T2.1 S3Provider adapter: access key/secret auth, list objects, presigned URL generation via `AWSS3` — see `Sources/Providers/S3` — depends: T1.4, T1.6
+- [x] T2.1 S3Provider adapter: access key/secret auth, list objects, presigned URL generation via `AWSS3` — see `Sources/Providers/S3` — depends: T1.4, T1.6
 - [ ] T2.2 Playback engine: `AVQueuePlayer` setup, queue, background audio session, `MPNowPlayingInfoCenter`/`MPRemoteCommandCenter` for lock-screen/Control Center — see `Sources/Playback` — depends: T1.1
 - [ ] T2.3 SpotifyImportSource adapter: OAuth (Authorization Code + PKCE via `ASWebAuthenticationSession`), list playlists, fetch tracks via Spotify Web API — see `Sources/Importers/Spotify` — depends: T1.5
 - [ ] T2.4 Fuzzy track matcher: normalize + compare imported track metadata against local library, confidence score, unmatched list — see `Sources/Importers/Matcher.swift` — depends: T1.2
