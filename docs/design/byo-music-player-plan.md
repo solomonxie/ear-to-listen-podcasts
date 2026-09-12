@@ -16,28 +16,25 @@ in parallel.
 - [x] T1.6 Add SPM dependencies to `project.yml` (GRDB.swift, aws-sdk-swift/AWSS3, GoogleSignIn-iOS) — see `project.yml` — depends: none
 - [x] T1.7 String Catalog foundation: `Resources/Localizable.xcstrings` (English source + Mandarin/zh-Hans), wire existing scaffold text through it — see `Resources/Localizable.xcstrings` — depends: none
 
-## Phase 2: Provider adapters & playback engine
+## Phase 2: S3 provider & playback engine
 Adapters implement the Phase 1 protocols against real backends; the playback
 engine only needs the app scaffold. Both can proceed in parallel once
-Phase 1 lands. S3 is top priority; Dropbox/OneDrive round out storage
-options. WebDAV is out of scope, Apple Music import is backlogged (see
-bottom of this file) — Spotify import ships alone for now.
+Phase 1 lands. S3 is the only storage provider being built now — Google
+Drive/Dropbox/OneDrive, WebDAV, and Apple Music import are all backlogged
+(see bottom of this file); Spotify import ships alongside S3.
 
-- [ ] T2.1 S3Provider adapter (priority): access key/secret auth, list objects, presigned URL generation via `AWSS3` — see `Sources/Providers/S3` — depends: T1.4, T1.6
-- [ ] T2.2 GoogleDriveProvider adapter: OAuth via `GoogleSignIn-iOS`, Drive REST v3 list files, download URL — see `Sources/Providers/GoogleDrive` — depends: T1.4, T1.6
-- [ ] T2.3 DropboxProvider adapter: OAuth + REST via `SwiftyDropbox` (add as SPM dependency), list files, download URL — see `Sources/Providers/Dropbox` — depends: T1.4
-- [ ] T2.4 OneDriveProvider adapter: OAuth via `MSAL` (add as SPM dependency), Microsoft Graph REST list files/download URL — see `Sources/Providers/OneDrive` — depends: T1.4
-- [ ] T2.5 Playback engine: `AVQueuePlayer` setup, queue, background audio session, `MPNowPlayingInfoCenter`/`MPRemoteCommandCenter` for lock-screen/Control Center — see `Sources/Playback` — depends: T1.1
-- [ ] T2.6 SpotifyImportSource adapter: OAuth (Authorization Code + PKCE via `ASWebAuthenticationSession`), list playlists, fetch tracks via Spotify Web API — see `Sources/Importers/Spotify` — depends: T1.5
-- [ ] T2.7 Fuzzy track matcher: normalize + compare imported track metadata against local library, confidence score, unmatched list — see `Sources/Importers/Matcher.swift` — depends: T1.2
+- [ ] T2.1 S3Provider adapter: access key/secret auth, list objects, presigned URL generation via `AWSS3` — see `Sources/Providers/S3` — depends: T1.4, T1.6
+- [ ] T2.2 Playback engine: `AVQueuePlayer` setup, queue, background audio session, `MPNowPlayingInfoCenter`/`MPRemoteCommandCenter` for lock-screen/Control Center — see `Sources/Playback` — depends: T1.1
+- [ ] T2.3 SpotifyImportSource adapter: OAuth (Authorization Code + PKCE via `ASWebAuthenticationSession`), list playlists, fetch tracks via Spotify Web API — see `Sources/Importers/Spotify` — depends: T1.5
+- [ ] T2.4 Fuzzy track matcher: normalize + compare imported track metadata against local library, confidence score, unmatched list — see `Sources/Importers/Matcher.swift` — depends: T1.2
 
 ## Phase 3: Settings UI & library sync
 Settings needs working adapters + Keychain to configure and test real
 credentials; the sync engine needs the DB + adapters to populate the library.
 Independent view/files, can run in parallel.
 
-- [ ] T3.1 Settings screen: add/edit/remove provider credentials, test-connection action, active-source multi-select — see `Sources/Screens/Settings` — depends: T1.3, T2.1, T2.2, T2.3, T2.4
-- [ ] T3.2 Library sync engine: list files from active providers, extract tag metadata (AVAsset/ID3), upsert into GRDB — see `Sources/Library/Sync.swift` — depends: T1.2, T2.1, T2.2, T2.3, T2.4
+- [ ] T3.1 Settings screen: add/edit/remove provider credentials, test-connection action, active-source multi-select — see `Sources/Screens/Settings` — depends: T1.3, T2.1
+- [ ] T3.2 Library sync engine: list files from active providers, extract tag metadata (AVAsset/ID3), upsert into GRDB — see `Sources/Library/Sync.swift` — depends: T1.2, T2.1
 
 ## Phase 4: Core screens
 The Spotify/YouTube-Music-style UI, built once there's a populated library
@@ -46,21 +43,26 @@ safe to parallelize.
 
 - [ ] T4.1 Library browse (Artists/Albums/Tracks tabs, pull-to-refresh triggers sync) — see `Sources/Screens/Library` — depends: T3.2
 - [ ] T4.2 Search screen (GRDB FTS5 query over local index) — see `Sources/Screens/Search` — depends: T3.2
-- [ ] T4.3 Now Playing screen (art, progress, transport controls) — see `Sources/Screens/NowPlaying` — depends: T2.5
-- [ ] T4.4 Queue screen (up-next list, reorder) — see `Sources/Screens/Queue` — depends: T2.5
+- [ ] T4.3 Now Playing screen (art, progress, transport controls) — see `Sources/Screens/NowPlaying` — depends: T2.2
+- [ ] T4.4 Queue screen (up-next list, reorder) — see `Sources/Screens/Queue` — depends: T2.2
 - [ ] T4.5 Playlists (create/edit, add/remove tracks) — see `Sources/Screens/Playlists` — depends: T1.2, T4.1
-- [ ] T4.6 Playlist import screen: connect Spotify, pick playlists to import, review/confirm fuzzy-matched + unmatched tracks — see `Sources/Screens/ImportPlaylists` — depends: T2.6, T2.7, T4.5
+- [ ] T4.6 Playlist import screen: connect Spotify, pick playlists to import, review/confirm fuzzy-matched + unmatched tracks — see `Sources/Screens/ImportPlaylists` — depends: T2.3, T2.4, T4.5
 
 ## Phase 5: Offline cache & release polish
 Hardening once the core app works end-to-end: reduces re-fetching, handles
 real-world failures, and gets the build ready to ship.
 
-- [ ] T5.1 LRU disk cache for streamed audio, backed by provider stream URLs — see `Sources/Playback/Cache.swift` — depends: T2.5
-- [ ] T5.2 Error/retry handling: expired presigned URLs, Google/Dropbox/Microsoft token refresh, offline state — see `Sources/Providers` — depends: T2.1, T2.2, T2.3, T2.4
+- [ ] T5.1 LRU disk cache for streamed audio, backed by provider stream URLs — see `Sources/Playback/Cache.swift` — depends: T2.2
+- [ ] T5.2 Error/retry handling: expired presigned URLs, offline state — see `Sources/Providers` — depends: T2.1
 - [ ] T5.3 App icon, launch screen, TestFlight build config (signing, `eas`-equivalent: Xcode Cloud or manual archive) — see `project.yml` — depends: T1.1
 - [ ] T5.4 QA pass: unit tests for provider/importer adapters + sync engine + matcher, manual playback test on device — see `Tests` — depends: T4.1, T4.2, T4.3, T4.4, T4.5, T4.6, T5.1, T5.2
 
 ## Backlog (not scheduled)
+- GoogleDriveProvider adapter: OAuth via `GoogleSignIn-iOS`, Drive REST v3
+  list files/download URL — same `CloudProvider` protocol from T1.4 already
+  accommodates it.
+- DropboxProvider adapter: OAuth + REST via `SwiftyDropbox`.
+- OneDriveProvider adapter: OAuth via `MSAL`, Microsoft Graph REST.
 - Apple Music playlist import (`MusicKit` adapter + wiring into T4.6) —
   deferred behind Spotify; same `PlaylistImportSource` protocol from T1.5
   already accommodates it whenever it's picked up.
