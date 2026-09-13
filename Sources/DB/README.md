@@ -29,6 +29,9 @@ Sources/Library/Sync.swift:SyncEngine.sync(providerRecord:)
    for each new file
         │ AVURLAsset metadata (title/artist/album/duration)
         ▼
+   Sources/Library/ContentAnalyzer.swift:analyze(filePath:title:artist:album:)
+        │ OpenAI key set? guesses better title/artist/album from path + tags, else nil (skip)
+        ▼
    LibraryStore.swift:upsertArtist(name:) ──► `artists`
    LibraryStore.swift:upsertAlbum(name:artistID:) ──► `albums`
         ▼

@@ -44,6 +44,7 @@ struct SyncEngine {
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
+    private let contentAnalyzer = ContentAnalyzer()
 
     /// Syncs every active provider's file listing into the local library.
     @discardableResult
@@ -55,8 +56,9 @@ struct SyncEngine {
         return total
     }
 
-    /// Recursively lists the provider's files, adds any not yet in local metadata (analyzing
-    /// their audio metadata), and marks any previously-known file no longer in the listing as lost.
+    /// Recursively lists the provider's files, adds any not yet in local metadata (reading
+    /// embedded audio metadata, then optionally refining it via `ContentAnalyzer` if an
+    /// OpenAI key is set), and marks any previously-known file no longer in the listing as lost.
     func sync(providerRecord record: ProviderRecord) async throws -> SyncResult {
         let provider = try ProviderManager.shared.provider(for: record)
         let files = try await provider.listFiles(inFolder: nil)
@@ -75,10 +77,15 @@ struct SyncEngine {
             }
 
             let metadata = await extractMetadata(provider: provider, fileID: file.path)
-            let title = metadata.title ?? (file.name as NSString).deletingPathExtension
-            let artist = try metadata.artist.map { try libraryStore.upsertArtist(name: $0) }
-            let album = try metadata.album.map { albumName in
-                try libraryStore.upsertAlbum(name: albumName, artistID: artist?.id)
+            let guess = await contentAnalyzer.analyze(
+                filePath: file.path, title: metadata.title, artist: metadata.artist, album: metadata.album
+            )
+            let title = guess?.title ?? metadata.title ?? (file.name as NSString).deletingPathExtension
+            let artistName = guess?.artist ?? metadata.artist
+            let albumName = guess?.album ?? metadata.album
+            let artist = try artistName.map { try libraryStore.upsertArtist(name: $0) }
+            let album = try albumName.map { name in
+                try libraryStore.upsertAlbum(name: name, artistID: artist?.id)
             }
 
             let track = Track(
@@ -94,7 +101,7 @@ struct SyncEngine {
                 isLost: false,
                 updatedAt: Date()
             )
-            try trackStore.upsert(track, artistName: metadata.artist, albumName: metadata.album)
+            try trackStore.upsert(track, artistName: artistName, albumName: albumName)
             added += 1
         }
 
