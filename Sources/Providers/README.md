@@ -10,14 +10,27 @@ are backlogged behind the same protocol.
 `ProviderManager` resolves a `ProviderRecord` (from `Sources/DB`) into a live
 provider instance and owns its settings/credentials lifecycle.
 
-## Structure
+## Resolution Workflow
 
 ```
-Sources/Providers/
-├── Provider.swift            CloudProvider protocol + CloudFile, CloudProviderRegistry
-├── ProviderManager.swift     ProviderRecord → live CloudProvider (Keychain-backed, cached)
-├── S3/
-│   └── S3Provider.swift        AWS S3-backed CloudProvider
-└── Local/
-    └── LocalFilesProvider.swift  on-device Documents folder as a CloudProvider
+BringYourOwnPodcastsApp.swift:init()
+  registers factories: "s3" → S3Provider.init, "local" → LocalFilesProvider.init
+        │
+        ▼ (later, on sync or playback)
+Sources/DB/ProviderStore.swift:active() → [ProviderRecord]
+        │ for each record
+        ▼
+ProviderManager.swift:provider(for: record)
+        ├─ cache hit ──► return cached CloudProvider
+        └─ cache miss
+              │ CredentialStore reads this record's settings from Keychain
+              ▼
+        Provider.swift:CloudProviderRegistry.makeProvider(for: config)
+              │ dispatches on config.type
+              ├─ "s3"    ──► S3/S3Provider.swift:init(config:)
+              └─ "local" ──► Local/LocalFilesProvider.swift:init(config:)
+                               resolves its security-scoped folder bookmark
+              │ caches the instance
+              ▼
+caller: .listFiles(inFolder:) / .streamURL(forFileID:) / .testConnection()
 ```

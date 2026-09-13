@@ -18,24 +18,31 @@ local sources, per-source sync frequency + manual "Sync Now", and a foreground
 `SyncScheduler` that auto-syncs due sources while the app is active. See
 `docs/design/` for the full design doc and phased implementation plan.
 
-## Structure
+## How It's Wired
 
 ```
-Sources/
-├── App/          entry point + root view (ContentView → HomeView)
-├── Screens/      Home, Player, NowPlaying, Playlists, Remote, Settings, Mock
-├── DB/           SQLite persistence — Sources/DB/README.md
-├── Providers/    CloudProvider backends — Sources/Providers/README.md
-├── Importers/    playlist import sources (Spotify)
-├── Library/      Sync engine + SyncScheduler
-├── Playback/     PlaybackEngine (AVAudioPlayer wrapper)
-└── Services/     Credentials (Keychain)
-Resources/        Assets, Localizable.xcstrings, DemoAudio
-Tests/            unit tests
-docs/             design docs + guides
-scripts/          one-off tooling (generate_app_icon.py)
-project.yml       XcodeGen spec
+BringYourOwnPodcastsApp.swift:init()
+  registers CloudProviders (S3, Local) + SpotifyImportSource
+        │
+        ▼
+ContentView.swift
+┌─────────────────────────────────────────────┐
+│ HomeView (NavigationStack root)              │──→ Sources/Screens/Home/HomeView.swift
+│ ┌───────────────────────────────────────────┐│
+│ │ search bar → searchResults                ││──→ inline (same file)
+│ │ shelves: Continue/Albums/Playlists/        ││──→ inline (same file)
+│ │   Favorites/Speakers/Downloaded/Year/Topic ││
+│ │ RemoteSectionView                          ││──→ Sources/Screens/Remote/README.md
+│ │ SettingsSectionView                        ││──→ Sources/Screens/Settings/
+│ └───────────────────────────────────────────┘│
+│ MiniPlayerBar (docked, safeAreaInset bottom) │──→ Sources/Screens/Player/MiniPlayerBar.swift
+│   tap → sheet → NowPlayingView               │──→ Sources/Screens/NowPlaying/NowPlayingView.swift
+└─────────────────────────────────────────────┘
 ```
+
+Home's shelves/search read `MockLibraryStore`/`PlaybackMockState`
+(`Sources/Screens/Mock/README.md`); Remote and Settings read the real
+DB/Provider layers (`Sources/DB/README.md`, `Sources/Providers/README.md`).
 
 ## Quickstart
 

@@ -11,11 +11,26 @@ Superseded once screens wire up to the real `Sources/DB` schema and
 `Sources/Providers` — until then, most screens under `Sources/Screens/`
 depend on this instead.
 
-## Structure
+## Playback Workflow
 
 ```
-Sources/Screens/Mock/
-├── MockModels.swift        Speaker, PodcastShow, PodcastEpisode, TranscriptLine, Topic, PlaylistUI, RemoteEntry
-├── MockData.swift          static sample data + MockLibraryStore (ObservableObject, resettable)
-└── PlaybackMockState.swift AVAudioPlayer-backed playback over Resources/DemoAudio clips
+user taps an episode (Home shelf / ShowDetailView / AlbumDetailView / EpisodeListView)
+        │
+        ▼
+PlaybackMockState.swift:play(_:queue:)
+        │ sets currentEpisode + queue; looks up episode.audioFileName in the app bundle
+        ├─ no bundled clip ──► duration = episode.durationSeconds, isPlaying = false (silent placeholder)
+        └─ clip found
+              │ AVAudioSession + AVAudioPlayer start
+              ▼
+        startTimer() ──► async boundary: 0.25s repeating Timer
+              │ tick() → progress
+              ▼
+        updateTranscriptLine() → currentTranscriptLineID
+              │ read by (@Published, live)
+              ▼
+NowPlayingView.swift / MiniPlayerBar.swift — progress bar + highlighted transcript line
+        │ clip finishes
+        ▼
+audioPlayerDidFinishPlaying(_:successfully:) → skipToNext() → play() next episode in queue
 ```

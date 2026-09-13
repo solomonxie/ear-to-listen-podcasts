@@ -9,11 +9,28 @@ stats from local metadata.
 `RemoteBrowserView` (folder browsing) is still a static mock tree
 (`MockData.remoteTree`) — real recursive browsing is backlog.
 
-## Structure
+## Screen Composition
 
 ```
-Sources/Screens/Remote/
-├── RemoteSectionView.swift       lists ProviderRecords (S3 + local), embedded in HomeView
-├── RemoteSourceDetailView.swift  sync frequency, manual "Sync Now", storage stats
-└── RemoteBrowserView.swift       folder browser — still backed by MockData.remoteTree
+RemoteSectionView.swift (embedded in HomeView, not a tab)
+┌─────────────────────────────────────────┐
+│ "Remote" header + add button            │──→ inline; opens AddS3ProviderView sheet
+│ ┌─────────────────────────────────────┐ │
+│ │ RemoteSourceRow (per S3/local        │ │──→ inline (same file)
+│ │   ProviderRecord)                    │ │
+│ └─────────────────────────────────────┘ │──→ tap → RemoteSourceDetailView.swift
+└─────────────────────────────────────────┘
+        │
+        ▼
+RemoteSourceDetailView.swift
+┌─────────────────────────────────────────┐
+│ "Browse Files" row                      │──→ tap → RemoteBrowserView.swift (folder tree)
+│ Sync section: frequency picker,         │──→ ProviderStore.updateSyncFrequency /
+│   last synced, "Sync Now"               │     SyncEngine.sync(providerRecord:)
+│ Storage section: episode count, size,   │──→ TrackStore.stats(forProvider:)
+│   missing-since-last-sync count         │
+└─────────────────────────────────────────┘
 ```
+
+`RemoteBrowserView`'s folder tree still reads `MockData.remoteTree` — real
+recursive browsing of the provider is backlog.
