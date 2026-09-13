@@ -1,6 +1,6 @@
 import XCTest
 
-final class BringYourOwnMusicTests: XCTestCase {
+final class BringYourOwnPodcastsTests: XCTestCase {
     func testScaffoldBuilds() {
         XCTAssertTrue(true)
     }
