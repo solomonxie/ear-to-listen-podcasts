@@ -8,20 +8,34 @@ podcast domain (show/speaker/episode) plus the metadata this app actually
 needs (transcripts, topics, file hashes for move-safe re-identification) is
 pending, tracked in `docs/design/`.
 
-## Structure
+## Sync Workflow
+
+The one real workflow that touches every store here — a scheduled tick,
+manual "Sync Now" (`RemoteSourceDetailView`), or right after adding a
+source (`AddS3ProviderView`/`SettingsSectionView`):
 
 ```
-Sources/DB/
-├── DatabaseManager.swift    opens byopo.sqlite, runs Migrations
-├── Migrations.swift         versioned schema (v1 tables, v2_sync_settings)
-├── Models/
-│   ├── Album.swift            `albums` table
-│   ├── Artist.swift           `artists` table
-│   ├── Playlist.swift         `playlists` table
-│   ├── Track.swift            `tracks` table (+ sizeBytes, isLost)
-│   └── ProviderRecord.swift   `providers` table (+ syncFrequencyMinutes, lastSyncedAt)
-├── LibraryStore.swift       Album/Artist queries
-├── PlaylistStore.swift      Playlist queries
-├── TrackStore.swift         Track queries + per-provider stats/lost-marking
-└── ProviderStore.swift      ProviderRecord CRUD + sync-frequency/last-synced updates
+SyncScheduler.start() (foreground poll loop)  /  manual "Sync Now"  /  add-source
+        │ due ProviderRecord
+        ▼
+Sources/Library/Sync.swift:SyncEngine.sync(providerRecord:)
+        │ provider.listFiles(inFolder: nil)   (S3Provider / LocalFilesProvider)
+        ▼
+   for each file already known (TrackStore.swift:find(providerID:filePath:))
+        │
+        ├─ unchanged ─────────────────────────────────────────► skip
+        └─ size changed / was lost ──► TrackStore.swift:refresh(id:sizeBytes:isLost:)
+        │
+   for each new file
+        │ AVURLAsset metadata (title/artist/album/duration)
+        ▼
+   LibraryStore.swift:upsertArtist(name:) ──► `artists`
+   LibraryStore.swift:upsertAlbum(name:artistID:) ──► `albums`
+        ▼
+   TrackStore.swift:upsert(track:artistName:albumName:) ──► `tracks`
+        ▼
+TrackStore.swift:markLost(providerID:keepingPaths:)
+   any previously-known file missing from this listing ──► isLost = true
+        ▼
+ProviderStore.swift:updateLastSynced(id:at:) ──► `providers.lastSyncedAt`
 ```
