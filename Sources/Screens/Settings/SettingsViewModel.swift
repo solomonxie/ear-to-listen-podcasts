@@ -9,7 +9,9 @@ final class SettingsViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     /// Not private: `Sources/Library/ContentAnalyzer.swift` reads the same Keychain entry.
-    static let openAIAPIKeyKey = "openai.apiKey"
+    /// `nonisolated` so that off-main-actor code (sync runs in the background) can read this
+    /// constant without hopping to the main actor for a value that never changes.
+    nonisolated static let openAIAPIKeyKey = "openai.apiKey"
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let credentials = CredentialStore()

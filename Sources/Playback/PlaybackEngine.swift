@@ -47,9 +47,8 @@ final class PlaybackEngine: ObservableObject {
                 return
             }
             let provider = try ProviderManager.shared.provider(for: record)
-            guard NetworkMonitor.shared.isConnected
-                || (await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil)
-            else {
+            let isCached = await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil
+            guard NetworkMonitor.shared.isConnected || isCached else {
                 lastError = "You're offline. Connect to the internet to stream this track."
                 return
             }
