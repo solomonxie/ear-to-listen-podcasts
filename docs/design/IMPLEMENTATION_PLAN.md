@@ -57,6 +57,21 @@ real-world failures, and gets the build ready to ship.
 - [x] T5.3 App icon, launch screen, TestFlight build config (signing, `eas`-equivalent: Xcode Cloud or manual archive) — see `project.yml` — depends: T1.1
 - [x] T5.4 QA pass: unit tests for provider/importer adapters + sync engine + matcher, manual playback test on device — see `Tests` — depends: T4.1, T4.2, T4.3, T4.4, T4.5, T4.6, T5.1, T5.2
 
+## Phase 6: Sync & Backup
+Fills in the four "coming soon" rows under Settings ▸ Sync & Backup. Backs up
+app metadata only (playlists, provider/import-source list) — not audio files
+(already on the provider) or credentials (Keychain-only, re-enter after a
+restore). Note: the real `Playlists` table this reads/writes is not yet wired
+to the Playlists screen (`Sources/Screens/Playlists` still runs on
+`MockLibraryStore`), so playlist backup/restore is correct but inert — always
+empty — until that screen is wired to `Sources/DB`; that wiring is its own,
+separate task, not scheduled here.
+
+- [x] T6.1 `LibrarySnapshot` Codable model + `BackupService` (build from DB, encode/decode, apply-with-matching by providerID+filePath) — see `Sources/Backup` — depends: T1.2
+- [x] T6.2 `S3Provider.uploadBackup`/`downloadBackup`: fixed-key JSON object in the bucket — see `Sources/Providers/S3` — depends: T2.1, T6.1
+- [x] T6.3 Wire Settings ▸ Sync & Backup: Export/Import via `.fileExporter`/`.fileImporter`, Backup/Restore via the active S3 provider — see `Sources/Screens/Settings` — depends: T6.1, T6.2
+- [x] T6.4 Unit tests: snapshot round-trip, restore matching (hit/miss by providerID+filePath), idempotent re-apply — see `Tests` — depends: T6.1
+
 ## Backlog (not scheduled)
 - GoogleDriveProvider adapter: OAuth via `GoogleSignIn-iOS`, Drive REST v3
   list files/download URL — same `CloudProvider` protocol from T1.4 already

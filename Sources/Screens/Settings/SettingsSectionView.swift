@@ -10,6 +10,9 @@ struct SettingsSectionView: View {
     @State private var showingFolderPicker = false
     @State private var isScanning = false
     @State private var importMessage: String?
+    @State private var exportDocument: BackupDocument?
+    @State private var showingExportPicker = false
+    @State private var showingImportPicker = false
 
     private var localProviders: [ProviderRecord] {
         viewModel.providers.filter { $0.type == LocalFilesProvider.providerType }
@@ -85,15 +88,65 @@ struct SettingsSectionView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("SYNC & BACKUP").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                comingSoonRow("Export Library Data", systemImage: "square.and.arrow.up")
-                comingSoonRow("Import Library Data", systemImage: "square.and.arrow.down")
-                comingSoonRow("Backup to Remote Now", systemImage: "arrow.clockwise.icloud")
-                comingSoonRow("Restore from Remote", systemImage: "icloud.and.arrow.down")
+
+                Button {
+                    exportDocument = viewModel.makeExportDocument()
+                    showingExportPicker = exportDocument != nil
+                } label: {
+                    Label("Export Library Data", systemImage: "square.and.arrow.up")
+                }
+                .fileExporter(
+                    isPresented: $showingExportPicker,
+                    document: exportDocument,
+                    contentType: .json,
+                    defaultFilename: "byop-backup"
+                ) { _ in exportDocument = nil }
+
+                Button {
+                    showingImportPicker = true
+                } label: {
+                    Label("Import Library Data", systemImage: "square.and.arrow.down")
+                }
+                .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.json]) { result in
+                    if case .success(let url) = result {
+                        viewModel.importSnapshot(from: url)
+                    }
+                }
+
+                Button {
+                    viewModel.backupToRemote()
+                } label: {
+                    Label("Backup to Remote Now", systemImage: "arrow.clockwise.icloud")
+                }
+                .disabled(viewModel.isBackupBusy)
+
+                Button {
+                    viewModel.restoreFromRemote()
+                } label: {
+                    Label("Restore from Remote", systemImage: "icloud.and.arrow.down")
+                }
+                .disabled(viewModel.isBackupBusy)
+
+                if !viewModel.hasActiveRemoteProvider {
+                    Text("Backup/Restore need an active remote (S3) source — see the Remote tab.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                if viewModel.isBackupBusy {
+                    ProgressView()
+                } else if let backupStatusMessage = viewModel.backupStatusMessage {
+                    Text(backupStatusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Export/Backup save your playlists and source list (not your files, not credentials). Restoring re-links playlist tracks that are already synced on this device; anything not synced yet is skipped until the next sync.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
-                Button(role: .destructive) {
+                Button {
                     showingResetConfirmation = true
                 } label: {
                     Label("Reset Demo Data", systemImage: "arrow.counterclockwise")
@@ -118,18 +171,6 @@ struct SettingsSectionView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
-    }
-
-    @ViewBuilder
-    private func comingSoonRow(_ title: String, systemImage: String) -> some View {
-        HStack {
-            Label(title, systemImage: systemImage)
-            Spacer()
-            Text("Coming soon")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .foregroundStyle(.secondary)
     }
 
     private func handleFolderPick(_ result: Result<URL, Error>) async {

@@ -134,4 +134,23 @@ struct S3Provider: CloudProvider {
             return ConnectionTestResult(isSuccess: false, message: describeAWSError(error))
         }
     }
+
+    /// Fixed key so "Backup to Remote"/"Restore from Remote" don't need a picker; `.json`
+    /// keeps it out of `SyncEngine`'s audio-extension listing filter, so it never shows up
+    /// as a track.
+    private var backupKey: String { (keyPrefix ?? "") + "byop-backup.json" }
+
+    func uploadBackup(_ data: Data) async throws {
+        _ = try await client.putObject(input: PutObjectInput(body: .data(data), bucket: bucket, contentType: "application/json", key: backupKey))
+    }
+
+    /// `nil` means no backup has been made yet, not an error.
+    func downloadBackup() async throws -> Data? {
+        do {
+            let output = try await client.getObject(input: GetObjectInput(bucket: bucket, key: backupKey))
+            return try await output.body?.readData()
+        } catch let error as AWSServiceError where error.errorCode == "NoSuchKey" {
+            return nil
+        }
+    }
 }

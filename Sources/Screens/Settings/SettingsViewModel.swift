@@ -7,6 +7,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var spotifyClientID: String = ""
     @Published var openAIAPIKey: String = ""
     @Published var errorMessage: String?
+    @Published var backupStatusMessage: String?
+    @Published var isBackupBusy = false
 
     /// Not private: `Sources/Library/ContentAnalyzer.swift` reads the same Keychain entry.
     /// `nonisolated` so that off-main-actor code (sync runs in the background) can read this
@@ -15,6 +17,11 @@ final class SettingsViewModel: ObservableObject {
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let credentials = CredentialStore()
+    private let backupService = BackupService()
+
+    var hasActiveRemoteProvider: Bool {
+        providers.contains { $0.type == S3Provider.providerType && $0.isActive }
+    }
 
     func load() {
         do {
@@ -137,5 +144,66 @@ final class SettingsViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Builds the export document lazily, right when the export sheet is about to
+    /// show, so it reflects the current DB rather than a stale snapshot from `load()`.
+    func makeExportDocument() -> BackupDocument? {
+        do {
+            return BackupDocument(data: try backupService.encode(try backupService.makeSnapshot()))
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// `url` comes from a `.fileImporter` picker, so it's security-scoped.
+    func importSnapshot(from url: URL) {
+        let didStartAccess = url.startAccessingSecurityScopedResource()
+        defer { if didStartAccess { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let result = try backupService.apply(try backupService.decode(try Data(contentsOf: url)))
+            backupStatusMessage = summarize(result)
+            load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func backupToRemote() {
+        guard !isBackupBusy else { return }
+        isBackupBusy = true
+        Task {
+            defer { isBackupBusy = false }
+            do {
+                try await backupService.backupToRemote()
+                backupStatusMessage = "Backed up to remote."
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func restoreFromRemote() {
+        guard !isBackupBusy else { return }
+        isBackupBusy = true
+        Task {
+            defer { isBackupBusy = false }
+            do {
+                let result = try await backupService.restoreFromRemote()
+                backupStatusMessage = summarize(result)
+                load()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func summarize(_ result: BackupImportResult) -> String {
+        var message = "Restored \(result.playlistsImported) playlist\(result.playlistsImported == 1 ? "" : "s")"
+        if result.tracksUnmatched > 0 {
+            message += ", \(result.tracksUnmatched) track\(result.tracksUnmatched == 1 ? "" : "s") not synced yet"
+        }
+        return message + "."
     }
 }
