@@ -39,6 +39,16 @@ struct SyncResult {
     var totalFiles: Int
 }
 
+enum SyncEngineError: Error, LocalizedError {
+    case offline
+
+    var errorDescription: String? {
+        switch self {
+        case .offline: return "You're offline. Connect to the internet to sync your library."
+        }
+    }
+}
+
 struct SyncEngine {
     let dbQueue = DatabaseManager.shared.dbQueue
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
@@ -60,6 +70,7 @@ struct SyncEngine {
     /// embedded audio metadata, then optionally refining it via `ContentAnalyzer` if an
     /// OpenAI key is set), and marks any previously-known file no longer in the listing as lost.
     func sync(providerRecord record: ProviderRecord) async throws -> SyncResult {
+        guard NetworkMonitor.shared.isConnected else { throw SyncEngineError.offline }
         let provider = try ProviderManager.shared.provider(for: record)
         let files = try await provider.listFiles(inFolder: nil)
             .filter { audioExtensions.contains(($0.path as NSString).pathExtension.lowercased()) }

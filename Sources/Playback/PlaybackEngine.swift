@@ -15,6 +15,8 @@ final class PlaybackEngine: ObservableObject {
 
     private let player = AVQueuePlayer()
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private var itemStatusObservation: NSKeyValueObservation?
+    private var hasRetriedCurrentTrack = false
 
     private init() {
         configureAudioSession()
@@ -34,6 +36,7 @@ final class PlaybackEngine: ObservableObject {
     func play(track: Track, queue newQueue: [Track] = []) {
         queue = newQueue.isEmpty ? [track] : newQueue
         currentTrack = track
+        hasRetriedCurrentTrack = false
         Task { await loadAndPlay(track: track) }
     }
 
@@ -44,8 +47,15 @@ final class PlaybackEngine: ObservableObject {
                 return
             }
             let provider = try ProviderManager.shared.provider(for: record)
+            guard NetworkMonitor.shared.isConnected
+                || (await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil)
+            else {
+                lastError = "You're offline. Connect to the internet to stream this track."
+                return
+            }
             let url = try await resolvedStreamURL(track: track, provider: provider)
             let item = AVPlayerItem(url: url)
+            observeStatus(of: item, track: track)
             player.removeAllItems()
             player.insert(item, after: nil)
             player.play()
@@ -55,6 +65,30 @@ final class PlaybackEngine: ObservableObject {
         } catch {
             lastError = "Playback failed: \(error.localizedDescription)"
         }
+    }
+
+    /// A presigned stream URL can expire mid-playback (e.g. a long pause). On failure, drop any
+    /// cached copy and retry once with a freshly resolved URL before giving up.
+    private func observeStatus(of item: AVPlayerItem, track: Track) {
+        itemStatusObservation?.invalidate()
+        itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard item.status == .failed else { return }
+            Task { @MainActor in await self?.handlePlaybackFailure(track: track) }
+        }
+    }
+
+    private func handlePlaybackFailure(track: Track) async {
+        guard currentTrack?.id == track.id else { return }
+        guard !hasRetriedCurrentTrack else {
+            isPlaying = false
+            lastError = NetworkMonitor.shared.isConnected
+                ? "Playback failed: couldn't load this track."
+                : "You're offline. Connect to the internet to stream this track."
+            return
+        }
+        hasRetriedCurrentTrack = true
+        await AudioCache.shared.invalidate(providerID: track.providerID, filePath: track.filePath)
+        await loadAndPlay(track: track)
     }
 
     /// Cache hit plays straight from disk. On a miss, streams from the provider immediately
