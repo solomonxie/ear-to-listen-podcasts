@@ -52,6 +52,19 @@ struct PlaylistUI: Identifiable, Hashable {
     var coverColors: [Color]
 }
 
+/// A curated, released collection with its own metadata — like a music album.
+/// Distinct from a playlist, which freely mixes episodes from any album/show.
+struct PodcastAlbum: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let speakerIDs: [String]
+    let description: String
+    let releaseDate: Date
+    let episodeIDs: [String]
+    let artColor: Color
+    let symbol: String
+}
+
 indirect enum RemoteEntry: Identifiable, Hashable {
     case folder(id: String, name: String, children: [RemoteEntry])
     case file(id: String, name: String, sizeBytes: Int, modified: String)
