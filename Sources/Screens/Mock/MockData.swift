@@ -124,6 +124,29 @@ enum MockData {
         ),
     ]
 
+    private static func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        DateComponents(calendar: .current, year: year, month: month, day: day).date!
+    }
+
+    static let albums: [PodcastAlbum] = [
+        PodcastAlbum(
+            id: "album-best-of-2024", title: "Best of 2024",
+            speakerIDs: ["alex-chen", "priya-rao", "casey-kim"],
+            description: "A compilation of the year's standout episodes, pulled from across every show.",
+            releaseDate: date(2024, 12, 20),
+            episodeIDs: ["ep-tech-1", "ep-news-1"],
+            artColor: .purple, symbol: "star.fill"
+        ),
+        PodcastAlbum(
+            id: "album-origins", title: "Origins",
+            speakerIDs: ["jordan-lee", "morgan-diaz"],
+            description: "A special release tracing where our favorite formats began.",
+            releaseDate: date(2023, 9, 14),
+            episodeIDs: ["ep-history-1", "ep-history-0"],
+            artColor: .brown, symbol: "book.closed.fill"
+        ),
+    ]
+
     static let defaultPlaylists: [PlaylistUI] = [
         PlaylistUI(id: "pl-commute", name: "Commute Mix", episodeIDs: ["ep-tech-1", "ep-news-1"], coverColors: [.blue, .red]),
         PlaylistUI(id: "pl-longform", name: "Weekend Longform", episodeIDs: ["ep-science-0", "ep-history-0"], coverColors: [.teal, .brown]),
@@ -156,6 +179,7 @@ final class MockLibraryStore: ObservableObject {
     @Published private(set) var episodes: [PodcastEpisode] = MockData.episodes
     @Published private(set) var speakers: [Speaker] = MockData.speakers
     @Published private(set) var topics: [Topic] = MockData.topics
+    @Published private(set) var albums: [PodcastAlbum] = MockData.albums
     @Published var playlists: [PlaylistUI] = MockData.defaultPlaylists
     @Published var savedShowIDs: Set<String> = ["deep-dive", "retrospective"]
     @Published var downloadedEpisodeIDs: Set<String> = ["ep-tech-1"]
@@ -167,6 +191,7 @@ final class MockLibraryStore: ObservableObject {
         episodes = MockData.episodes
         speakers = MockData.speakers
         topics = MockData.topics
+        albums = MockData.albums
         playlists = MockData.defaultPlaylists
         savedShowIDs = ["deep-dive", "retrospective"]
         downloadedEpisodeIDs = ["ep-tech-1"]
@@ -174,7 +199,11 @@ final class MockLibraryStore: ObservableObject {
 
     func show(_ id: String) -> PodcastShow? { shows.first { $0.id == id } }
     func speaker(_ id: String) -> Speaker? { speakers.first { $0.id == id } }
+    func album(_ id: String) -> PodcastAlbum? { albums.first { $0.id == id } }
     func episodes(forShow showID: String) -> [PodcastEpisode] { episodes.filter { $0.showID == showID } }
+    func episodes(forAlbum album: PodcastAlbum) -> [PodcastEpisode] {
+        album.episodeIDs.compactMap { id in episodes.first { $0.id == id } }
+    }
     func episodes(forSpeaker speakerID: String) -> [PodcastEpisode] {
         let showIDs = Set(shows.filter { $0.speakerIDs.contains(speakerID) }.map(\.id))
         return episodes.filter { showIDs.contains($0.showID) }

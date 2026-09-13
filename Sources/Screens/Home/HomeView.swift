@@ -58,6 +58,15 @@ struct HomeView: View {
             }
         }
 
+        shelf("Albums") {
+            ForEach(library.albums) { album in
+                NavigationLink { AlbumDetailView(album: album) } label: {
+                    AlbumCard(album: album)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
         shelf("Playlists", trailing: {
             Button { showingCreatePlaylist = true } label: { Image(systemName: "plus.circle.fill") }
         }) {
@@ -71,15 +80,6 @@ struct HomeView: View {
 
         shelf("Favorites") {
             ForEach(favoriteShows) { show in
-                NavigationLink { ShowDetailView(show: show) } label: {
-                    ShowCard(show: show)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-
-        shelf("Shows for you") {
-            ForEach(library.shows) { show in
                 NavigationLink { ShowDetailView(show: show) } label: {
                     ShowCard(show: show)
                 }
@@ -128,13 +128,14 @@ struct HomeView: View {
 
     private var matchedShows: [PodcastShow] { library.shows.filter { $0.title.localizedCaseInsensitiveContains(query) } }
     private var matchedSpeakers: [Speaker] { library.speakers.filter { $0.name.localizedCaseInsensitiveContains(query) } }
+    private var matchedAlbums: [PodcastAlbum] { library.albums.filter { $0.title.localizedCaseInsensitiveContains(query) } }
     private var matchedPlaylists: [PlaylistUI] { library.playlists.filter { $0.name.localizedCaseInsensitiveContains(query) } }
     private var matchedTopics: [Topic] { library.topics.filter { $0.name.localizedCaseInsensitiveContains(query) } }
     private var matchedEpisodes: [PodcastEpisode] {
         library.episodes.filter { $0.title.localizedCaseInsensitiveContains(query) || $0.summary.localizedCaseInsensitiveContains(query) }
     }
     private var hasResults: Bool {
-        !(matchedShows.isEmpty && matchedSpeakers.isEmpty && matchedPlaylists.isEmpty && matchedEpisodes.isEmpty && matchedTopics.isEmpty)
+        !(matchedShows.isEmpty && matchedSpeakers.isEmpty && matchedAlbums.isEmpty && matchedPlaylists.isEmpty && matchedEpisodes.isEmpty && matchedTopics.isEmpty)
     }
 
     @ViewBuilder
@@ -151,6 +152,11 @@ struct HomeView: View {
             resultSection("Speakers", matchedSpeakers) { speaker in
                 NavigationLink { SpeakerDetailView(speaker: speaker) } label: {
                     resultRow(symbol: "person.fill", color: .gray, title: speaker.name, subtitle: nil)
+                }
+            }
+            resultSection("Albums", matchedAlbums) { album in
+                NavigationLink { AlbumDetailView(album: album) } label: {
+                    resultRow(symbol: album.symbol, color: album.artColor, title: album.title, subtitle: "\(album.episodeIDs.count) episodes")
                 }
             }
             resultSection("Playlists", matchedPlaylists) { playlist in
@@ -254,6 +260,21 @@ private struct PlaylistCard: View {
                 .overlay { Image(systemName: "square.stack.fill").font(.largeTitle).foregroundStyle(.white) }
             Text(playlist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
             Text("\(playlist.episodeIDs.count, format: .number.grouping(.never)) episodes").font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(width: 120)
+    }
+}
+
+private struct AlbumCard: View {
+    let album: PodcastAlbum
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(album.artColor.gradient)
+                .frame(width: 120, height: 120)
+                .overlay { Image(systemName: album.symbol).font(.largeTitle).foregroundStyle(.white) }
+            Text(album.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+            Text("\(album.episodeIDs.count, format: .number.grouping(.never)) episodes").font(.caption).foregroundStyle(.secondary)
         }
         .frame(width: 120)
     }
