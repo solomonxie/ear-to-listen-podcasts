@@ -5,7 +5,10 @@ final class SettingsViewModel: ObservableObject {
     @Published var providers: [ProviderRecord] = []
     @Published var testResults: [String: ConnectionTestResult] = [:]
     @Published var spotifyClientID: String = ""
+    @Published var openAIAPIKey: String = ""
     @Published var errorMessage: String?
+
+    private static let openAIAPIKeyKey = "openai.apiKey"
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let credentials = CredentialStore()
@@ -14,6 +17,7 @@ final class SettingsViewModel: ObservableObject {
         do {
             providers = try providerStore.all()
             spotifyClientID = try credentials.get(SpotifyImportSource.clientIDKey) ?? ""
+            openAIAPIKey = try credentials.get(Self.openAIAPIKeyKey) ?? ""
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -115,6 +119,18 @@ final class SettingsViewModel: ObservableObject {
     func saveSpotifyClientID() {
         do {
             try credentials.set(spotifyClientID, forKey: SpotifyImportSource.clientIDKey)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func saveOpenAIAPIKey() {
+        do {
+            if openAIAPIKey.isEmpty {
+                try credentials.delete(Self.openAIAPIKeyKey)
+            } else {
+                try credentials.set(openAIAPIKey, forKey: Self.openAIAPIKeyKey)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
