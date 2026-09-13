@@ -72,6 +72,18 @@ struct SettingsSectionView: View {
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("AI FEATURES").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                SecureField("OpenAI API Key", text: $viewModel.openAIAPIKey)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit { viewModel.saveOpenAIAPIKey() }
+                Text("Optional — lets the app ask OpenAI to analyze episode titles/summaries/transcripts (e.g. better topics, descriptions). Your key is stored only in this device's Keychain: we never see it or send it anywhere ourselves, it's used solely for direct requests from your device to OpenAI.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("SYNC & BACKUP").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 comingSoonRow("Export Library Data", systemImage: "square.and.arrow.up")
                 comingSoonRow("Import Library Data", systemImage: "square.and.arrow.down")
