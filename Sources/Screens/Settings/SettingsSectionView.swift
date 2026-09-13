@@ -77,7 +77,7 @@ struct SettingsSectionView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onSubmit { viewModel.saveOpenAIAPIKey() }
-                Text("Optional — lets the app ask OpenAI to analyze episode titles/summaries/transcripts (e.g. better topics, descriptions). Your key is stored only in this device's Keychain: we never see it or send it anywhere ourselves, it's used solely for direct requests from your device to OpenAI.")
+                Text("Optional — during sync, lets the app ask OpenAI to guess better titles/show names from a file's path and existing tags (not its audio). Your key is stored only in this device's Keychain: we never see it or send it anywhere ourselves, it's used solely for direct requests from your device to OpenAI.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

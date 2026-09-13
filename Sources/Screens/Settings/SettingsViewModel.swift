@@ -8,7 +8,8 @@ final class SettingsViewModel: ObservableObject {
     @Published var openAIAPIKey: String = ""
     @Published var errorMessage: String?
 
-    private static let openAIAPIKeyKey = "openai.apiKey"
+    /// Not private: `Sources/Library/ContentAnalyzer.swift` reads the same Keychain entry.
+    static let openAIAPIKeyKey = "openai.apiKey"
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let credentials = CredentialStore()
