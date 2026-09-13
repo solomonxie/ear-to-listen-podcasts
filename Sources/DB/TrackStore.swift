@@ -40,6 +40,15 @@ struct TrackStore {
         }
     }
 
+    func tracks(forProvider providerID: String) throws -> [Track] {
+        try dbQueue.read { db in
+            try Track
+                .filter(Column("providerID") == providerID && Column("isLost") == false)
+                .order(Column("title"))
+                .fetchAll(db)
+        }
+    }
+
     struct ProviderStats {
         var count: Int
         var lostCount: Int
@@ -90,6 +99,36 @@ struct TrackStore {
                 count += 1
             }
             return count
+        }
+    }
+
+    /// Records in-progress playback so it can be resumed and surfaced in "Continue Listening".
+    func recordProgress(id: String, positionMs: Int, playedAt: Date = Date()) throws {
+        try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return }
+            track.positionMs = positionMs
+            track.lastPlayedAt = playedAt
+            try track.save(db)
+        }
+    }
+
+    /// Marks a track as just-started, without touching its stored resume position.
+    func touchLastPlayed(id: String, playedAt: Date = Date()) throws {
+        try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return }
+            track.lastPlayedAt = playedAt
+            try track.save(db)
+        }
+    }
+
+    /// Tracks with playback history, most recently played first.
+    func recentlyPlayed(limit: Int = 20) throws -> [Track] {
+        try dbQueue.read { db in
+            try Track
+                .filter(Column("lastPlayedAt") != nil && Column("isLost") == false)
+                .order(Column("lastPlayedAt").desc)
+                .limit(limit)
+                .fetchAll(db)
         }
     }
 

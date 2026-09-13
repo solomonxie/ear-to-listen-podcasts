@@ -29,6 +29,30 @@ protocol CloudProvider: Sendable {
     func testConnection() async -> ConnectionTestResult
 }
 
+extension CloudProvider {
+    /// One directory level: immediate subfolder names and files directly in `folderID`.
+    /// Derived from `listFiles`'s recursive listing since providers don't expose a
+    /// delimiter-aware listing of their own.
+    func listDirectory(atFolder folderID: String?) async throws -> (folders: [String], files: [CloudFile]) {
+        let all = try await listFiles(inFolder: folderID)
+        let prefix = folderID.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
+
+        var folderNames: Set<String> = []
+        var directFiles: [CloudFile] = []
+        for file in all {
+            guard file.path.hasPrefix(prefix) else { continue }
+            let relative = String(file.path.dropFirst(prefix.count))
+            guard !relative.isEmpty else { continue }
+            if let slashIndex = relative.firstIndex(of: "/") {
+                folderNames.insert(String(relative[relative.startIndex..<slashIndex]))
+            } else {
+                directFiles.append(file)
+            }
+        }
+        return (folderNames.sorted(), directFiles)
+    }
+}
+
 final class CloudProviderRegistry: @unchecked Sendable {
     static let shared = CloudProviderRegistry()
 

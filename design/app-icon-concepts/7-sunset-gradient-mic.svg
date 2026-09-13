@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg7" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF7A59"/>
+      <stop offset="1" stop-color="#FF3D77"/>
+    </linearGradient>
+    <clipPath id="clip7"><rect width="1024" height="1024" rx="224" ry="224"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip7)">
+    <rect width="1024" height="1024" fill="url(#bg7)"/>
+    <g stroke="#FFFFFF" fill="none" stroke-linecap="round">
+      <path d="M282,220 A90,90 0 0,0 282,400" stroke-width="18" opacity="1"/>
+      <path d="M212,180 A130,130 0 0,0 212,440" stroke-width="18" opacity="0.7"/>
+      <path d="M142,140 A170,170 0 0,0 142,480" stroke-width="18" opacity="0.45"/>
+      <path d="M742,220 A90,90 0 0,1 742,400" stroke-width="18" opacity="1"/>
+      <path d="M812,180 A130,130 0 0,1 812,440" stroke-width="18" opacity="0.7"/>
+      <path d="M882,140 A170,170 0 0,1 882,480" stroke-width="18" opacity="0.45"/>
+    </g>
+    <rect x="422" y="140" width="180" height="340" rx="90" fill="#FFFFFF"/>
+    <path d="M372,480 A140,140 0 0,1 652,480" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+    <line x1="512" y1="620" x2="512" y2="700" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+    <line x1="430" y1="750" x2="594" y2="750" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+  </g>
+</svg>

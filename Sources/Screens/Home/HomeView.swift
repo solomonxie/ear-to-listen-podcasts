@@ -36,6 +36,7 @@ struct HomeView: View {
             }
             .padding(.vertical)
         }
+        .background(Color.appBackground.ignoresSafeArea())
         .navigationTitle("Good listening")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
         .onAppear { settings.load() }

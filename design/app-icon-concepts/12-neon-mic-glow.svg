@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg12" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101018"/>
+      <stop offset="1" stop-color="#05050A"/>
+    </linearGradient>
+    <linearGradient id="neon12" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#E879F9"/>
+    </linearGradient>
+    <clipPath id="clip12"><rect width="1024" height="1024" rx="224" ry="224"/></clipPath>
+    <filter id="glow12" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g clip-path="url(#clip12)">
+    <rect width="1024" height="1024" fill="url(#bg12)"/>
+    <g filter="url(#glow12)">
+      <g stroke="url(#neon12)" fill="none" stroke-linecap="round">
+        <path d="M282,220 A90,90 0 0,0 282,400" stroke-width="14" opacity="0.9"/>
+        <path d="M212,180 A130,130 0 0,0 212,440" stroke-width="14" opacity="0.6"/>
+        <path d="M142,140 A170,170 0 0,0 142,480" stroke-width="14" opacity="0.35"/>
+        <path d="M742,220 A90,90 0 0,1 742,400" stroke-width="14" opacity="0.9"/>
+        <path d="M812,180 A130,130 0 0,1 812,440" stroke-width="14" opacity="0.6"/>
+        <path d="M882,140 A170,170 0 0,1 882,480" stroke-width="14" opacity="0.35"/>
+      </g>
+      <rect x="422" y="140" width="180" height="340" rx="90" fill="none" stroke="url(#neon12)" stroke-width="14"/>
+      <path d="M372,480 A140,140 0 0,1 652,480" fill="none" stroke="url(#neon12)" stroke-width="14" stroke-linecap="round"/>
+      <line x1="512" y1="620" x2="512" y2="700" stroke="url(#neon12)" stroke-width="14" stroke-linecap="round"/>
+      <line x1="430" y1="750" x2="594" y2="750" stroke="url(#neon12)" stroke-width="14" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

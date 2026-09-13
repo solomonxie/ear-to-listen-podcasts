@@ -79,6 +79,35 @@ enum Migrations {
             }
         }
 
+        migrator.registerMigration("v3_transcripts") { db in
+            try db.create(table: "transcripts") { t in
+                t.column("trackID", .text).primaryKey().references("tracks", onDelete: .cascade)
+                t.column("segmentsJSON", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+
+        migrator.registerMigration("v4_playback_progress") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "positionMs", .integer)
+                t.add(column: "lastPlayedAt", .datetime)
+            }
+        }
+
+        migrator.registerMigration("v5_sync_queue") { db in
+            try db.create(table: "syncJobs") { t in
+                t.column("id", .text).primaryKey()
+                t.column("providerID", .text).notNull().indexed().references("providers", onDelete: .cascade)
+                t.column("filePath", .text).notNull()
+                t.column("displayName", .text).notNull()
+                t.column("sizeBytes", .integer)
+                t.column("status", .text).notNull().defaults(to: "pending")
+                t.column("errorMessage", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

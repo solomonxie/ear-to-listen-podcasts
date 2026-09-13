@@ -12,11 +12,22 @@ final class PlaybackEngine: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var lastError: String?
+    @Published private(set) var transcript: [TranscriptSegment] = []
+    @Published private(set) var isTranscribing = false
 
     private let player = AVQueuePlayer()
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let transcriptStore = TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let transcriber = Transcriber()
     private var itemStatusObservation: NSKeyValueObservation?
     private var hasRetriedCurrentTrack = false
+    private var lastPersistedProgressAt = Date.distantPast
+
+    /// The transcript line current playback has reached, for highlighting in the UI.
+    var currentTranscriptSegment: TranscriptSegment? {
+        transcript.last { $0.start <= currentTime }
+    }
 
     private init() {
         configureAudioSession()
@@ -34,10 +45,40 @@ final class PlaybackEngine: ObservableObject {
     }
 
     func play(track: Track, queue newQueue: [Track] = []) {
+        persistProgress(force: true)
         queue = newQueue.isEmpty ? [track] : newQueue
         currentTrack = track
         hasRetriedCurrentTrack = false
+        transcript = []
+        try? trackStore.touchLastPlayed(id: track.id)
         Task { await loadAndPlay(track: track) }
+        Task { await loadTranscript(track: track) }
+    }
+
+    /// Loads a cached transcript instantly, or transcribes live via OpenAI and saves it
+    /// locally for next time. Best-effort: a failure here doesn't interrupt playback.
+    private func loadTranscript(track: Track) async {
+        if let cached = try? transcriptStore.find(trackID: track.id) {
+            guard currentTrack?.id == track.id else { return }
+            transcript = cached
+            return
+        }
+        guard
+            let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
+            let provider = try? ProviderManager.shared.provider(for: record)
+        else { return }
+
+        isTranscribing = true
+        defer { isTranscribing = false }
+        do {
+            let segments = try await transcriber.transcribe(track: track, provider: provider)
+            try? transcriptStore.save(trackID: track.id, segments: segments)
+            guard currentTrack?.id == track.id else { return }
+            transcript = segments
+        } catch {
+            guard currentTrack?.id == track.id else { return }
+            lastError = error.localizedDescription
+        }
     }
 
     private func loadAndPlay(track: Track) async {
@@ -57,6 +98,7 @@ final class PlaybackEngine: ObservableObject {
             observeStatus(of: item, track: track)
             player.removeAllItems()
             player.insert(item, after: nil)
+            seekToResumePosition(of: track)
             player.play()
             isPlaying = true
             lastError = nil
@@ -64,6 +106,13 @@ final class PlaybackEngine: ObservableObject {
         } catch {
             lastError = "Playback failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Resumes from where playback last left off, unless the track was already finished.
+    private func seekToResumePosition(of track: Track) {
+        guard let positionMs = track.positionMs, positionMs > 2_000 else { return }
+        if let durationMs = track.durationMs, positionMs >= durationMs - 5_000 { return }
+        player.seek(to: CMTime(seconds: TimeInterval(positionMs) / 1000, preferredTimescale: 600))
     }
 
     /// A presigned stream URL can expire mid-playback (e.g. a long pause). On failure, drop any
@@ -113,6 +162,7 @@ final class PlaybackEngine: ObservableObject {
         player.pause()
         isPlaying = false
         updateNowPlayingPlaybackState()
+        persistProgress(force: true)
     }
 
     func resume() {
@@ -146,8 +196,18 @@ final class PlaybackEngine: ObservableObject {
                 self.currentTime = time.seconds
                 self.duration = self.player.currentItem?.duration.seconds ?? 0
                 self.updateNowPlayingElapsedTime()
+                self.persistProgress()
             }
         }
+    }
+
+    /// Throttled so scrubbing/seeking doesn't hammer the database; `force` bypasses that
+    /// for moments that matter (pause, track switch).
+    private func persistProgress(force: Bool = false) {
+        guard let track = currentTrack, currentTime.isFinite, currentTime >= 0 else { return }
+        guard force || Date().timeIntervalSince(lastPersistedProgressAt) > 5 else { return }
+        lastPersistedProgressAt = Date()
+        try? trackStore.recordProgress(id: track.id, positionMs: Int(currentTime * 1000))
     }
 
     private func configureRemoteCommands() {
