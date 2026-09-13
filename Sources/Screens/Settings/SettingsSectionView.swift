@@ -7,8 +7,8 @@ struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @EnvironmentObject private var library: MockLibraryStore
     @State private var showingResetConfirmation = false
-    @State private var showingFileImporter = false
-    @State private var isImporting = false
+    @State private var showingFolderPicker = false
+    @State private var isScanning = false
     @State private var importMessage: String?
 
     private var localProviders: [ProviderRecord] {
@@ -20,32 +20,31 @@ struct SettingsSectionView: View {
             Text("Settings").font(.title3.bold()).padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("ON-DEVICE STORAGE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text("LOCAL FOLDERS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Button {
-                    showingFileImporter = true
+                    showingFolderPicker = true
                 } label: {
-                    if isImporting {
+                    if isScanning {
                         Label {
-                            Text("Importing…")
+                            Text("Scanning…")
                         } icon: {
                             ProgressView()
                         }
                     } else {
-                        Label("Add Local Files", systemImage: "iphone")
+                        Label("Add a Folder", systemImage: "folder.badge.plus")
                     }
                 }
-                .disabled(isImporting)
+                .disabled(isScanning)
                 .fileImporter(
-                    isPresented: $showingFileImporter,
-                    allowedContentTypes: [.audio],
-                    allowsMultipleSelection: true
+                    isPresented: $showingFolderPicker,
+                    allowedContentTypes: [.folder]
                 ) { result in
-                    Task { await handleImport(result) }
+                    Task { await handleFolderPick(result) }
                 }
 
                 ForEach(localProviders) { record in
                     HStack {
-                        Label(record.label, systemImage: "iphone")
+                        Label(record.label, systemImage: "folder")
                         Spacer()
                         Toggle("", isOn: Binding(
                             get: { record.isActive },
@@ -66,7 +65,7 @@ struct SettingsSectionView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                Text("Picks specific audio files and copies them into the app's on-device storage, then syncs them in.")
+                Text("Scans a folder you pick on this device for audio files — they're read in place, never copied.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -121,42 +120,20 @@ struct SettingsSectionView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func handleImport(_ result: Result<[URL], Error>) async {
+    private func handleFolderPick(_ result: Result<URL, Error>) async {
         switch result {
         case .failure(let error):
             importMessage = error.localizedDescription
-        case .success(let urls):
-            isImporting = true
-            defer { isImporting = false }
+        case .success(let folderURL):
+            isScanning = true
+            defer { isScanning = false }
 
-            let destination = LocalFilesProvider.musicDirectory
-            try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-
-            var copied = 0
-            for url in urls {
-                guard url.startAccessingSecurityScopedResource() else { continue }
-                defer { url.stopAccessingSecurityScopedResource() }
-                let target = destination.appendingPathComponent(url.lastPathComponent)
-                do {
-                    if FileManager.default.fileExists(atPath: target.path) {
-                        try FileManager.default.removeItem(at: target)
-                    }
-                    try FileManager.default.copyItem(at: url, to: target)
-                    copied += 1
-                } catch {
-                    continue
-                }
+            guard let record = viewModel.addLocalProvider(folderURL: folderURL) else {
+                importMessage = "Couldn't add that folder."
+                return
             }
-
-            if localProviders.isEmpty {
-                viewModel.addLocalProvider()
-            }
-            if let record = viewModel.providers.first(where: { $0.type == LocalFilesProvider.providerType }) {
-                _ = try? await SyncEngine().sync(providerRecord: record)
-            }
-            importMessage = copied == 0
-                ? "No files were imported."
-                : "Imported \(copied) file\(copied == 1 ? "" : "s")."
+            let result = try? await SyncEngine().sync(providerRecord: record)
+            importMessage = "Found \(result?.totalFiles ?? 0) file\(result?.totalFiles == 1 ? "" : "s")."
         }
     }
 }

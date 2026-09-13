@@ -19,7 +19,8 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func addS3Provider(accessKeyId: String, secretAccessKey: String, region: String, bucket: String, keyPrefix: String, endpoint: String = "") {
+    @discardableResult
+    func addS3Provider(accessKeyId: String, secretAccessKey: String, region: String, bucket: String, keyPrefix: String) -> ProviderRecord? {
         let id = UUID().uuidString
         let settings = [
             "accessKeyId": accessKeyId,
@@ -27,7 +28,6 @@ final class SettingsViewModel: ObservableObject {
             "region": region,
             "bucket": bucket,
             "keyPrefix": keyPrefix,
-            "endpoint": endpoint,
         ]
         do {
             try ProviderManager.shared.saveSettings(settings, forProviderID: id)
@@ -41,27 +41,41 @@ final class SettingsViewModel: ObservableObject {
             )
             try providerStore.upsert(record)
             load()
+            return record
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 
-    func addLocalProvider() {
+    /// `folderURL` must be a security-scoped URL from a `.fileImporter`/document
+    /// picker; access is only needed long enough to mint the bookmark.
+    @discardableResult
+    func addLocalProvider(folderURL: URL) -> ProviderRecord? {
         let id = UUID().uuidString
+        guard folderURL.startAccessingSecurityScopedResource() else {
+            errorMessage = "Couldn't access that folder."
+            return nil
+        }
+        defer { folderURL.stopAccessingSecurityScopedResource() }
+
         do {
-            try ProviderManager.shared.saveSettings([:], forProviderID: id)
+            let bookmark = try folderURL.bookmarkData()
+            try ProviderManager.shared.saveSettings(["bookmark": bookmark.base64EncodedString()], forProviderID: id)
             let record = ProviderRecord(
                 id: id,
                 type: LocalFilesProvider.providerType,
-                label: "Files on this iPhone",
+                label: folderURL.lastPathComponent,
                 configJSON: "",
                 isActive: true,
                 createdAt: Date()
             )
             try providerStore.upsert(record)
             load()
+            return record
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 
