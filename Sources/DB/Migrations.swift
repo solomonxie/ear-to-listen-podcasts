@@ -68,6 +68,17 @@ enum Migrations {
             }
         }
 
+        migrator.registerMigration("v2_sync_settings") { db in
+            try db.alter(table: "providers") { t in
+                t.add(column: "syncFrequencyMinutes", .integer)
+                t.add(column: "lastSyncedAt", .datetime)
+            }
+            try db.alter(table: "tracks") { t in
+                t.add(column: "sizeBytes", .integer)
+                t.add(column: "isLost", .boolean).notNull().defaults(to: false)
+            }
+        }
+
         return migrator
     }
 }

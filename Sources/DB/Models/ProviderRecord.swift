@@ -10,6 +10,9 @@ struct ProviderRecord: Codable, FetchableRecord, PersistableRecord, Identifiable
     var configJSON: String
     var isActive: Bool
     var createdAt: Date
+    /// Minutes between auto-syncs; nil means manual only ("Sync Now").
+    var syncFrequencyMinutes: Int? = nil
+    var lastSyncedAt: Date? = nil
 }
 
 struct ImportSourceRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {

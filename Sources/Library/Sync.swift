@@ -3,6 +3,42 @@ import Foundation
 
 private let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "flac", "aiff", "alac"]
 
+enum SyncFrequency: Int, CaseIterable, Identifiable {
+    case manual = 0
+    case minutes15 = 15
+    case minutes30 = 30
+    case hourly = 60
+    case hours6 = 360
+    case hours12 = 720
+    case daily = 1440
+
+    var id: Int { rawValue }
+
+    init(minutes: Int?) {
+        self = SyncFrequency(rawValue: minutes ?? 0) ?? .manual
+    }
+
+    var minutes: Int? { self == .manual ? nil : rawValue }
+
+    var displayName: String {
+        switch self {
+        case .manual: return "Manual (no auto sync)"
+        case .minutes15: return "Every 15 minutes"
+        case .minutes30: return "Every 30 minutes"
+        case .hourly: return "Every hour"
+        case .hours6: return "Every 6 hours"
+        case .hours12: return "Every 12 hours"
+        case .daily: return "Every day"
+        }
+    }
+}
+
+struct SyncResult {
+    var added: Int
+    var lost: Int
+    var totalFiles: Int
+}
+
 struct SyncEngine {
     let dbQueue = DatabaseManager.shared.dbQueue
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
@@ -10,22 +46,34 @@ struct SyncEngine {
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
 
     /// Syncs every active provider's file listing into the local library.
-    /// Returns the number of tracks added or updated.
+    @discardableResult
     func syncActiveProviders() async throws -> Int {
         var total = 0
         for record in try providerStore.active() {
-            total += try await sync(providerRecord: record)
+            total += try await sync(providerRecord: record).added
         }
         return total
     }
 
-    func sync(providerRecord record: ProviderRecord) async throws -> Int {
+    /// Recursively lists the provider's files, adds any not yet in local metadata (analyzing
+    /// their audio metadata), and marks any previously-known file no longer in the listing as lost.
+    func sync(providerRecord record: ProviderRecord) async throws -> SyncResult {
         let provider = try ProviderManager.shared.provider(for: record)
         let files = try await provider.listFiles(inFolder: nil)
             .filter { audioExtensions.contains(($0.path as NSString).pathExtension.lowercased()) }
 
-        var count = 0
+        var seenPaths: Set<String> = []
+        var added = 0
         for file in files {
+            seenPaths.insert(file.path)
+
+            if let existing = try trackStore.find(providerID: record.id, filePath: file.path) {
+                if existing.isLost || existing.sizeBytes != file.sizeBytes {
+                    try trackStore.refresh(id: existing.id, sizeBytes: file.sizeBytes, isLost: false)
+                }
+                continue
+            }
+
             let metadata = await extractMetadata(provider: provider, fileID: file.path)
             let title = metadata.title ?? (file.name as NSString).deletingPathExtension
             let artist = try metadata.artist.map { try libraryStore.upsertArtist(name: $0) }
@@ -33,9 +81,8 @@ struct SyncEngine {
                 try libraryStore.upsertAlbum(name: albumName, artistID: artist?.id)
             }
 
-            let existing = try trackStore.find(providerID: record.id, filePath: file.path)
             let track = Track(
-                id: existing?.id ?? UUID().uuidString,
+                id: UUID().uuidString,
                 providerID: record.id,
                 artistID: artist?.id,
                 albumID: album?.id,
@@ -43,12 +90,18 @@ struct SyncEngine {
                 title: title,
                 trackNumber: nil,
                 durationMs: metadata.durationMs,
+                sizeBytes: file.sizeBytes,
+                isLost: false,
                 updatedAt: Date()
             )
             try trackStore.upsert(track, artistName: metadata.artist, albumName: metadata.album)
-            count += 1
+            added += 1
         }
-        return count
+
+        let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
+        try providerStore.updateLastSynced(id: record.id, at: Date())
+
+        return SyncResult(added: added, lost: lost, totalFiles: files.count)
     }
 
     private func extractMetadata(provider: CloudProvider, fileID: String) async -> (title: String?, artist: String?, album: String?, durationMs: Int?) {
