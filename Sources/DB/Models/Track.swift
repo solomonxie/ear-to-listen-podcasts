@@ -16,4 +16,7 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// True when the last sync no longer found this file in the bucket listing.
     var isLost: Bool = false
     var updatedAt: Date
+    /// Playback progress, in milliseconds, as of `lastPlayedAt`.
+    var positionMs: Int? = nil
+    var lastPlayedAt: Date? = nil
 }

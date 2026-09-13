@@ -5,8 +5,8 @@ import SwiftUI
 
 struct Speaker: Identifiable, Hashable {
     let id: String
-    let name: String
-    let bio: String
+    var name: String
+    var bio: String
 }
 
 struct PodcastShow: Identifiable, Hashable {
@@ -37,6 +37,8 @@ struct PodcastEpisode: Identifiable, Hashable {
     /// Bundled demo clip name under Resources/DemoAudio (no extension), if any.
     let audioFileName: String?
     let transcript: [TranscriptLine]
+    /// Manually credited speakers beyond the show's regular hosts (e.g. a one-off guest).
+    var extraSpeakerIDs: [String] = []
 }
 
 struct Topic: Identifiable, Hashable {
@@ -57,7 +59,7 @@ struct PlaylistUI: Identifiable, Hashable {
 struct PodcastAlbum: Identifiable, Hashable {
     let id: String
     let title: String
-    let speakerIDs: [String]
+    var speakerIDs: [String]
     let description: String
     let releaseDate: Date
     let episodeIDs: [String]
@@ -65,21 +67,3 @@ struct PodcastAlbum: Identifiable, Hashable {
     let symbol: String
 }
 
-indirect enum RemoteEntry: Identifiable, Hashable {
-    case folder(id: String, name: String, children: [RemoteEntry])
-    case file(id: String, name: String, sizeBytes: Int, modified: String)
-
-    var id: String {
-        switch self {
-        case .folder(let id, _, _): return id
-        case .file(let id, _, _, _): return id
-        }
-    }
-
-    var name: String {
-        switch self {
-        case .folder(_, let name, _): return name
-        case .file(_, let name, _, _): return name
-        }
-    }
-}

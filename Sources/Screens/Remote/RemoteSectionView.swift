@@ -5,6 +5,10 @@ import SwiftUI
 struct RemoteSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var showingAddS3 = false
+    @State private var recentTracks: [Track] = []
+    @State private var isShowingPlayer = false
+
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     private var s3Providers: [ProviderRecord] {
         viewModel.providers.filter { $0.type == S3Provider.providerType }
@@ -12,6 +16,25 @@ struct RemoteSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if !recentTracks.isEmpty {
+                Text("Continue Listening").font(.title3.bold()).padding(.horizontal)
+                VStack(spacing: 0) {
+                    ForEach(recentTracks) { track in
+                        Button {
+                            PlaybackEngine.shared.play(track: track)
+                            isShowingPlayer = true
+                        } label: {
+                            RecentTrackRow(track: track)
+                        }
+                        .buttonStyle(.plain)
+                        if track.id != recentTracks.last?.id {
+                            Divider().padding(.leading, 68)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+
             HStack {
                 Text("Remote").font(.title3.bold())
                 Spacer()
@@ -51,6 +74,38 @@ struct RemoteSectionView: View {
         .sheet(isPresented: $showingAddS3) {
             NavigationStack { AddS3ProviderView(viewModel: viewModel) }
         }
+        .sheet(isPresented: $isShowingPlayer) {
+            RealPlayerView()
+        }
+        .onAppear(perform: reloadRecentTracks)
+        .onChange(of: isShowingPlayer) { _, isShowing in
+            if !isShowing { reloadRecentTracks() }
+        }
+    }
+
+    private func reloadRecentTracks() {
+        recentTracks = (try? trackStore.recentlyPlayed()) ?? []
+    }
+}
+
+private struct RecentTrackRow: View {
+    let track: Track
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.accentColor.gradient)
+                .frame(width: 44, height: 44)
+                .overlay { Image(systemName: "play.circle.fill").foregroundStyle(.white) }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                if let positionMs = track.positionMs, let durationMs = track.durationMs, durationMs > 0 {
+                    ProgressView(value: Double(positionMs), total: Double(durationMs))
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 }
 

@@ -74,6 +74,7 @@ struct NowPlayingView: View {
                     Spacer()
                 }
             }
+            .background(Color.appBackground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -138,6 +139,8 @@ private struct UpNextView: View {
                 .buttonStyle(.plain)
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground.ignoresSafeArea())
             .navigationTitle("Up Next")
             .navigationBarTitleDisplayMode(.inline)
         }

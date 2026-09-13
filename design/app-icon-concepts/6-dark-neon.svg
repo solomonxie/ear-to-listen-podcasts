@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg6" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101018"/>
+      <stop offset="1" stop-color="#05050A"/>
+    </linearGradient>
+    <linearGradient id="neon6" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#E879F9"/>
+    </linearGradient>
+    <clipPath id="clip6"><rect width="1024" height="1024" rx="224" ry="224"/></clipPath>
+    <filter id="glow6" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g clip-path="url(#clip6)">
+    <rect width="1024" height="1024" fill="url(#bg6)"/>
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"
+          transform="translate(200,150) scale(26)" fill="none"
+          stroke="url(#neon6)" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"
+          opacity="0.85" filter="url(#glow6)"/>
+    <g fill="url(#neon6)" filter="url(#glow6)">
+      <rect x="290" y="700" width="46" height="60" rx="23"/>
+      <rect x="360" y="650" width="46" height="110" rx="23"/>
+      <rect x="430" y="590" width="46" height="170" rx="23"/>
+      <rect x="500" y="540" width="46" height="220" rx="23"/>
+      <rect x="570" y="590" width="46" height="170" rx="23"/>
+      <rect x="640" y="650" width="46" height="110" rx="23"/>
+      <rect x="710" y="700" width="46" height="60" rx="23"/>
+    </g>
+  </g>
+</svg>

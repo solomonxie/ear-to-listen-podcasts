@@ -85,47 +85,56 @@ struct SyncEngine {
         var added = 0
         for file in files {
             seenPaths.insert(file.path)
-
-            if let existing = try trackStore.find(providerID: record.id, filePath: file.path) {
-                if existing.isLost || existing.sizeBytes != file.sizeBytes {
-                    try trackStore.refresh(id: existing.id, sizeBytes: file.sizeBytes, isLost: false)
-                }
-                continue
+            if try await importFileIfNeeded(file, providerRecord: record, provider: provider) {
+                added += 1
             }
-
-            let metadata = await extractMetadata(provider: provider, fileID: file.path)
-            let guess = await contentAnalyzer.analyze(
-                filePath: file.path, title: metadata.title, artist: metadata.artist, album: metadata.album
-            )
-            let title = guess?.title ?? metadata.title ?? (file.name as NSString).deletingPathExtension
-            let artistName = guess?.artist ?? metadata.artist
-            let albumName = guess?.album ?? metadata.album
-            let artist = try artistName.map { try libraryStore.upsertArtist(name: $0) }
-            let album = try albumName.map { name in
-                try libraryStore.upsertAlbum(name: name, artistID: artist?.id)
-            }
-
-            let track = Track(
-                id: UUID().uuidString,
-                providerID: record.id,
-                artistID: artist?.id,
-                albumID: album?.id,
-                filePath: file.path,
-                title: title,
-                trackNumber: nil,
-                durationMs: metadata.durationMs,
-                sizeBytes: file.sizeBytes,
-                isLost: false,
-                updatedAt: Date()
-            )
-            try trackStore.upsert(track, artistName: artistName, albumName: albumName)
-            added += 1
         }
 
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
         try providerStore.updateLastSynced(id: record.id, at: Date())
 
         return SyncResult(added: added, lost: lost, totalFiles: files.count)
+    }
+
+    /// Imports one already-listed file if not yet known locally (or refreshes its size/lost
+    /// state if it is); shared by the whole-bucket `sync` above and the per-file sync queue.
+    /// Returns whether a new track was added.
+    @discardableResult
+    func importFileIfNeeded(_ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider) async throws -> Bool {
+        if let existing = try trackStore.find(providerID: record.id, filePath: file.path) {
+            if existing.isLost || existing.sizeBytes != file.sizeBytes {
+                try trackStore.refresh(id: existing.id, sizeBytes: file.sizeBytes, isLost: false)
+            }
+            return false
+        }
+
+        let metadata = await extractMetadata(provider: provider, fileID: file.path)
+        let guess = await contentAnalyzer.analyze(
+            filePath: file.path, title: metadata.title, artist: metadata.artist, album: metadata.album
+        )
+        let title = guess?.title ?? metadata.title ?? (file.name as NSString).deletingPathExtension
+        let artistName = guess?.artist ?? metadata.artist
+        let albumName = guess?.album ?? metadata.album
+        let artist = try artistName.map { try libraryStore.upsertArtist(name: $0) }
+        let album = try albumName.map { name in
+            try libraryStore.upsertAlbum(name: name, artistID: artist?.id)
+        }
+
+        let track = Track(
+            id: UUID().uuidString,
+            providerID: record.id,
+            artistID: artist?.id,
+            albumID: album?.id,
+            filePath: file.path,
+            title: title,
+            trackNumber: nil,
+            durationMs: metadata.durationMs,
+            sizeBytes: file.sizeBytes,
+            isLost: false,
+            updatedAt: Date()
+        )
+        try trackStore.upsert(track, artistName: artistName, albumName: albumName)
+        return true
     }
 
     private func extractMetadata(provider: CloudProvider, fileID: String) async -> (title: String?, artist: String?, album: String?, durationMs: Int?) {

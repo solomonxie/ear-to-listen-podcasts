@@ -3,12 +3,13 @@ import Foundation
 /// Best-effort title/artist/album guesses from OpenAI, using only a file's path/name
 /// and whatever tags were already embedded in it — never the audio content itself
 /// (too heavy to send/transcribe during a routine sync). Skipped entirely when no
-/// key is set in Settings ▸ AI Features.
+/// key is set in Settings ▸ AI Features, or when embedded metadata is already complete.
 struct ContentAnalyzer {
     private let credentials = CredentialStore()
 
     private static let endpoint = URL(string: "https://api.openai.com/v1/chat/completions")!
     private static let model = "gpt-4o-mini"
+    private static let maxResponseTokens = 60
 
     struct Guess: Decodable {
         var title: String?
@@ -16,8 +17,10 @@ struct ContentAnalyzer {
         var album: String?
     }
 
-    /// Returns `nil` on any failure (missing key, network error, bad response) — this is
-    /// purely an enhancement over the embedded metadata, sync must not fail without it.
+    /// Returns `nil` on any failure (missing key, network error, bad response), or when
+    /// `title`/`artist`/`album` are all already filled in — this is purely an enhancement
+    /// over embedded metadata, sync must not fail without it and shouldn't pay for it
+    /// when there's nothing to improve.
     func analyze(filePath: String, title: String?, artist: String?, album: String?) async -> Guess? {
         guard
             let apiKey = try? credentials.get(SettingsViewModel.openAIAPIKeyKey),
@@ -25,15 +28,16 @@ struct ContentAnalyzer {
         else {
             return nil
         }
+        guard [title, artist, album].contains(where: { $0?.isEmpty != false }) else {
+            return nil
+        }
 
         let prompt = """
-        An audio file has this path: \(filePath)
-        Its embedded metadata (may be missing or generic): title=\(title ?? "none"), artist=\(artist ?? "none"), album=\(album ?? "none")
-
-        From the path and filename alone, guess better values for title, artist (host/show
-        name), and album (show/series name). Respond with strict JSON only:
+        Path: \(filePath)
+        Known: title=\(title ?? "none"), artist=\(artist ?? "none"), album=\(album ?? "none")
+        Guess better title/artist(host)/album(show) from the path alone. Strict JSON only:
         {"title": string|null, "artist": string|null, "album": string|null}
-        Use null for any field you can't confidently improve on the embedded metadata.
+        null = can't improve.
         """
 
         var request = URLRequest(url: Self.endpoint)
@@ -43,6 +47,7 @@ struct ContentAnalyzer {
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
             "model": Self.model,
             "response_format": ["type": "json_object"],
+            "max_tokens": Self.maxResponseTokens,
             "messages": [["role": "user", "content": prompt]],
         ])
 

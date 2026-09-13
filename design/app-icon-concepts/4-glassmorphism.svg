@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <clipPath id="clip4"><rect width="1024" height="1024" rx="224" ry="224"/></clipPath>
+    <filter id="blur4"><feGaussianBlur stdDeviation="60"/></filter>
+  </defs>
+  <g clip-path="url(#clip4)">
+    <rect width="1024" height="1024" fill="url(#bg4)"/>
+    <circle cx="180" cy="180" r="220" fill="#FFFFFF" opacity="0.22" filter="url(#blur4)"/>
+    <circle cx="880" cy="860" r="260" fill="#FFFFFF" opacity="0.18" filter="url(#blur4)"/>
+    <rect x="262" y="262" width="500" height="500" rx="120" fill="#FFFFFF" opacity="0.15"
+          stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="3"/>
+    <path d="M262 300 L 720 262 L 762 340 L 300 380 Z" fill="#FFFFFF" opacity="0.10"/>
+    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"
+          transform="translate(308,325) scale(17)" fill="#FFFFFF" opacity="0.95"/>
+    <g fill="#FFFFFF" opacity="0.95">
+      <rect x="452" y="600" width="30" height="60" rx="15"/>
+      <rect x="498" y="565" width="30" height="95" rx="15"/>
+      <rect x="544" y="600" width="30" height="60" rx="15"/>
+    </g>
+  </g>
+</svg>

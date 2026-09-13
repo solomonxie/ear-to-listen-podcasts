@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Per-source sync controls (frequency, manual sync, storage stats) plus a way into
+/// Per-source sync controls (frequency, manual sync, storage stats), a real synced-episode
+/// list that plays via `PlaybackEngine` (transcribing live if needed), and a way into
 /// the (still mock) folder browser.
 struct RemoteSourceDetailView: View {
     @State var record: ProviderRecord
@@ -9,6 +10,8 @@ struct RemoteSourceDetailView: View {
     @State private var isSyncing = false
     @State private var syncMessage: String?
     @State private var stats: TrackStore.ProviderStats?
+    @State private var tracks: [Track] = []
+    @State private var isShowingPlayer = false
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -22,9 +25,14 @@ struct RemoteSourceDetailView: View {
         List {
             Section {
                 NavigationLink {
-                    RemoteBrowserView(sourceName: record.label)
+                    RemoteBrowserView(record: record)
                 } label: {
                     Label("Browse Files", systemImage: "folder")
+                }
+                NavigationLink {
+                    SyncQueueView()
+                } label: {
+                    Label("Sync Queue", systemImage: "arrow.triangle.2.circlepath")
                 }
             }
 
@@ -60,6 +68,19 @@ struct RemoteSourceDetailView: View {
                 }
             }
 
+            if !tracks.isEmpty {
+                Section("Episodes") {
+                    ForEach(tracks) { track in
+                        Button {
+                            PlaybackEngine.shared.play(track: track, queue: tracks)
+                            isShowingPlayer = true
+                        } label: {
+                            Text(track.title).lineLimit(1)
+                        }
+                    }
+                }
+            }
+
             Section("Storage") {
                 if let stats, stats.count > 0 {
                     LabeledContent("Episodes", value: "\(stats.count)")
@@ -79,10 +100,14 @@ struct RemoteSourceDetailView: View {
         .navigationTitle(record.label)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: loadStats)
+        .sheet(isPresented: $isShowingPlayer) {
+            RealPlayerView()
+        }
     }
 
     private func loadStats() {
         stats = try? trackStore.stats(forProvider: record.id)
+        tracks = (try? trackStore.tracks(forProvider: record.id)) ?? []
     }
 
     private func syncNow() async {

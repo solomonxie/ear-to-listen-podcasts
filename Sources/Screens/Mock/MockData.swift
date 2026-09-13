@@ -153,22 +153,6 @@ enum MockData {
         PlaylistUI(id: "pl-quick", name: "Quick Hits", episodeIDs: ["ep-news-1", "ep-tech-1", "ep-history-1"], coverColors: [.orange, .indigo]),
     ]
 
-    static let remoteTree: [RemoteEntry] = [
-        .folder(id: "f-deep-dive", name: "Deep Dive", children: [
-            .file(id: "file-1", name: "on-device-ai-for-real.m4a", sizeBytes: 24_500_000, modified: "2024-11-02"),
-            .file(id: "file-2", name: "why-local-first-won.m4a", sizeBytes: 31_200_000, modified: "2024-10-26"),
-        ]),
-        .folder(id: "f-retrospective", name: "Retrospective", children: [
-            .file(id: "file-3", name: "short-history-of-podcast.m4a", sizeBytes: 19_800_000, modified: "2023-09-14"),
-            .file(id: "file-4", name: "first-radio-broadcast.m4a", sizeBytes: 27_100_000, modified: "2023-09-07"),
-        ]),
-        .folder(id: "f-daily-brief", name: "Daily Brief", children: [
-            .file(id: "file-5", name: "local-first-moment.m4a", sizeBytes: 4_100_000, modified: "2024-11-10"),
-        ]),
-        .folder(id: "f-unsorted", name: "Unsorted", children: [
-            .file(id: "file-6", name: "memory-consolidation-raw.m4a", sizeBytes: 46_700_000, modified: "2022-05-19"),
-        ]),
-    ]
 }
 
 @MainActor
@@ -206,10 +190,19 @@ final class MockLibraryStore: ObservableObject {
     }
     func episodes(forSpeaker speakerID: String) -> [PodcastEpisode] {
         let showIDs = Set(shows.filter { $0.speakerIDs.contains(speakerID) }.map(\.id))
-        return episodes.filter { showIDs.contains($0.showID) }
+        return episodes.filter { showIDs.contains($0.showID) || $0.extraSpeakerIDs.contains(speakerID) }
     }
     func episodes(inPlaylist playlist: PlaylistUI) -> [PodcastEpisode] {
         playlist.episodeIDs.compactMap { id in episodes.first { $0.id == id } }
+    }
+    func albums(forSpeaker speakerID: String) -> [PodcastAlbum] {
+        albums.filter { $0.speakerIDs.contains(speakerID) }
+    }
+    /// Whether a speaker is credited on an episode via its show, rather than a manual link.
+    func isSpeakerCreditedViaShow(_ speakerID: String, episodeID: String) -> Bool {
+        guard let episode = episodes.first(where: { $0.id == episodeID }),
+              let show = show(episode.showID) else { return false }
+        return show.speakerIDs.contains(speakerID)
     }
 
     func createPlaylist(name: String) {
@@ -219,5 +212,29 @@ final class MockLibraryStore: ObservableObject {
 
     func deletePlaylist(id: String) {
         playlists.removeAll { $0.id == id }
+    }
+
+    func updateSpeaker(id: String, name: String, bio: String) {
+        guard let index = speakers.firstIndex(where: { $0.id == id }) else { return }
+        speakers[index].name = name
+        speakers[index].bio = bio
+    }
+
+    func setSpeaker(_ speakerID: String, linkedToAlbum albumID: String, linked: Bool) {
+        guard let index = albums.firstIndex(where: { $0.id == albumID }) else { return }
+        if linked {
+            if !albums[index].speakerIDs.contains(speakerID) { albums[index].speakerIDs.append(speakerID) }
+        } else {
+            albums[index].speakerIDs.removeAll { $0 == speakerID }
+        }
+    }
+
+    func setSpeaker(_ speakerID: String, linkedToEpisode episodeID: String, linked: Bool) {
+        guard let index = episodes.firstIndex(where: { $0.id == episodeID }) else { return }
+        if linked {
+            if !episodes[index].extraSpeakerIDs.contains(speakerID) { episodes[index].extraSpeakerIDs.append(speakerID) }
+        } else {
+            episodes[index].extraSpeakerIDs.removeAll { $0 == speakerID }
+        }
     }
 }
