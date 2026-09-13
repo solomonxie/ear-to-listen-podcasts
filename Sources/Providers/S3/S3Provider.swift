@@ -58,24 +58,15 @@ struct S3Provider: CloudProvider {
         let region = try setting("region")
         bucket = try setting("bucket")
         keyPrefix = config.settings["keyPrefix"].flatMap { $0.isEmpty ? nil : $0 }
-        let endpoint = config.settings["endpoint"].flatMap { $0.isEmpty ? nil : $0 }
 
         let identity = AWSCredentialIdentity(accessKey: accessKeyId, secret: secretAccessKey)
         let resolver = StaticAWSCredentialIdentityResolver(identity)
         let clientConfig = try S3Client.S3ClientConfig(
             awsCredentialIdentityResolver: resolver,
-            region: region,
-            // S3-compatible services (MinIO, etc.) are almost always path-style;
-            // real AWS S3 works with either, so only force it when a custom endpoint is set.
-            forcePathStyle: endpoint != nil,
-            endpoint: endpoint
+            region: region
         )
         client = S3Client(config: clientConfig)
     }
-
-    /// Used as the signing region for S3-compatible services that ignore region but still
-    /// require the SDK to sign requests with one.
-    static let fallbackRegion = "us-east-1"
 
     /// Looks up which region a bucket lives in, so the add-provider flow doesn't require typing it
     /// or granting any IAM permission: S3 returns this header for any request to a bucket's

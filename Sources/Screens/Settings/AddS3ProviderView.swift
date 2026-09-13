@@ -7,7 +7,6 @@ struct AddS3ProviderView: View {
     @State private var accessKeyId = ""
     @State private var secretAccessKey = ""
     @State private var bucket = ""
-    @State private var endpoint = ""
     @State private var keyPrefix = S3Provider.defaultKeyPrefix
     @State private var isValidating = false
     @State private var validationError: String?
@@ -21,27 +20,16 @@ struct AddS3ProviderView: View {
                     TextField("Bucket name", text: $bucket)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                    TextField("Folder (key prefix)", text: $keyPrefix)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                     TextField("Access Key ID", text: $accessKeyId)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                     SecureField("Secret Access Key", text: $secretAccessKey)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                }
-                Section("Endpoint") {
-                    TextField("Endpoint (leave blank for AWS S3)", text: $endpoint)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    Text("Only needed for S3-compatible services, e.g. https://minio.example.com.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Section("Key Prefix") {
-                    TextField("Key prefix", text: $keyPrefix)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    Text("Only files under this path in the bucket are used. Region is detected automatically for AWS S3.")
+                    Text("Only files under this folder in the bucket are used. Region is detected automatically.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -58,9 +46,6 @@ struct AddS3ProviderView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section {
-                    Text("Works with AWS S3 and S3-compatible services: MinIO, Cloudflare R2, Backblaze B2, Wasabi, DigitalOcean Spaces, and others.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                     Link("How to create a bucket and set permissions", destination: Self.setupGuideURL)
                         .font(.footnote)
                 }
@@ -90,14 +75,9 @@ struct AddS3ProviderView: View {
         let accessKeyId = accessKeyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let secretAccessKey = secretAccessKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let bucket = bucket.trimmingCharacters(in: .whitespacesAndNewlines)
-        let endpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
-            // Region auto-detection relies on AWS's virtual-hosted endpoint, so it only
-            // works for real AWS S3; S3-compatible services sign with a fallback region instead.
-            let region = endpoint.isEmpty
-                ? try await S3Provider.detectRegion(bucket: bucket)
-                : S3Provider.fallbackRegion
+            let region = try await S3Provider.detectRegion(bucket: bucket)
 
             let config = CloudProviderConfig(
                 id: UUID().uuidString,
@@ -109,7 +89,6 @@ struct AddS3ProviderView: View {
                     "region": region,
                     "bucket": bucket,
                     "keyPrefix": keyPrefix,
-                    "endpoint": endpoint,
                 ]
             )
 
@@ -119,14 +98,17 @@ struct AddS3ProviderView: View {
                 validationError = result.message ?? "Could not connect to this bucket."
                 return
             }
-            viewModel.addS3Provider(
+            if let record = viewModel.addS3Provider(
                 accessKeyId: accessKeyId,
                 secretAccessKey: secretAccessKey,
                 region: region,
                 bucket: bucket,
-                keyPrefix: keyPrefix,
-                endpoint: endpoint
-            )
+                keyPrefix: keyPrefix
+            ) {
+                // Scans the bucket right away so the new source isn't empty until the
+                // next scheduled/manual sync.
+                _ = try? await SyncEngine().sync(providerRecord: record)
+            }
             dismiss()
         } catch {
             validationError = describeAWSError(error)

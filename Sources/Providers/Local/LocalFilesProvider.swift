@@ -1,8 +1,21 @@
 import Foundation
 
-/// Reads episodes straight out of the app's on-device Documents/Music folder.
-/// Files land there via the Files app ("On My iPhone" > Bring Your Own Podcasts > Music)
-/// or Finder file sharing over USB — no credentials, no network.
+enum LocalFilesProviderError: Error, LocalizedError {
+    case missingBookmark
+    case accessDenied
+
+    var errorDescription: String? {
+        switch self {
+        case .missingBookmark: return "This local folder is missing its saved location — remove and re-add it."
+        case .accessDenied: return "Couldn't access this folder. It may have been moved or deleted."
+        }
+    }
+}
+
+/// Reads episodes straight out of a folder the user picked via the Files app,
+/// in place — nothing is copied into the app's own storage. Access persists
+/// across launches via a security-scoped bookmark stored alongside the other
+/// provider settings.
 struct LocalFilesProvider: CloudProvider {
     static let providerType = "local"
     let type = LocalFilesProvider.providerType
@@ -10,13 +23,19 @@ struct LocalFilesProvider: CloudProvider {
     private let baseURL: URL
 
     init(config: CloudProviderConfig) throws {
-        baseURL = Self.musicDirectory
-        try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
-    }
+        guard
+            let encoded = config.settings["bookmark"],
+            let bookmarkData = Data(base64Encoded: encoded)
+        else {
+            throw LocalFilesProviderError.missingBookmark
+        }
 
-    static var musicDirectory: URL {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return documents.appendingPathComponent("Music", isDirectory: true)
+        var isStale = false
+        let url = try URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &isStale)
+        guard url.startAccessingSecurityScopedResource() else {
+            throw LocalFilesProviderError.accessDenied
+        }
+        baseURL = url
     }
 
     func listFiles(inFolder folderID: String?) async throws -> [CloudFile] {
@@ -66,7 +85,7 @@ struct LocalFilesProvider: CloudProvider {
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: baseURL.path, isDirectory: &isDirectory)
         guard exists, isDirectory.boolValue else {
-            return ConnectionTestResult(isSuccess: false, message: "Music folder not found.")
+            return ConnectionTestResult(isSuccess: false, message: "Folder not found.")
         }
         return ConnectionTestResult(isSuccess: true, message: nil)
     }
