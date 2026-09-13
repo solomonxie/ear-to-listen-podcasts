@@ -10,6 +10,9 @@ DerivedData/
 .build/
 .swiftpm/
 
+# Python
+venv/
+
 # XcodeGen-generated Info.plist (source of truth is project.yml)
 Sources/App/Info.plist
 
