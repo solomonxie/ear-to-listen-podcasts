@@ -44,7 +44,7 @@ final class PlaybackEngine: ObservableObject {
                 return
             }
             let provider = try ProviderManager.shared.provider(for: record)
-            let url = try await provider.streamURL(forFileID: track.filePath)
+            let url = try await resolvedStreamURL(track: track, provider: provider)
             let item = AVPlayerItem(url: url)
             player.removeAllItems()
             player.insert(item, after: nil)
@@ -55,6 +55,21 @@ final class PlaybackEngine: ObservableObject {
         } catch {
             lastError = "Playback failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Cache hit plays straight from disk. On a miss, streams from the provider immediately
+    /// (no playback delay) and downloads a copy in the background for next time — local
+    /// files are already on-disk, so those are never cached.
+    private func resolvedStreamURL(track: Track, provider: CloudProvider) async throws -> URL {
+        if let cached = await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) {
+            return cached
+        }
+        let remote = try await provider.streamURL(forFileID: track.filePath)
+        guard !remote.isFileURL else { return remote }
+        Task.detached {
+            try? await AudioCache.shared.store(remoteURL: remote, providerID: track.providerID, filePath: track.filePath)
+        }
+        return remote
     }
 
     func togglePlayPause() {
