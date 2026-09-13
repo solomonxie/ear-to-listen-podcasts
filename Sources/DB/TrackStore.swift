@@ -40,6 +40,59 @@ struct TrackStore {
         }
     }
 
+    struct ProviderStats {
+        var count: Int
+        var lostCount: Int
+        var totalBytes: Int64
+    }
+
+    func stats(forProvider providerID: String) throws -> ProviderStats {
+        try dbQueue.read { db in
+            let count = try Track
+                .filter(Column("providerID") == providerID && Column("isLost") == false)
+                .fetchCount(db)
+            let lostCount = try Track
+                .filter(Column("providerID") == providerID && Column("isLost") == true)
+                .fetchCount(db)
+            let totalBytes = try Int64.fetchOne(
+                db,
+                sql: "SELECT COALESCE(SUM(sizeBytes), 0) FROM tracks WHERE providerID = ? AND isLost = 0",
+                arguments: [providerID]
+            ) ?? 0
+            return ProviderStats(count: count, lostCount: lostCount, totalBytes: totalBytes)
+        }
+    }
+
+    /// Refreshes just the sync-derived columns for an already-known track, leaving its
+    /// title/artist/album metadata (and search index) untouched.
+    func refresh(id: String, sizeBytes: Int64?, isLost: Bool) throws {
+        try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return }
+            track.sizeBytes = sizeBytes
+            track.isLost = isLost
+            track.updatedAt = Date()
+            try track.save(db)
+        }
+    }
+
+    /// Marks tracks for this provider as lost if their file path wasn't in the latest listing.
+    /// Returns the number newly marked lost.
+    func markLost(providerID: String, keepingPaths paths: Set<String>) throws -> Int {
+        try dbQueue.write { db in
+            let candidates = try Track
+                .filter(Column("providerID") == providerID && Column("isLost") == false)
+                .fetchAll(db)
+            var count = 0
+            for var track in candidates where !paths.contains(track.filePath) {
+                track.isLost = true
+                track.updatedAt = Date()
+                try track.save(db)
+                count += 1
+            }
+            return count
+        }
+    }
+
     func search(_ query: String) throws -> [Track] {
         guard !query.isEmpty else { return [] }
         return try dbQueue.read { db in

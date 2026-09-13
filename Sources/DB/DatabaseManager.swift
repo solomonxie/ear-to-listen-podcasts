@@ -9,7 +9,7 @@ final class DatabaseManager: @unchecked Sendable {
     private init() {
         let directory = URL.applicationSupportDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let dbURL = directory.appending(path: "byomusic.sqlite")
+        let dbURL = directory.appending(path: "byopo.sqlite")
         dbQueue = try! DatabaseQueue(path: dbURL.path)
         try! Migrations.migrator().migrate(dbQueue)
     }

@@ -6,7 +6,7 @@ enum CredentialStoreError: Error {
 }
 
 struct CredentialStore {
-    private let service = "com.example.byomusic"
+    private let service = "com.example.byopo"
 
     func set(_ value: String, forKey key: String) throws {
         try delete(key)

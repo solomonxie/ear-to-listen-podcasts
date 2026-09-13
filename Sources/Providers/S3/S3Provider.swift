@@ -1,9 +1,37 @@
+import AWSClientRuntime
 import AWSS3
 import AWSSDKIdentity
+import ClientRuntime
 import Foundation
 
-enum S3ProviderError: Error {
+/// `error.localizedDescription` on AWS SDK errors bridges to a generic NSError
+/// string ("The operation couldn't be completed...") that drops the actual AWS
+/// error code/message/status, so unwrap those explicitly for anything useful to show.
+func describeAWSError(_ error: Error) -> String {
+    if let serviceError = error as? AWSServiceError {
+        var parts: [String] = []
+        if let code = serviceError.errorCode { parts.append(code) }
+        if let message = serviceError.message { parts.append(message) }
+        if let httpError = error as? HTTPError {
+            parts.append("(HTTP \(httpError.httpResponse.statusCode.rawValue))")
+        }
+        if !parts.isEmpty { return parts.joined(separator: ": ") }
+    }
+    return error.localizedDescription
+}
+
+enum S3ProviderError: Error, LocalizedError {
     case missingSetting(String)
+    case regionDetectionFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingSetting(let key):
+            return "Missing setting: \(key)"
+        case .regionDetectionFailed:
+            return "Couldn't detect the bucket's region. Check the bucket name is correct."
+        }
+    }
 }
 
 struct S3Provider: CloudProvider {
@@ -11,7 +39,11 @@ struct S3Provider: CloudProvider {
     let type = S3Provider.providerType
 
     private let bucket: String
+    private let keyPrefix: String?
     private let client: S3Client
+
+    /// Default folder new buckets are scoped to, so users don't have to think of one.
+    static let defaultKeyPrefix = "BringYourOwnPodcasts/"
 
     init(config: CloudProviderConfig) throws {
         func setting(_ key: String) throws -> String {
@@ -25,14 +57,38 @@ struct S3Provider: CloudProvider {
         let secretAccessKey = try setting("secretAccessKey")
         let region = try setting("region")
         bucket = try setting("bucket")
+        keyPrefix = config.settings["keyPrefix"].flatMap { $0.isEmpty ? nil : $0 }
+        let endpoint = config.settings["endpoint"].flatMap { $0.isEmpty ? nil : $0 }
 
         let identity = AWSCredentialIdentity(accessKey: accessKeyId, secret: secretAccessKey)
         let resolver = StaticAWSCredentialIdentityResolver(identity)
         let clientConfig = try S3Client.S3ClientConfig(
             awsCredentialIdentityResolver: resolver,
-            region: region
+            region: region,
+            // S3-compatible services (MinIO, etc.) are almost always path-style;
+            // real AWS S3 works with either, so only force it when a custom endpoint is set.
+            forcePathStyle: endpoint != nil,
+            endpoint: endpoint
         )
         client = S3Client(config: clientConfig)
+    }
+
+    /// Used as the signing region for S3-compatible services that ignore region but still
+    /// require the SDK to sign requests with one.
+    static let fallbackRegion = "us-east-1"
+
+    /// Looks up which region a bucket lives in, so the add-provider flow doesn't require typing it
+    /// or granting any IAM permission: S3 returns this header for any request to a bucket's
+    /// virtual-hosted endpoint, even unauthenticated ones, before permission checks happen.
+    static func detectRegion(bucket: String) async throws -> String {
+        var request = URLRequest(url: URL(string: "https://\(bucket).s3.amazonaws.com/")!)
+        request.httpMethod = "HEAD"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              let region = http.value(forHTTPHeaderField: "x-amz-bucket-region") else {
+            throw S3ProviderError.regionDetectionFailed
+        }
+        return region
     }
 
     func listFiles(inFolder folderID: String?) async throws -> [CloudFile] {
@@ -42,7 +98,7 @@ struct S3Provider: CloudProvider {
             let output = try await client.listObjectsV2(input: ListObjectsV2Input(
                 bucket: bucket,
                 continuationToken: continuationToken,
-                prefix: folderID
+                prefix: folderID ?? keyPrefix
             ))
             for object in output.contents ?? [] {
                 guard let key = object.key else { continue }
@@ -84,7 +140,7 @@ struct S3Provider: CloudProvider {
             _ = try await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, maxKeys: 1))
             return ConnectionTestResult(isSuccess: true, message: nil)
         } catch {
-            return ConnectionTestResult(isSuccess: false, message: error.localizedDescription)
+            return ConnectionTestResult(isSuccess: false, message: describeAWSError(error))
         }
     }
 }

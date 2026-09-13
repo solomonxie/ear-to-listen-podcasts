@@ -19,6 +19,22 @@ struct ProviderStore {
     func active() throws -> [ProviderRecord] {
         try dbQueue.read { db in try ProviderRecord.filter(Column("isActive") == true).fetchAll(db) }
     }
+
+    func updateSyncFrequency(id: String, minutes: Int?) throws {
+        try dbQueue.write { db in
+            guard var record = try ProviderRecord.fetchOne(db, key: id) else { return }
+            record.syncFrequencyMinutes = minutes
+            try record.save(db)
+        }
+    }
+
+    func updateLastSynced(id: String, at date: Date) throws {
+        try dbQueue.write { db in
+            guard var record = try ProviderRecord.fetchOne(db, key: id) else { return }
+            record.lastSyncedAt = date
+            try record.save(db)
+        }
+    }
 }
 
 struct ImportSourceStore {
