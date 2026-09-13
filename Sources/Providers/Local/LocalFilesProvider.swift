@@ -1,6 +1,6 @@
 import Foundation
 
-enum LocalFilesProviderError: Error, LocalizedError {
+enum LocalFilesProviderError: Error, LocalizedError, Equatable {
     case missingBookmark
     case accessDenied
 
