@@ -21,7 +21,7 @@ struct CloudProviderConfig: Codable {
     var settings: [String: String]
 }
 
-protocol CloudProvider {
+protocol CloudProvider: Sendable {
     var type: String { get }
     func listFiles(inFolder folderID: String?) async throws -> [CloudFile]
     func metadata(forFileID fileID: String) async throws -> CloudFile

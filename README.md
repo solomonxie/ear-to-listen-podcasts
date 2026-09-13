@@ -59,6 +59,25 @@ xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts 
   -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build
 ```
 
+## Release (TestFlight)
+
+Signing is automatic; set your Apple Developer Team ID for device/archive
+builds (simulator builds don't need one):
+
+```sh
+DEVELOPMENT_TEAM=YOURTEAMID xcodegen generate
+xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts \
+  -configuration Release -archivePath build/BringYourOwnPodcasts.xcarchive \
+  -skipPackagePluginValidation archive
+xcodebuild -exportArchive -archivePath build/BringYourOwnPodcasts.xcarchive \
+  -exportOptionsPlist ExportOptions.plist -exportPath build/export
+```
+
+Fill in your team ID in `ExportOptions.plist` before exporting, then upload
+`build/export/BringYourOwnPodcasts.ipa` via Transporter or `xcrun altool`.
+Xcode Cloud is a no-repo-changes alternative — configure it in App Store
+Connect instead of running the commands above.
+
 ## Localization
 
 English + Simplified Chinese from the start, via a String Catalog
