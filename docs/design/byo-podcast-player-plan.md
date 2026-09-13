@@ -1,6 +1,6 @@
-# Bring-Your-Own-Music Player — Implementation Plan
+# Bring-Your-Own-Podcasts Player — Implementation Plan
 
-See [design doc](./byo-music-player.md) for reasoning behind these choices.
+See [design doc](./byo-podcast-player.md) for reasoning behind these choices.
 
 ## Phase 1: Foundations
 Scaffold, local DB, secure credential storage, and the two source protocols

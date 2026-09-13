@@ -1,4 +1,4 @@
-# Bring-Your-Own-Music Player
+# Bring-Your-Own-Podcasts Player
 
 ## Problem
 Spotify/YouTube Music have great streaming UX but only play licensed catalog

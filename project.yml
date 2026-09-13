@@ -1,4 +1,4 @@
-name: BringYourOwnMusic
+name: BringYourOwnPodcasts
 options:
   bundleIdPrefix: com.example
   deploymentTarget:
@@ -17,11 +17,13 @@ packages:
     from: 8.0.0
 
 targets:
-  BringYourOwnMusic:
+  BringYourOwnPodcasts:
     type: application
     platform: iOS
     sources:
       - path: Sources
+        excludes:
+          - "**/README.md"
       - path: Resources
     dependencies:
       - package: GRDB
@@ -35,13 +37,16 @@ targets:
     info:
       path: Sources/App/Info.plist
       properties:
-        CFBundleDisplayName: BringYourOwnMusic
+        CFBundleDisplayName: Bring Your Own Podcasts
+        UIUserInterfaceStyle: Dark
         UILaunchScreen: {}
         UIBackgroundModes:
           - audio
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.byomusic
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.byopo
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
@@ -49,23 +54,23 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
-  BringYourOwnMusicTests:
+  BringYourOwnPodcastsTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests
     dependencies:
-      - target: BringYourOwnMusic
+      - target: BringYourOwnPodcasts
     settings:
       base:
         SWIFT_VERSION: "6.0"
 
 schemes:
-  BringYourOwnMusic:
+  BringYourOwnPodcasts:
     build:
       targets:
-        BringYourOwnMusic: all
-        BringYourOwnMusicTests: [test]
+        BringYourOwnPodcasts: all
+        BringYourOwnPodcastsTests: [test]
     test:
       targets:
-        - BringYourOwnMusicTests
+        - BringYourOwnPodcastsTests
