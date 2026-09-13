@@ -65,3 +65,17 @@ English + Simplified Chinese from the start, via a String Catalog
 (`Resources/Localizable.xcstrings`). New UI text should stay in plain
 `Text("...")`/`Label("...")` literals so Xcode keeps picking it up; add the
 `zh-Hans` translation alongside when you add the English string.
+
+## Screenshots
+
+**Home**
+![Home](docs/screenshots/home-page.png)
+
+**Browse by speaker, year & topic**
+![Browse by speaker, year & topic](docs/screenshots/sections.png)
+
+**Remote & Settings**
+![Remote & Settings](docs/screenshots/settings.png)
+
+**Now Playing**
+![Now Playing](docs/screenshots/player.png)
