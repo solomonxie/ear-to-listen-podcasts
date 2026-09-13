@@ -19,20 +19,41 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func addS3Provider(label: String, accessKeyId: String, secretAccessKey: String, region: String, bucket: String) {
+    func addS3Provider(accessKeyId: String, secretAccessKey: String, region: String, bucket: String, keyPrefix: String, endpoint: String = "") {
         let id = UUID().uuidString
         let settings = [
             "accessKeyId": accessKeyId,
             "secretAccessKey": secretAccessKey,
             "region": region,
             "bucket": bucket,
+            "keyPrefix": keyPrefix,
+            "endpoint": endpoint,
         ]
         do {
             try ProviderManager.shared.saveSettings(settings, forProviderID: id)
             let record = ProviderRecord(
                 id: id,
                 type: S3Provider.providerType,
-                label: label.isEmpty ? bucket : label,
+                label: bucket,
+                configJSON: "",
+                isActive: true,
+                createdAt: Date()
+            )
+            try providerStore.upsert(record)
+            load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func addLocalProvider() {
+        let id = UUID().uuidString
+        do {
+            try ProviderManager.shared.saveSettings([:], forProviderID: id)
+            let record = ProviderRecord(
+                id: id,
+                type: LocalFilesProvider.providerType,
+                label: "Files on this iPhone",
                 configJSON: "",
                 isActive: true,
                 createdAt: Date()
