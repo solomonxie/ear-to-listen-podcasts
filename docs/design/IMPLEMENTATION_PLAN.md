@@ -55,7 +55,7 @@ real-world failures, and gets the build ready to ship.
 - [x] T5.1 LRU disk cache for streamed audio, backed by provider stream URLs — see `Sources/Playback/Cache.swift` — depends: T2.2
 - [x] T5.2 Error/retry handling: expired presigned URLs, offline state — see `Sources/Providers` — depends: T2.1
 - [x] T5.3 App icon, launch screen, TestFlight build config (signing, `eas`-equivalent: Xcode Cloud or manual archive) — see `project.yml` — depends: T1.1
-- [ ] T5.4 QA pass: unit tests for provider/importer adapters + sync engine + matcher, manual playback test on device — see `Tests` — depends: T4.1, T4.2, T4.3, T4.4, T4.5, T4.6, T5.1, T5.2
+- [x] T5.4 QA pass: unit tests for provider/importer adapters + sync engine + matcher, manual playback test on device — see `Tests` — depends: T4.1, T4.2, T4.3, T4.4, T4.5, T4.6, T5.1, T5.2
 
 ## Backlog (not scheduled)
 - GoogleDriveProvider adapter: OAuth via `GoogleSignIn-iOS`, Drive REST v3

@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import GRDB
 
 private let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "flac", "aiff", "alac"]
 
@@ -50,11 +51,16 @@ enum SyncEngineError: Error, LocalizedError {
 }
 
 struct SyncEngine {
-    let dbQueue = DatabaseManager.shared.dbQueue
+    let dbQueue: DatabaseQueue
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
     private let contentAnalyzer = ContentAnalyzer()
+
+    /// `dbQueue` defaults to the shared app database; tests inject an in-memory one instead.
+    init(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) {
+        self.dbQueue = dbQueue
+    }
 
     /// Syncs every active provider's file listing into the local library.
     @discardableResult
