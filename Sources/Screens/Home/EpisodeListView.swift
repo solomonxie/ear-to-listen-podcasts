@@ -1,11 +1,10 @@
 import SwiftUI
 
-struct PlaylistDetailView: View {
-    let playlist: PlaylistUI
-    @EnvironmentObject private var library: MockLibraryStore
+/// Shared list used for year/topic browsing from Home.
+struct EpisodeListView: View {
+    let title: String
+    let episodes: [PodcastEpisode]
     @EnvironmentObject private var playback: PlaybackMockState
-
-    private var episodes: [PodcastEpisode] { library.episodes(inPlaylist: playlist) }
 
     var body: some View {
         Group {
@@ -23,6 +22,7 @@ struct PlaylistDetailView: View {
                 .listStyle(.plain)
             }
         }
-        .navigationTitle(playlist.name)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
