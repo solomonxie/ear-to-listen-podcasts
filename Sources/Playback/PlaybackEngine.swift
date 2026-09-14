@@ -193,8 +193,12 @@ final class PlaybackEngine: ObservableObject {
         player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
                 guard let self else { return }
-                self.currentTime = time.seconds
-                self.duration = self.player.currentItem?.duration.seconds ?? 0
+                if time.seconds.isFinite { self.currentTime = time.seconds }
+                // `duration` is NaN (indefinite) until the asset finishes resolving it — e.g.
+                // while a real, possibly-VBR mp3 is still parsing. Feeding that straight into
+                // the now-playing slider's range (`0...duration`) crashes it.
+                let rawDuration = self.player.currentItem?.duration.seconds ?? 0
+                self.duration = rawDuration.isFinite ? rawDuration : 0
                 self.updateNowPlayingElapsedTime()
                 self.persistProgress()
             }
