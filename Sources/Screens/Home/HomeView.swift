@@ -3,23 +3,13 @@ import SwiftUI
 /// Single-page root: search up top, then Home/Library shelves, then Remote and
 /// Settings sections — no tab bar, everything reachable by scrolling.
 struct HomeView: View {
-    @EnvironmentObject private var library: MockLibraryStore
-    @EnvironmentObject private var playback: PlaybackMockState
+    @StateObject private var homeData = HomeLibraryViewModel()
     @StateObject private var settings = SettingsViewModel()
 
     @State private var query = ""
     @State private var showingCreatePlaylist = false
     @State private var newPlaylistName = ""
-
-    private var years: [Int] {
-        Array(Set(library.episodes.map(\.publishedYear))).sorted(by: >)
-    }
-    private var favoriteShows: [PodcastShow] {
-        library.shows.filter { library.savedShowIDs.contains($0.id) }
-    }
-    private var downloadedEpisodes: [PodcastEpisode] {
-        library.episodes.filter { library.downloadedEpisodeIDs.contains($0.id) }
-    }
+    @State private var isShowingPlayer = false
 
     var body: some View {
         ScrollView {
@@ -40,27 +30,42 @@ struct HomeView: View {
         .navigationTitle("Good listening")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
         .onAppear { settings.load() }
+        .task { await homeData.refresh() }
+        .onChange(of: isShowingPlayer) { _, isShowing in
+            if !isShowing { Task { await homeData.refresh() } }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
+            Task { await homeData.refresh() }
+        }
+        .sheet(isPresented: $isShowingPlayer) {
+            RealPlayerView()
+        }
         .alert("New Playlist", isPresented: $showingCreatePlaylist) {
             TextField("Name", text: $newPlaylistName)
             Button("Create") {
                 guard !newPlaylistName.isEmpty else { return }
-                library.createPlaylist(name: newPlaylistName)
+                homeData.createPlaylist(name: newPlaylistName)
                 newPlaylistName = ""
             }
             Button("Cancel", role: .cancel) {}
         }
     }
 
+    private func play(_ track: Track, queue: [Track]) {
+        PlaybackEngine.shared.play(track: track, queue: queue)
+        isShowingPlayer = true
+    }
+
     @ViewBuilder
     private var homeShelves: some View {
         shelf("Continue Listening") {
-            ForEach(downloadedEpisodes) { episode in
-                EpisodeCard(episode: episode)
+            ForEach(homeData.recentTracks) { track in
+                TrackCard(track: track) { play(track, queue: homeData.recentTracks) }
             }
         }
 
         shelf("Albums") {
-            ForEach(library.albums) { album in
+            ForEach(homeData.albums) { album in
                 NavigationLink { AlbumDetailView(album: album) } label: {
                     AlbumCard(album: album)
                 }
@@ -71,7 +76,7 @@ struct HomeView: View {
         shelf("Playlists", trailing: {
             Button { showingCreatePlaylist = true } label: { Image(systemName: "plus.circle.fill") }
         }) {
-            ForEach(library.playlists) { playlist in
+            ForEach(homeData.playlists) { playlist in
                 NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
                     PlaylistCard(playlist: playlist)
                 }
@@ -80,7 +85,7 @@ struct HomeView: View {
         }
 
         shelf("Favorites") {
-            ForEach(favoriteShows) { show in
+            ForEach(homeData.favoriteShows()) { show in
                 NavigationLink { ShowDetailView(show: show) } label: {
                     ShowCard(show: show)
                 }
@@ -89,24 +94,24 @@ struct HomeView: View {
         }
 
         shelf("Speakers") {
-            ForEach(library.speakers) { speaker in
-                NavigationLink { SpeakerDetailView(speaker: speaker) } label: {
-                    SpeakerCard(speaker: speaker)
+            ForEach(homeData.artists) { artist in
+                NavigationLink { SpeakerDetailView(speaker: artist) } label: {
+                    SpeakerCard(artist: artist)
                 }
                 .buttonStyle(.plain)
             }
         }
 
         shelf("Downloaded") {
-            ForEach(downloadedEpisodes) { episode in
-                EpisodeCard(episode: episode)
+            ForEach(homeData.downloadedTracks) { track in
+                TrackCard(track: track) { play(track, queue: homeData.downloadedTracks) }
             }
         }
 
         shelf("Browse by Year") {
-            ForEach(years, id: \.self) { year in
+            ForEach(homeData.years, id: \.self) { year in
                 NavigationLink {
-                    EpisodeListView(title: "\(year)", episodes: library.episodes.filter { $0.publishedYear == year })
+                    EpisodeListView(title: "\(year)", tracks: homeData.tracks(forYear: year))
                 } label: {
                     ChipCard(title: "\(year)", color: .gray)
                 }
@@ -115,28 +120,25 @@ struct HomeView: View {
         }
 
         shelf("Topics") {
-            ForEach(library.topics) { topic in
+            ForEach(homeData.topics) { topic in
                 NavigationLink {
-                    let showIDs = Set(library.shows.filter { $0.topicIDs.contains(topic.id) }.map(\.id))
-                    EpisodeListView(title: topic.name, episodes: library.episodes.filter { showIDs.contains($0.showID) })
+                    EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
                 } label: {
-                    ChipCard(title: topic.name, color: topic.color)
+                    ChipCard(title: topic.name, color: LibraryArt.color(for: topic.id))
                 }
                 .buttonStyle(.plain)
             }
         }
     }
 
-    private var matchedShows: [PodcastShow] { library.shows.filter { $0.title.localizedCaseInsensitiveContains(query) } }
-    private var matchedSpeakers: [Speaker] { library.speakers.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedAlbums: [PodcastAlbum] { library.albums.filter { $0.title.localizedCaseInsensitiveContains(query) } }
-    private var matchedPlaylists: [PlaylistUI] { library.playlists.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedTopics: [Topic] { library.topics.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedEpisodes: [PodcastEpisode] {
-        library.episodes.filter { $0.title.localizedCaseInsensitiveContains(query) || $0.summary.localizedCaseInsensitiveContains(query) }
-    }
+    private var matchedShows: [Show] { homeData.shows.filter { $0.name.localizedCaseInsensitiveContains(query) } }
+    private var matchedSpeakers: [Artist] { homeData.artists.filter { $0.name.localizedCaseInsensitiveContains(query) } }
+    private var matchedAlbums: [Album] { homeData.albums.filter { $0.name.localizedCaseInsensitiveContains(query) } }
+    private var matchedPlaylists: [Playlist] { homeData.playlists.filter { $0.name.localizedCaseInsensitiveContains(query) } }
+    private var matchedTopics: [Topic] { homeData.topics.filter { $0.name.localizedCaseInsensitiveContains(query) } }
+    private var matchedTracks: [Track] { homeData.tracks.filter { $0.title.localizedCaseInsensitiveContains(query) } }
     private var hasResults: Bool {
-        !(matchedShows.isEmpty && matchedSpeakers.isEmpty && matchedAlbums.isEmpty && matchedPlaylists.isEmpty && matchedEpisodes.isEmpty && matchedTopics.isEmpty)
+        !(matchedShows.isEmpty && matchedSpeakers.isEmpty && matchedAlbums.isEmpty && matchedPlaylists.isEmpty && matchedTracks.isEmpty && matchedTopics.isEmpty)
     }
 
     @ViewBuilder
@@ -147,7 +149,7 @@ struct HomeView: View {
         } else {
             resultSection("Shows", matchedShows) { show in
                 NavigationLink { ShowDetailView(show: show) } label: {
-                    resultRow(symbol: show.symbol, color: show.artColor, title: show.title, subtitle: "\(show.year)")
+                    resultRow(symbol: "mic.fill", color: LibraryArt.color(for: show.id), title: show.name, subtitle: nil)
                 }
             }
             resultSection("Speakers", matchedSpeakers) { speaker in
@@ -157,27 +159,24 @@ struct HomeView: View {
             }
             resultSection("Albums", matchedAlbums) { album in
                 NavigationLink { AlbumDetailView(album: album) } label: {
-                    resultRow(symbol: album.symbol, color: album.artColor, title: album.title, subtitle: "\(album.episodeIDs.count) episodes")
+                    resultRow(symbol: "square.stack.fill", color: LibraryArt.color(for: album.id), title: album.name, subtitle: nil)
                 }
             }
             resultSection("Playlists", matchedPlaylists) { playlist in
                 NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
-                    resultRow(symbol: "square.stack.fill", color: playlist.coverColors.first ?? .gray, title: playlist.name, subtitle: "\(playlist.episodeIDs.count) episodes")
+                    resultRow(symbol: "square.stack.fill", color: LibraryArt.color(for: playlist.id), title: playlist.name, subtitle: nil)
                 }
             }
             resultSection("Topics", matchedTopics) { topic in
-                let showIDs = Set(library.shows.filter { $0.topicIDs.contains(topic.id) }.map(\.id))
                 NavigationLink {
-                    EpisodeListView(title: topic.name, episodes: library.episodes.filter { showIDs.contains($0.showID) })
+                    EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
                 } label: {
-                    resultRow(symbol: "number", color: topic.color, title: topic.name, subtitle: nil)
+                    resultRow(symbol: "number", color: LibraryArt.color(for: topic.id), title: topic.name, subtitle: nil)
                 }
             }
-            resultSection("Episodes", matchedEpisodes) { episode in
-                Button {
-                    playback.play(episode, queue: matchedEpisodes)
-                } label: {
-                    EpisodeRow(episode: episode)
+            resultSection("Episodes", matchedTracks) { track in
+                Button { play(track, queue: matchedTracks) } label: {
+                    TrackRow(track: track)
                 }
                 .buttonStyle(.plain)
             }
@@ -252,79 +251,75 @@ struct HomeView: View {
 }
 
 private struct PlaylistCard: View {
-    let playlist: PlaylistUI
+    let playlist: Playlist
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: 10)
-                .fill(LinearGradient(colors: playlist.coverColors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(LibraryArt.color(for: playlist.id).gradient)
                 .frame(width: 120, height: 120)
                 .overlay { Image(systemName: "square.stack.fill").font(.largeTitle).foregroundStyle(.white) }
             Text(playlist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-            Text("\(playlist.episodeIDs.count, format: .number.grouping(.never)) episodes").font(.caption).foregroundStyle(.secondary)
         }
         .frame(width: 120)
     }
 }
 
 private struct AlbumCard: View {
-    let album: PodcastAlbum
+    let album: Album
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: 10)
-                .fill(album.artColor.gradient)
+                .fill(LibraryArt.color(for: album.id).gradient)
                 .frame(width: 120, height: 120)
-                .overlay { Image(systemName: album.symbol).font(.largeTitle).foregroundStyle(.white) }
-            Text(album.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-            Text("\(album.episodeIDs.count, format: .number.grouping(.never)) episodes").font(.caption).foregroundStyle(.secondary)
+                .overlay { Image(systemName: "square.stack.fill").font(.largeTitle).foregroundStyle(.white) }
+            Text(album.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 120)
     }
 }
 
 private struct ShowCard: View {
-    let show: PodcastShow
+    let show: Show
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             RoundedRectangle(cornerRadius: 10)
-                .fill(show.artColor.gradient)
+                .fill(LibraryArt.color(for: show.id).gradient)
                 .frame(width: 120, height: 120)
-                .overlay { Image(systemName: show.symbol).font(.largeTitle).foregroundStyle(.white) }
-            Text(show.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-            Text("\(show.year, format: .number.grouping(.never))").font(.caption).foregroundStyle(.secondary)
+                .overlay { Image(systemName: "mic.fill").font(.largeTitle).foregroundStyle(.white) }
+            Text(show.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 120)
     }
 }
 
 private struct SpeakerCard: View {
-    let speaker: Speaker
+    let artist: Artist
     var body: some View {
         VStack(spacing: 6) {
             Circle()
                 .fill(Color.secondary.opacity(0.3))
                 .frame(width: 90, height: 90)
                 .overlay { Image(systemName: "person.fill").font(.largeTitle).foregroundStyle(.secondary) }
-            Text(speaker.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+            Text(artist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 90)
     }
 }
 
-private struct EpisodeCard: View {
-    @EnvironmentObject private var library: MockLibraryStore
-    @EnvironmentObject private var playback: PlaybackMockState
-    let episode: PodcastEpisode
+private struct TrackCard: View {
+    let track: Track
+    let action: () -> Void
     var body: some View {
-        Button {
-            playback.play(episode, queue: library.episodes(forShow: episode.showID))
-        } label: {
+        Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill((library.show(episode.showID)?.artColor ?? .gray).gradient)
+                    .fill(LibraryArt.color(for: track.id).gradient)
                     .frame(width: 160, height: 90)
                     .overlay { Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white) }
-                Text(episode.title).font(.subheadline.weight(.semibold)).lineLimit(2)
-                Text(library.show(episode.showID)?.title ?? "").font(.caption).foregroundStyle(.secondary)
+                Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                if let positionMs = track.positionMs, let durationMs = track.durationMs, durationMs > 0 {
+                    ProgressView(value: Double(positionMs), total: Double(durationMs))
+                }
             }
             .frame(width: 160)
         }

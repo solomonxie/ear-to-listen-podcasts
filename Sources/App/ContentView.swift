@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var playbackMock = PlaybackMockState.shared
-    @StateObject private var library = MockLibraryStore.shared
     @State private var showingNowPlaying = false
 
     var body: some View {
@@ -13,10 +11,8 @@ struct ContentView: View {
             MiniPlayerBar(showingNowPlaying: $showingNowPlaying)
         }
         .sheet(isPresented: $showingNowPlaying) {
-            NowPlayingView()
+            RealPlayerView()
         }
-        .environmentObject(playbackMock)
-        .environmentObject(library)
         .preferredColorScheme(.dark)
     }
 }

@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 /// live in `RemoteSectionView`; this covers on-device storage and app-wide settings.
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
-    @EnvironmentObject private var library: MockLibraryStore
     @State private var showingResetConfirmation = false
     @State private var showingFolderPicker = false
     @State private var isScanning = false
@@ -158,7 +157,7 @@ struct SettingsSectionView: View {
             .padding(.horizontal)
         }
         .alert("Reset Demo Data?", isPresented: $showingResetConfirmation) {
-            Button("Reset", role: .destructive) { library.resetToDefaults() }
+            Button("Reset", role: .destructive) { try? DemoDataSeeder.reseed() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This puts back the sample shows, speakers, and playlists.")

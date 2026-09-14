@@ -1,34 +1,33 @@
 import SwiftUI
 
 struct AlbumDetailView: View {
-    let album: PodcastAlbum
-    @EnvironmentObject private var library: MockLibraryStore
-    @EnvironmentObject private var playback: PlaybackMockState
+    let album: Album
+    @State private var tracks: [Track] = []
+    @State private var artistName: String?
 
-    private var episodes: [PodcastEpisode] { library.episodes(forAlbum: album) }
-    private var speakers: [Speaker] { album.speakerIDs.compactMap(library.speaker) }
+    private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(album.artColor.gradient)
+                        .fill(LibraryArt.color(for: album.id).gradient)
                         .frame(height: 160)
-                        .overlay { Image(systemName: album.symbol).font(.system(size: 48)).foregroundStyle(.white) }
-                    Text(album.description).font(.callout).foregroundStyle(.secondary)
+                        .overlay { Image(systemName: "square.stack.fill").font(.system(size: 48)).foregroundStyle(.white) }
                     HStack {
-                        ForEach(speakers) { speaker in
-                            Text(speaker.name).font(.caption.weight(.semibold))
+                        if let artistName {
+                            Text(artistName).font(.caption.weight(.semibold))
                         }
                         Spacer()
-                        Text(album.releaseDate, format: .dateTime.year().month().day())
+                        Text("\(tracks.count) episode\(tracks.count == 1 ? "" : "s")")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let first = episodes.first {
+                    if let first = tracks.first {
                         Button {
-                            playback.play(first, queue: episodes)
+                            PlaybackEngine.shared.play(track: first, queue: tracks)
                         } label: {
                             Label("Play latest", systemImage: "play.fill")
                                 .frame(maxWidth: .infinity)
@@ -40,18 +39,22 @@ struct AlbumDetailView: View {
             }
 
             Section("Episodes") {
-                ForEach(episodes) { episode in
+                ForEach(tracks) { track in
                     Button {
-                        playback.play(episode, queue: episodes)
+                        PlaybackEngine.shared.play(track: track, queue: tracks)
                     } label: {
-                        EpisodeRow(episode: episode)
+                        TrackRow(track: track)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
         .listStyle(.plain)
-        .navigationTitle(album.title)
+        .navigationTitle(album.name)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            tracks = (try? trackStore.tracks(forAlbum: album.id)) ?? []
+            artistName = album.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
+        }
     }
 }
