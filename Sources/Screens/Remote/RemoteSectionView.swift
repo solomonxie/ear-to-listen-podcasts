@@ -2,13 +2,13 @@ import SwiftUI
 
 /// Embeddable "Remote" section for the single-page root layout — real S3 sources,
 /// each linking to `RemoteSourceDetailView` for sync controls and storage stats.
+/// "Continue Listening" lives at the top of Home instead of here, since it's about
+/// the library as a whole, not specifically about remote connections.
 struct RemoteSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @ObservedObject private var syncQueue = SyncQueueManager.shared
     @State private var showingAddS3 = false
-    @State private var recentTracks: [Track] = []
-    @State private var isShowingPlayer = false
-
-    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    @State private var showingSyncQueue = false
 
     private var s3Providers: [ProviderRecord] {
         viewModel.providers.filter { $0.type == S3Provider.providerType }
@@ -16,25 +16,6 @@ struct RemoteSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !recentTracks.isEmpty {
-                Text("Continue Listening").font(.title3.bold()).padding(.horizontal)
-                VStack(spacing: 0) {
-                    ForEach(recentTracks) { track in
-                        Button {
-                            PlaybackEngine.shared.play(track: track)
-                            isShowingPlayer = true
-                        } label: {
-                            RecentTrackRow(track: track)
-                        }
-                        .buttonStyle(.plain)
-                        if track.id != recentTracks.last?.id {
-                            Divider().padding(.leading, 68)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-
             HStack {
                 Text("Remote").font(.title3.bold())
                 Spacer()
@@ -50,17 +31,22 @@ struct RemoteSectionView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(s3Providers) { record in
-                        NavigationLink {
-                            RemoteSourceDetailView(record: record)
-                        } label: {
-                            RemoteSourceRow(record: record)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                viewModel.delete(record)
+                        HStack(spacing: 4) {
+                            NavigationLink {
+                                RemoteBrowserView(record: record, onDelete: { viewModel.delete(record) })
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                RemoteSourceRow(record: record)
+                            }
+                            .buttonStyle(.plain)
+                            // Deleting lives in the bucket's own settings menu (inside
+                            // RemoteBrowserView) instead of a second tap target right next
+                            // to the disclosure chevron, where it's too easy to hit by mistake.
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    viewModel.delete(record)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
                         }
                         if record.id != s3Providers.last?.id {
@@ -69,48 +55,43 @@ struct RemoteSectionView: View {
                     }
                 }
                 .padding(.horizontal)
+
+                // The sync queue is global across every connection, not per-bucket, so its
+                // status lives here once rather than behind each bucket's own menu.
+                Button { showingSyncQueue = true } label: {
+                    HStack {
+                        Text(syncQueueSummary)
+                        Image(systemName: "chevron.right").font(.caption2)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal)
             }
         }
         .sheet(isPresented: $showingAddS3) {
             NavigationStack { AddS3ProviderView(viewModel: viewModel) }
         }
-        .sheet(isPresented: $isShowingPlayer) {
-            RealPlayerView()
+        .sheet(isPresented: $showingSyncQueue) {
+            NavigationStack { SyncQueueView() }
         }
-        .onAppear(perform: reloadRecentTracks)
-        .onChange(of: isShowingPlayer) { _, isShowing in
-            if !isShowing { reloadRecentTracks() }
+        .onAppear {
+            syncQueue.refresh()
         }
     }
 
-    private func reloadRecentTracks() {
-        recentTracks = (try? trackStore.recentlyPlayed()) ?? []
-    }
-}
-
-private struct RecentTrackRow: View {
-    let track: Track
-    var body: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.accentColor.gradient)
-                .frame(width: 44, height: 44)
-                .overlay { Image(systemName: "play.circle.fill").foregroundStyle(.white) }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                if let positionMs = track.positionMs, let durationMs = track.durationMs, durationMs > 0 {
-                    ProgressView(value: Double(positionMs), total: Double(durationMs))
-                }
-            }
-            Spacer()
-        }
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
+    private var syncQueueSummary: String {
+        let pending = syncQueue.jobs.filter { $0.status == .pending || $0.status == .running }.count
+        guard pending > 0 else { return "Sync queue: idle" }
+        let state = syncQueue.isPaused ? "paused" : "\(syncQueue.concurrency) at a time"
+        return "Sync queue: \(pending) pending · \(state)"
     }
 }
 
 private struct RemoteSourceRow: View {
     let record: ProviderRecord
+    @State private var path: String?
+
     var body: some View {
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 6)
@@ -119,6 +100,10 @@ private struct RemoteSourceRow: View {
                 .overlay { Image(systemName: "cloud.fill").foregroundStyle(.white) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.label).font(.subheadline.weight(.semibold))
+                // Lets two connections to the same bucket (different prefixes) be told apart.
+                if let path {
+                    Text(path).font(.caption2).foregroundStyle(.secondary)
+                }
                 Text(record.isActive ? "Active" : "Inactive")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -128,5 +113,6 @@ private struct RemoteSourceRow: View {
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
+        .onAppear { path = ProviderManager.shared.s3DisplayPath(for: record) }
     }
 }

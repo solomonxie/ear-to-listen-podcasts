@@ -1,31 +1,42 @@
 import SwiftUI
 
-/// Overall sync queue across every provider — pause/resume, clear, and tune concurrency.
+/// Overall sync queue across every provider — pause/resume, clear, and tune concurrency
+/// live on the "Queue" header itself rather than as a separate settings block, since
+/// they act on the same list right below them.
 struct SyncQueueView: View {
     @ObservedObject private var manager = SyncQueueManager.shared
 
     var body: some View {
         List {
             Section {
-                Toggle("Paused", isOn: Binding(
-                    get: { manager.isPaused },
-                    set: { manager.setPaused($0) }
-                ))
-                Stepper("Speed: \(manager.concurrency) at a time", value: $manager.concurrency, in: 1...8)
-                Button("Clear Queue", role: .destructive) { manager.clearQueue() }
-            }
-
-            if manager.jobs.isEmpty {
-                Section {
+                if manager.jobs.isEmpty {
                     Text("Nothing queued. Sync a folder from a remote source to add files here.")
                         .foregroundStyle(.secondary)
-                }
-            } else {
-                Section("Queue (\(manager.jobs.count))") {
+                } else {
                     ForEach(manager.jobs) { job in
-                        SyncJobRow(job: job)
+                        SyncJobRow(job: job, providerLabel: manager.providerLabels[job.providerID]) {
+                            manager.retry(job)
+                        }
                     }
                 }
+            } header: {
+                HStack {
+                    Text("Queue (\(manager.jobs.count))")
+                    Spacer()
+                    Button {
+                        manager.setPaused(!manager.isPaused)
+                    } label: {
+                        Image(systemName: manager.isPaused ? "play.fill" : "pause.fill")
+                    }
+                    Menu {
+                        Stepper("Speed: \(manager.concurrency) at a time", value: $manager.concurrency, in: 1...8)
+                        Divider()
+                        Button("Clear Queue", role: .destructive) { manager.clearQueue() }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+                .textCase(nil)
             }
         }
         .navigationTitle("Sync Queue")
@@ -36,11 +47,16 @@ struct SyncQueueView: View {
 
 private struct SyncJobRow: View {
     let job: SyncJob
+    let providerLabel: String?
+    let onRetry: () -> Void
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(job.displayName).font(.subheadline).lineLimit(1)
+                if let providerLabel {
+                    Text(providerLabel).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
                 if job.status == .failed, let errorMessage = job.errorMessage {
                     Text(errorMessage).font(.caption).foregroundStyle(.orange).lineLimit(1)
                 }
@@ -60,7 +76,12 @@ private struct SyncJobRow: View {
         case .done:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
         case .failed:
-            Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+            Button(action: onRetry) {
+                Label("Retry", systemImage: "arrow.clockwise.circle.fill")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
         }
     }
 }
