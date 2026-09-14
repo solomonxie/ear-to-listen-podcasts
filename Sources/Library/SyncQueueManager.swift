@@ -8,6 +8,7 @@ final class SyncQueueManager: ObservableObject {
     static let shared = SyncQueueManager()
 
     @Published private(set) var jobs: [SyncJob] = []
+    @Published private(set) var providerLabels: [String: String] = [:]
     @Published var isPaused: Bool {
         didSet { UserDefaults.standard.set(isPaused, forKey: Self.pausedKey) }
     }
@@ -33,6 +34,9 @@ final class SyncQueueManager: ObservableObject {
 
     func refresh() {
         jobs = (try? jobStore.all()) ?? []
+        if let records = try? providerStore.all() {
+            providerLabels = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.label) })
+        }
     }
 
     /// Lists `folder` one level deep (non-recursive) and enqueues any files not yet imported.
@@ -61,6 +65,13 @@ final class SyncQueueManager: ObservableObject {
         refresh()
     }
 
+    /// Re-queues a failed job and wakes the drain loop back up.
+    func retry(_ job: SyncJob) {
+        try? jobStore.retry(id: job.id)
+        refresh()
+        startDraining()
+    }
+
     private func startDraining() {
         guard !isDraining, !isPaused else { return }
         isDraining = true
@@ -71,8 +82,11 @@ final class SyncQueueManager: ObservableObject {
         defer { isDraining = false; refresh() }
         await withTaskGroup(of: Void.self) { group in
             var running = 0
-            while !isPaused, running < concurrency, let job = try? jobStore.nextPending() {
+            // `dequeueNextPending` claims (marks `.running`) the job in the same transaction
+            // it's fetched in, so this loop can't hand the same pending job to two tasks.
+            while !isPaused, running < concurrency, let job = try? jobStore.dequeueNextPending() {
                 running += 1
+                refresh()
                 group.addTask { await self.process(job) }
                 if running >= concurrency {
                     await group.next()
@@ -84,8 +98,6 @@ final class SyncQueueManager: ObservableObject {
     }
 
     private func process(_ job: SyncJob) async {
-        try? jobStore.markRunning(id: job.id)
-        refresh()
         do {
             guard let record = try providerStore.all().first(where: { $0.id == job.providerID }) else {
                 try? jobStore.markFailed(id: job.id, error: "Provider not found.")
