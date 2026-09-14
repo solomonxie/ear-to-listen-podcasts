@@ -129,6 +129,7 @@ struct SyncEngine {
             title: title,
             trackNumber: nil,
             durationMs: metadata.durationMs,
+            year: metadata.year,
             sizeBytes: file.sizeBytes,
             isLost: false,
             updatedAt: Date()
@@ -137,30 +138,33 @@ struct SyncEngine {
         return true
     }
 
-    private func extractMetadata(provider: CloudProvider, fileID: String) async -> (title: String?, artist: String?, album: String?, durationMs: Int?) {
+    private func extractMetadata(provider: CloudProvider, fileID: String) async -> (title: String?, artist: String?, album: String?, durationMs: Int?, year: Int?) {
         guard let url = try? await provider.streamURL(forFileID: fileID) else {
-            return (nil, nil, nil, nil)
+            return (nil, nil, nil, nil, nil)
         }
         let asset = AVURLAsset(url: url)
         guard let commonMetadata = try? await asset.load(.commonMetadata) else {
-            return (nil, nil, nil, nil)
+            return (nil, nil, nil, nil, nil)
         }
 
         var title: String?
         var artist: String?
         var album: String?
+        var creationDate: String?
         for item in commonMetadata {
             guard let key = item.commonKey else { continue }
             switch key {
             case .commonKeyTitle: title = try? await item.load(.stringValue)
             case .commonKeyArtist: artist = try? await item.load(.stringValue)
             case .commonKeyAlbumName: album = try? await item.load(.stringValue)
+            case .commonKeyCreationDate: creationDate = try? await item.load(.stringValue)
             default: break
             }
         }
 
         let durationSeconds = try? await asset.load(.duration).seconds
         let durationMs = durationSeconds.map { Int($0 * 1000) }
-        return (title, artist, album, durationMs)
+        let year = creationDate.flatMap { Int($0.prefix(4)) }
+        return (title, artist, album, durationMs, year)
     }
 }

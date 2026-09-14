@@ -49,6 +49,59 @@ struct TrackStore {
         }
     }
 
+    func tracks(forAlbum albumID: String) throws -> [Track] {
+        try dbQueue.read { db in
+            try Track
+                .filter(Column("albumID") == albumID && Column("isLost") == false)
+                .order(Column("trackNumber"), Column("title"))
+                .fetchAll(db)
+        }
+    }
+
+    func tracks(forArtist artistID: String) throws -> [Track] {
+        try dbQueue.read { db in
+            try Track
+                .filter(Column("artistID") == artistID && Column("isLost") == false)
+                .order(Column("title"))
+                .fetchAll(db)
+        }
+    }
+
+    func tracks(forShow showID: String) throws -> [Track] {
+        try dbQueue.read { db in
+            try Track
+                .filter(Column("showID") == showID && Column("isLost") == false)
+                .order(Column("title"))
+                .fetchAll(db)
+        }
+    }
+
+    func tracks(forYear year: Int) throws -> [Track] {
+        try dbQueue.read { db in
+            try Track
+                .filter(Column("year") == year && Column("isLost") == false)
+                .order(Column("title"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Every synced-and-present track, for shelves that browse the whole library at once.
+    func all(includingLost: Bool = false) throws -> [Track] {
+        try dbQueue.read { db in
+            let query = includingLost ? Track.all() : Track.filter(Column("isLost") == false)
+            return try query.order(Column("title")).fetchAll(db)
+        }
+    }
+
+    /// Distinct release years present in the library, newest first.
+    func years() throws -> [Int] {
+        try dbQueue.read { db in
+            try Int.fetchAll(db, sql: """
+                SELECT DISTINCT year FROM tracks WHERE year IS NOT NULL AND isLost = 0 ORDER BY year DESC
+                """)
+        }
+    }
+
     struct ProviderStats {
         var count: Int
         var lostCount: Int
