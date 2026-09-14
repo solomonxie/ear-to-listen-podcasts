@@ -8,6 +8,8 @@ struct Playlist: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var name: String
     var source: String
     var createdAt: Date
+    /// Seeded by `DemoDataSeeder`, wiped/reseeded together rather than treated as real data.
+    var isDemo: Bool = false
 }
 
 struct PlaylistTrack: Codable, FetchableRecord, PersistableRecord {

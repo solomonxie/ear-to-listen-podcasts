@@ -8,10 +8,13 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var providerID: String
     var artistID: String?
     var albumID: String?
+    var showID: String? = nil
     var filePath: String
     var title: String
     var trackNumber: Int?
     var durationMs: Int?
+    /// Release year, read from embedded metadata where available (used for "Browse by Year").
+    var year: Int? = nil
     var sizeBytes: Int64? = nil
     /// True when the last sync no longer found this file in the bucket listing.
     var isLost: Bool = false

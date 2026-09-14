@@ -108,6 +108,55 @@ enum Migrations {
             }
         }
 
+        // Real "Show" (a series) and "Topic" concepts, so Home's shelves can be backed by
+        // the synced library instead of mock data. `isDemo` rows come from `DemoDataSeeder`
+        // and are wiped/reseeded together, kept apart from anything the user actually synced.
+        migrator.registerMigration("v6_shows_and_topics") { db in
+            try db.alter(table: "artists") { t in
+                t.add(column: "bio", .text)
+                t.add(column: "isDemo", .boolean).notNull().defaults(to: false)
+            }
+            try db.alter(table: "albums") { t in
+                t.add(column: "isDemo", .boolean).notNull().defaults(to: false)
+            }
+            try db.alter(table: "playlists") { t in
+                t.add(column: "isDemo", .boolean).notNull().defaults(to: false)
+            }
+
+            try db.create(table: "shows") { t in
+                t.column("id", .text).primaryKey()
+                t.column("name", .text).notNull()
+                t.column("summary", .text)
+                t.column("isSaved", .boolean).notNull().defaults(to: false)
+                t.column("isDemo", .boolean).notNull().defaults(to: false)
+                t.column("createdAt", .datetime).notNull()
+            }
+
+            try db.create(table: "topics") { t in
+                t.column("id", .text).primaryKey()
+                t.column("name", .text).notNull().unique().collate(.nocase)
+                t.column("isDemo", .boolean).notNull().defaults(to: false)
+            }
+
+            try db.create(table: "showArtists") { t in
+                t.column("showID", .text).notNull().indexed().references("shows", onDelete: .cascade)
+                t.column("artistID", .text).notNull().indexed().references("artists", onDelete: .cascade)
+                t.primaryKey(["showID", "artistID"])
+            }
+
+            try db.create(table: "showTopics") { t in
+                t.column("showID", .text).notNull().indexed().references("shows", onDelete: .cascade)
+                t.column("topicID", .text).notNull().indexed().references("topics", onDelete: .cascade)
+                t.primaryKey(["showID", "topicID"])
+            }
+
+            try db.alter(table: "tracks") { t in
+                t.add(column: "showID", .text)
+                t.add(column: "year", .integer)
+            }
+            try db.create(index: "idx_tracks_show", on: "tracks", columns: ["showID"])
+        }
+
         return migrator
     }
 }

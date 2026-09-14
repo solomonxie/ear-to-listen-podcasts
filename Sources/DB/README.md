@@ -1,17 +1,21 @@
 # Local Database
 
 GRDB/SQLite persistence — `DatabaseManager` opens the on-device DB and runs
-`Migrations`; one `*Store` per table handles its own queries. This is the
-real, wired-up layer (unlike `Sources/Screens/Mock`), but its models
-(`Album`/`Artist`/`Track`) still use music-era naming — renaming to the
-podcast domain (show/speaker/episode) plus the metadata this app actually
-needs (transcripts, topics, file hashes for move-safe re-identification) is
-pending, tracked in `docs/design/`.
+`Migrations`; one `*Store` per table handles its own queries. Every Home
+shelf reads from here (`LibraryStore`/`TrackStore`/`PlaylistStore`) — there's
+no separate mock/demo data layer. `Artist`/`Album`/`Track` keep their
+music-era table names, but the UI calls an `Artist` a "Speaker"; `Show` and
+`Topic` (added for the podcast domain — a series and its tags, distinct from
+`Album`, a curated release) sit alongside them, linked via `showArtists`/
+`showTopics`. `DemoDataSeeder` (`Sources/Library`) populates all of these
+with sample rows on first launch (or via "Reset Demo Data"), tagged
+`isDemo = true` so they can be wiped and reseeded without touching anything
+actually synced.
 
 ## Sync Workflow
 
 The one real workflow that touches every store here — a scheduled tick,
-manual "Sync Now" (`RemoteSourceDetailView`), or right after adding a
+manual "Sync Now" (`RemoteBrowserView`), or right after adding a
 source (`AddS3ProviderView`/`SettingsSectionView`):
 
 ```

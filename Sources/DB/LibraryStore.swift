@@ -30,9 +30,121 @@ struct LibraryStore {
         try dbQueue.read { db in try Artist.order(Column("name")).fetchAll(db) }
     }
 
+    func artist(id: String) throws -> Artist? {
+        try dbQueue.read { db in try Artist.fetchOne(db, key: id) }
+    }
+
+    func updateArtist(id: String, name: String, bio: String?) throws {
+        try dbQueue.write { db in
+            guard var artist = try Artist.fetchOne(db, key: id) else { return }
+            artist.name = name
+            artist.bio = bio
+            try artist.update(db)
+        }
+    }
+
     func albums(forArtist artistID: String?) throws -> [Album] {
         try dbQueue.read { db in
             try Album.filter(Column("artistID") == artistID).order(Column("name")).fetchAll(db)
+        }
+    }
+
+    func albums() throws -> [Album] {
+        try dbQueue.read { db in try Album.order(Column("name")).fetchAll(db) }
+    }
+
+    func album(id: String) throws -> Album? {
+        try dbQueue.read { db in try Album.fetchOne(db, key: id) }
+    }
+
+    // MARK: Shows
+
+    func upsertShow(name: String, summary: String? = nil, isDemo: Bool = false) throws -> Show {
+        try dbQueue.write { db in
+            if let existing = try Show.filter(Column("name") == name).fetchOne(db) {
+                return existing
+            }
+            let show = Show(id: UUID().uuidString, name: name, summary: summary, isDemo: isDemo, createdAt: Date())
+            try show.insert(db)
+            return show
+        }
+    }
+
+    func shows() throws -> [Show] {
+        try dbQueue.read { db in try Show.order(Column("name")).fetchAll(db) }
+    }
+
+    func show(id: String) throws -> Show? {
+        try dbQueue.read { db in try Show.fetchOne(db, key: id) }
+    }
+
+    func savedShows() throws -> [Show] {
+        try dbQueue.read { db in try Show.filter(Column("isSaved") == true).order(Column("name")).fetchAll(db) }
+    }
+
+    func setShow(_ showID: String, saved: Bool) throws {
+        try dbQueue.write { db in
+            guard var show = try Show.fetchOne(db, key: showID) else { return }
+            show.isSaved = saved
+            try show.update(db)
+        }
+    }
+
+    func linkShowArtist(showID: String, artistID: String) throws {
+        try dbQueue.write { db in try ShowArtist(showID: showID, artistID: artistID).save(db) }
+    }
+
+    func artists(forShow showID: String) throws -> [Artist] {
+        try dbQueue.read { db in
+            try Artist.fetchAll(db, sql: """
+                SELECT artists.* FROM artists
+                JOIN showArtists ON showArtists.artistID = artists.id
+                WHERE showArtists.showID = ?
+                ORDER BY artists.name
+                """, arguments: [showID])
+        }
+    }
+
+    func shows(forArtist artistID: String) throws -> [Show] {
+        try dbQueue.read { db in
+            try Show.fetchAll(db, sql: """
+                SELECT shows.* FROM shows
+                JOIN showArtists ON showArtists.showID = shows.id
+                WHERE showArtists.artistID = ?
+                ORDER BY shows.name
+                """, arguments: [artistID])
+        }
+    }
+
+    // MARK: Topics
+
+    func upsertTopic(name: String, isDemo: Bool = false) throws -> Topic {
+        try dbQueue.write { db in
+            if let existing = try Topic.filter(Column("name") == name).fetchOne(db) {
+                return existing
+            }
+            let topic = Topic(id: UUID().uuidString, name: name, isDemo: isDemo)
+            try topic.insert(db)
+            return topic
+        }
+    }
+
+    func topics() throws -> [Topic] {
+        try dbQueue.read { db in try Topic.order(Column("name")).fetchAll(db) }
+    }
+
+    func linkShowTopic(showID: String, topicID: String) throws {
+        try dbQueue.write { db in try ShowTopic(showID: showID, topicID: topicID).save(db) }
+    }
+
+    func shows(forTopic topicID: String) throws -> [Show] {
+        try dbQueue.read { db in
+            try Show.fetchAll(db, sql: """
+                SELECT shows.* FROM shows
+                JOIN showTopics ON showTopics.showID = shows.id
+                WHERE showTopics.topicID = ?
+                ORDER BY shows.name
+                """, arguments: [topicID])
         }
     }
 }
