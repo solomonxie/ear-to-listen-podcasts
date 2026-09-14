@@ -1,22 +1,21 @@
 import SwiftUI
 
 struct PlaylistDetailView: View {
-    let playlist: PlaylistUI
-    @EnvironmentObject private var library: MockLibraryStore
-    @EnvironmentObject private var playback: PlaybackMockState
+    let playlist: Playlist
+    @State private var tracks: [Track] = []
 
-    private var episodes: [PodcastEpisode] { library.episodes(inPlaylist: playlist) }
+    private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     var body: some View {
         Group {
-            if episodes.isEmpty {
+            if tracks.isEmpty {
                 ContentUnavailableView("No episodes yet", systemImage: "mic.slash")
             } else {
-                List(episodes) { episode in
+                List(tracks) { track in
                     Button {
-                        playback.play(episode, queue: episodes)
+                        PlaybackEngine.shared.play(track: track, queue: tracks)
                     } label: {
-                        EpisodeRow(episode: episode)
+                        TrackRow(track: track)
                     }
                     .buttonStyle(.plain)
                 }
@@ -24,5 +23,8 @@ struct PlaylistDetailView: View {
             }
         }
         .navigationTitle(playlist.name)
+        .task {
+            tracks = (try? playlistStore.tracks(inPlaylist: playlist.id)) ?? []
+        }
     }
 }

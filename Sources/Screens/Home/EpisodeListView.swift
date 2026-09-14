@@ -3,19 +3,18 @@ import SwiftUI
 /// Shared list used for year/topic browsing from Home.
 struct EpisodeListView: View {
     let title: String
-    let episodes: [PodcastEpisode]
-    @EnvironmentObject private var playback: PlaybackMockState
+    let tracks: [Track]
 
     var body: some View {
         Group {
-            if episodes.isEmpty {
+            if tracks.isEmpty {
                 ContentUnavailableView("No episodes yet", systemImage: "mic.slash")
             } else {
-                List(episodes) { episode in
+                List(tracks) { track in
                     Button {
-                        playback.play(episode, queue: episodes)
+                        PlaybackEngine.shared.play(track: track, queue: tracks)
                     } label: {
-                        EpisodeRow(episode: episode)
+                        TrackRow(track: track)
                     }
                     .buttonStyle(.plain)
                 }

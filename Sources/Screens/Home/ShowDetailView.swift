@@ -1,39 +1,44 @@
 import SwiftUI
 
 struct ShowDetailView: View {
-    let show: PodcastShow
-    @EnvironmentObject private var library: MockLibraryStore
-    @EnvironmentObject private var playback: PlaybackMockState
+    let show: Show
+    @State private var isSaved: Bool
+    @State private var tracks: [Track] = []
+    @State private var hosts: [Artist] = []
 
-    private var episodes: [PodcastEpisode] { library.episodes(forShow: show.id) }
-    private var speakers: [Speaker] { show.speakerIDs.compactMap(library.speaker) }
+    private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+
+    init(show: Show) {
+        self.show = show
+        _isSaved = State(initialValue: show.isSaved)
+    }
 
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(show.artColor.gradient)
+                        .fill(LibraryArt.color(for: show.id).gradient)
                         .frame(height: 160)
-                        .overlay { Image(systemName: show.symbol).font(.system(size: 48)).foregroundStyle(.white) }
-                    Text(show.summary).font(.callout).foregroundStyle(.secondary)
+                        .overlay { Image(systemName: "mic.fill").font(.system(size: 48)).foregroundStyle(.white) }
+                    if let summary = show.summary {
+                        Text(summary).font(.callout).foregroundStyle(.secondary)
+                    }
                     HStack {
-                        ForEach(speakers) { speaker in
-                            Text(speaker.name).font(.caption.weight(.semibold))
+                        ForEach(hosts) { host in
+                            Text(host.name).font(.caption.weight(.semibold))
                         }
                         Spacer()
-                        Button(library.savedShowIDs.contains(show.id) ? "Saved" : "Save") {
-                            if library.savedShowIDs.contains(show.id) {
-                                library.savedShowIDs.remove(show.id)
-                            } else {
-                                library.savedShowIDs.insert(show.id)
-                            }
+                        Button(isSaved ? "Saved" : "Save") {
+                            isSaved.toggle()
+                            try? libraryStore.setShow(show.id, saved: isSaved)
                         }
                         .buttonStyle(.bordered)
                     }
-                    if let first = episodes.first {
+                    if let first = tracks.first {
                         Button {
-                            playback.play(first, queue: episodes)
+                            PlaybackEngine.shared.play(track: first, queue: tracks)
                         } label: {
                             Label("Play latest", systemImage: "play.fill")
                                 .frame(maxWidth: .infinity)
@@ -45,44 +50,22 @@ struct ShowDetailView: View {
             }
 
             Section("Episodes") {
-                ForEach(episodes) { episode in
+                ForEach(tracks) { track in
                     Button {
-                        playback.play(episode, queue: episodes)
+                        PlaybackEngine.shared.play(track: track, queue: tracks)
                     } label: {
-                        EpisodeRow(episode: episode)
+                        TrackRow(track: track)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
         .listStyle(.plain)
-        .navigationTitle(show.title)
+        .navigationTitle(show.name)
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct EpisodeRow: View {
-    let episode: PodcastEpisode
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(episode.title).font(.subheadline.weight(.semibold))
-            HStack(spacing: 6) {
-                Text(Self.formattedDuration(episode.durationSeconds))
-                if episode.audioFileName != nil {
-                    Label("Transcript", systemImage: "text.bubble")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        .task {
+            tracks = (try? trackStore.tracks(forShow: show.id)) ?? []
+            hosts = (try? libraryStore.artists(forShow: show.id)) ?? []
         }
-        .padding(.vertical, 2)
-    }
-
-    static func formattedDuration(_ seconds: Int) -> String {
-        let minutes = seconds / 60
-        if minutes >= 60 {
-            return "\(minutes / 60)h \(minutes % 60)m"
-        }
-        return "\(minutes) min"
     }
 }

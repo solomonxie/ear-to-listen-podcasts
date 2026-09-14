@@ -1,23 +1,41 @@
 import SwiftUI
 
-/// Minimal now-playing sheet for real, synced `Track`s — separate from the mock-data
-/// `NowPlayingView` used by the rest of the app today. Exists so `PlaybackEngine`
-/// (and the live transcription it drives) is actually reachable from the UI.
+/// The app's one now-playing screen, over real synced `Track`s via `PlaybackEngine`.
 struct RealPlayerView: View {
     @ObservedObject var engine = PlaybackEngine.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var tab: Tab = .details
+    @State private var showingUpNext = false
+    @State private var artistName: String?
+    @State private var showSummary: String?
+
+    private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+
+    private enum Tab: String, CaseIterable {
+        case details = "Details"
+        case transcript = "Transcript"
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
                 if let track = engine.currentTrack {
-                    Text(track.title).font(.title3.bold()).multilineTextAlignment(.center).padding(.horizontal)
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(LibraryArt.color(for: track.id).gradient)
+                        .frame(height: 220)
+                        .overlay { Image(systemName: LibraryArt.symbol(for: track.id)).font(.system(size: 64)).foregroundStyle(.white) }
+                        .padding(.horizontal)
 
-                    Slider(
-                        value: Binding(get: { engine.currentTime }, set: { engine.seek(to: $0) }),
-                        in: 0...max(engine.duration, 1)
-                    )
+                    VStack(spacing: 4) {
+                        Text(track.title).font(.title3.bold()).multilineTextAlignment(.center)
+                        if let artistName {
+                            Text(artistName).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
                     .padding(.horizontal)
+
+                    Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
+                        .padding(.horizontal)
 
                     HStack(spacing: 48) {
                         Button { engine.skipToPrevious() } label: { Image(systemName: "backward.fill").font(.title) }
@@ -32,7 +50,33 @@ struct RealPlayerView: View {
                         Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
                     }
 
-                    transcriptSection
+                    Picker("View", selection: $tab) {
+                        ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+
+                    switch tab {
+                    case .details:
+                        ScrollView {
+                            Text(showSummary ?? "No details for this episode.")
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal)
+                        }
+                    case .transcript:
+                        TranscriptSection(engine: engine)
+                    }
+
+                    Button {
+                        showingUpNext = true
+                    } label: {
+                        Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
+                    }
+                    .padding(.bottom)
+                    .task(id: track.id) {
+                        artistName = track.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
+                        showSummary = track.showID.flatMap { try? libraryStore.show(id: $0) }?.summary
+                    }
                 } else {
                     Spacer()
                     ContentUnavailableView("Nothing playing", systemImage: "mic.slash")
@@ -48,11 +92,80 @@ struct RealPlayerView: View {
                     Button("Close") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showingUpNext) {
+                UpNextView()
+            }
+        }
+    }
+}
+
+/// Drives itself from a locally-held drag position while the user's finger is down, so
+/// `PlaybackEngine`'s periodic `currentTime` publishing (every 0.5s) can't yank the thumb
+/// back mid-drag. A zero-distance drag gesture also means tapping anywhere on the track
+/// jumps straight there, not just dragging the thumb.
+private struct Scrubber: View {
+    let currentTime: TimeInterval
+    let duration: TimeInterval
+    let onSeek: (TimeInterval) -> Void
+
+    @State private var isDragging = false
+    @State private var dragTime: TimeInterval = 0
+
+    private var displayedTime: TimeInterval { isDragging ? dragTime : currentTime }
+    private var progress: Double { duration > 0 ? min(max(displayedTime / duration, 0), 1) : 0 }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary).frame(height: 4)
+                    Capsule().fill(Color.accentColor).frame(width: geo.size.width * progress, height: 4)
+                    Circle().fill(Color.accentColor)
+                        .frame(width: 14, height: 14)
+                        .offset(x: geo.size.width * progress - 7)
+                }
+                .frame(maxHeight: .infinity, alignment: .center)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            isDragging = true
+                            dragTime = time(atX: value.location.x, width: geo.size.width)
+                        }
+                        .onEnded { value in
+                            let time = time(atX: value.location.x, width: geo.size.width)
+                            onSeek(time)
+                            isDragging = false
+                        }
+                )
+            }
+            .frame(height: 20)
+            HStack {
+                Text(Self.formatted(displayedTime))
+                Spacer()
+                Text(Self.formatted(duration))
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
     }
 
-    @ViewBuilder
-    private var transcriptSection: some View {
+    private func time(atX x: CGFloat, width: CGFloat) -> TimeInterval {
+        guard width > 0 else { return 0 }
+        return min(max(x / width, 0), 1) * duration
+    }
+
+    static func formatted(_ time: TimeInterval) -> String {
+        guard time.isFinite, time >= 0 else { return "0:00" }
+        let total = Int(time)
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private struct TranscriptSection: View {
+    @ObservedObject var engine: PlaybackEngine
+
+    var body: some View {
         if engine.isTranscribing {
             ProgressView("Transcribing…")
         } else if engine.transcript.isEmpty {
@@ -77,5 +190,33 @@ struct RealPlayerView: View {
                 }
             }
         }
+    }
+}
+
+private struct UpNextView: View {
+    @ObservedObject var engine = PlaybackEngine.shared
+
+    var body: some View {
+        NavigationStack {
+            List(engine.queue) { track in
+                Button {
+                    engine.play(track: track, queue: engine.queue)
+                } label: {
+                    HStack {
+                        if track.id == engine.currentTrack?.id {
+                            Image(systemName: "speaker.wave.2.fill").foregroundStyle(.tint)
+                        }
+                        Text(track.title).lineLimit(1)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground.ignoresSafeArea())
+            .navigationTitle("Up Next")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
     }
 }

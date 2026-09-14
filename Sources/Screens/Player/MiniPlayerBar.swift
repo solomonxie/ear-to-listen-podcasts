@@ -1,40 +1,45 @@
 import SwiftUI
 
 struct MiniPlayerBar: View {
-    @EnvironmentObject private var playback: PlaybackMockState
+    @ObservedObject private var engine = PlaybackEngine.shared
     @Binding var showingNowPlaying: Bool
+    @State private var artistName: String?
+
+    private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     var body: some View {
-        if let episode = playback.currentEpisode {
+        if let track = engine.currentTrack {
             Button {
                 showingNowPlaying = true
             } label: {
                 HStack(spacing: 12) {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(MockLibraryStore.shared.show(episode.showID)?.artColor ?? .gray)
+                        .fill(LibraryArt.color(for: track.id).gradient)
                         .frame(width: 36, height: 36)
                         .overlay {
-                            Image(systemName: MockLibraryStore.shared.show(episode.showID)?.symbol ?? "mic.fill")
+                            Image(systemName: LibraryArt.symbol(for: track.id))
                                 .foregroundStyle(.white)
                                 .font(.caption)
                         }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(episode.title)
+                        Text(track.title)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        Text(MockLibraryStore.shared.show(episode.showID)?.title ?? "")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        if let artistName {
+                            Text(artistName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
 
                     Spacer()
 
                     Button {
-                        playback.toggle()
+                        engine.togglePlayPause()
                     } label: {
-                        Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
+                        Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill")
                             .font(.title3)
                     }
                     .buttonStyle(.plain)
@@ -43,13 +48,16 @@ struct MiniPlayerBar: View {
                 .padding(.vertical, 8)
                 .background(.ultraThinMaterial)
                 .overlay(alignment: .top) {
-                    ProgressView(value: playback.duration > 0 ? playback.progress / playback.duration : 0)
+                    ProgressView(value: engine.duration > 0 ? engine.currentTime / engine.duration : 0)
                         .progressViewStyle(.linear)
                         .tint(.accentColor)
                         .frame(height: 1.5)
                 }
             }
             .buttonStyle(.plain)
+            .task(id: track.id) {
+                artistName = track.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
+            }
         }
     }
 }

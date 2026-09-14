@@ -1,15 +1,20 @@
 import SwiftUI
 
 struct SpeakerDetailView: View {
-    let speaker: Speaker
-    @EnvironmentObject private var library: MockLibraryStore
-    @EnvironmentObject private var playback: PlaybackMockState
+    let speaker: Artist
+    @State private var currentSpeaker: Artist
+    @State private var shows: [Show] = []
+    @State private var albums: [Album] = []
+    @State private var tracks: [Track] = []
     @State private var showingEdit = false
 
-    private var currentSpeaker: Speaker { library.speaker(speaker.id) ?? speaker }
-    private var shows: [PodcastShow] { library.shows.filter { $0.speakerIDs.contains(speaker.id) } }
-    private var albums: [PodcastAlbum] { library.albums(forSpeaker: speaker.id) }
-    private var episodes: [PodcastEpisode] { library.episodes(forSpeaker: speaker.id) }
+    private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+
+    init(speaker: Artist) {
+        self.speaker = speaker
+        _currentSpeaker = State(initialValue: speaker)
+    }
 
     var body: some View {
         List {
@@ -19,9 +24,11 @@ struct SpeakerDetailView: View {
                         .fill(Color.secondary.opacity(0.3))
                         .frame(width: 96, height: 96)
                         .overlay { Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(.secondary) }
-                    Text(currentSpeaker.bio).font(.callout).foregroundStyle(.secondary)
+                    if let bio = currentSpeaker.bio {
+                        Text(bio).font(.callout).foregroundStyle(.secondary)
+                    }
                     HStack {
-                        ForEach(shows) { show in Text(show.title).font(.caption.weight(.semibold)) }
+                        ForEach(shows) { show in Text(show.name).font(.caption.weight(.semibold)) }
                     }
                 }
                 .listRowSeparator(.hidden)
@@ -39,11 +46,11 @@ struct SpeakerDetailView: View {
             }
 
             Section("Episodes") {
-                ForEach(episodes) { episode in
+                ForEach(tracks) { track in
                     Button {
-                        playback.play(episode, queue: episodes)
+                        PlaybackEngine.shared.play(track: track, queue: tracks)
                     } label: {
-                        EpisodeRow(episode: episode)
+                        TrackRow(track: track)
                     }
                     .buttonStyle(.plain)
                 }
@@ -57,24 +64,29 @@ struct SpeakerDetailView: View {
                 Button("Edit") { showingEdit = true }
             }
         }
-        .sheet(isPresented: $showingEdit) {
+        .task { await load() }
+        .sheet(isPresented: $showingEdit, onDismiss: { Task { await load() } }) {
             SpeakerEditView(speaker: currentSpeaker)
         }
+    }
+
+    private func load() async {
+        currentSpeaker = (try? libraryStore.artist(id: speaker.id)) ?? currentSpeaker
+        shows = (try? libraryStore.shows(forArtist: speaker.id)) ?? []
+        albums = (try? libraryStore.albums(forArtist: speaker.id)) ?? []
+        tracks = (try? trackStore.tracks(forArtist: speaker.id)) ?? []
     }
 }
 
 struct AlbumRow: View {
-    let album: PodcastAlbum
+    let album: Album
     var body: some View {
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 8)
-                .fill(album.artColor.gradient)
+                .fill(LibraryArt.color(for: album.id).gradient)
                 .frame(width: 40, height: 40)
-                .overlay { Image(systemName: album.symbol).foregroundStyle(.white) }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(album.title).font(.subheadline.weight(.semibold))
-                Text("\(album.episodeIDs.count) episodes").font(.caption).foregroundStyle(.secondary)
-            }
+                .overlay { Image(systemName: "square.stack.fill").foregroundStyle(.white) }
+            Text(album.name).font(.subheadline.weight(.semibold))
         }
         .padding(.vertical, 2)
     }
