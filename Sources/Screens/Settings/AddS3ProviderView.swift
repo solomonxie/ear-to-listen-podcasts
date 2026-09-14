@@ -7,15 +7,36 @@ struct AddS3ProviderView: View {
     @State private var accessKeyId = ""
     @State private var secretAccessKey = ""
     @State private var bucket = ""
-    @State private var keyPrefix = S3Provider.defaultKeyPrefix
+    @State private var keyPrefix = ""
     @State private var isValidating = false
     @State private var validationError: String?
 
     private static let setupGuideURL = URL(string: "https://github.com/solomonxie/bring-your-own-podcasts/blob/main/docs/guides/s3-bucket-setup.md")!
 
+    private var existingS3Providers: [ProviderRecord] {
+        viewModel.providers.filter { $0.type == S3Provider.providerType }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                if !existingS3Providers.isEmpty {
+                    Section("Fill from an existing connection") {
+                        ForEach(existingS3Providers) { record in
+                            Button {
+                                fillDraft(from: record)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(record.label)
+                                    if let path = ProviderManager.shared.s3DisplayPath(for: record) {
+                                        Text(path).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                        }
+                    }
+                }
                 Section("S3 Bucket") {
                     TextField("Bucket name", text: $bucket)
                         .autocorrectionDisabled()
@@ -67,6 +88,17 @@ struct AddS3ProviderView: View {
         }
     }
 
+    /// Copies another connection's fields in as a starting point — e.g. the same bucket
+    /// and credentials with just the prefix tweaked, rather than retyping everything.
+    private func fillDraft(from record: ProviderRecord) {
+        guard let settings = ProviderManager.shared.s3Settings(for: record) else { return }
+        validationError = nil
+        accessKeyId = settings["accessKeyId"] ?? accessKeyId
+        secretAccessKey = settings["secretAccessKey"] ?? secretAccessKey
+        bucket = settings["bucket"] ?? bucket
+        keyPrefix = settings["keyPrefix"] ?? keyPrefix
+    }
+
     private func validateAndSave() async {
         isValidating = true
         validationError = nil
@@ -105,9 +137,10 @@ struct AddS3ProviderView: View {
                 bucket: bucket,
                 keyPrefix: keyPrefix
             ) {
-                // Scans the bucket right away so the new source isn't empty until the
-                // next scheduled/manual sync.
-                _ = try? await SyncEngine().sync(providerRecord: record)
+                // Scans the bucket in the background so the new source isn't empty until
+                // the next scheduled/manual sync — not awaited here, since a large prefix
+                // can take a long time and shouldn't block "Save".
+                Task { _ = try? await SyncEngine().sync(providerRecord: record) }
             }
             dismiss()
         } catch {

@@ -42,9 +42,6 @@ struct S3Provider: CloudProvider {
     private let keyPrefix: String?
     private let client: S3Client
 
-    /// Default folder new buckets are scoped to, so users don't have to think of one.
-    static let defaultKeyPrefix = "BringYourOwnPodcasts/"
-
     init(config: CloudProviderConfig) throws {
         func setting(_ key: String) throws -> String {
             guard let value = config.settings[key], !value.isEmpty else {
@@ -128,7 +125,7 @@ struct S3Provider: CloudProvider {
 
     func testConnection() async -> ConnectionTestResult {
         do {
-            _ = try await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, maxKeys: 1))
+            _ = try await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, maxKeys: 1, prefix: keyPrefix))
             return ConnectionTestResult(isSuccess: true, message: nil)
         } catch {
             return ConnectionTestResult(isSuccess: false, message: describeAWSError(error))

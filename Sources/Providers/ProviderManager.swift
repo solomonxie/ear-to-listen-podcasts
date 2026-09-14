@@ -41,4 +41,19 @@ final class ProviderManager: @unchecked Sendable {
     func invalidate(providerID: String) {
         lock.withLock { cache.removeValue(forKey: providerID) }
     }
+
+    /// Raw settings dict (accessKeyId/secretAccessKey/region/bucket/keyPrefix) — lets the
+    /// "add connection" screen offer an existing S3 connection as a fillable draft.
+    func s3Settings(for record: ProviderRecord) -> [String: String]? {
+        guard record.type == S3Provider.providerType else { return nil }
+        return try? credentials.getJSON([String: String].self, forKey: Self.settingsKey(providerID: record.id))
+    }
+
+    /// "s3://bucket/prefix" for display — lets two connections to the same bucket
+    /// (different prefixes) be told apart in a list.
+    func s3DisplayPath(for record: ProviderRecord) -> String? {
+        guard let settings = s3Settings(for: record), let bucket = settings["bucket"], !bucket.isEmpty else { return nil }
+        let prefix = settings["keyPrefix"].flatMap { $0.isEmpty ? nil : $0 }
+        return prefix.map { "s3://\(bucket)/\($0)" } ?? "s3://\(bucket)"
+    }
 }
