@@ -53,6 +53,32 @@ struct LibraryStore {
         try dbQueue.read { db in try Album.order(Column("name")).fetchAll(db) }
     }
 
+    /// Corrects an album's speaker when the embedded/guessed metadata was wrong (e.g. a
+    /// shared uploader/collection name instead of the actual speaker) — repoints the
+    /// album and every one of its tracks at `artistName` (creating that artist if it
+    /// doesn't exist yet), rather than just the album, since tracks carry their own
+    /// denormalized `artistID` too.
+    @discardableResult
+    func reassignAlbumArtist(albumID: String, artistName: String) throws -> Artist {
+        try dbQueue.write { db in
+            let artist: Artist
+            if let existing = try Artist.filter(Column("name") == artistName).fetchOne(db) {
+                artist = existing
+            } else {
+                artist = Artist(id: UUID().uuidString, name: artistName)
+                try artist.insert(db)
+            }
+            guard var album = try Album.fetchOne(db, key: albumID) else { return artist }
+            album.artistID = artist.id
+            try album.update(db)
+            try db.execute(
+                sql: "UPDATE tracks SET artistID = ? WHERE albumID = ?",
+                arguments: [artist.id, albumID]
+            )
+            return artist
+        }
+    }
+
     func album(id: String) throws -> Album? {
         try dbQueue.read { db in try Album.fetchOne(db, key: id) }
     }
