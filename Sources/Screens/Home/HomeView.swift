@@ -316,7 +316,7 @@ private struct TrackCard: View {
                     .fill(LibraryArt.color(for: track.id).gradient)
                     .frame(width: 160, height: 90)
                     .overlay { Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white) }
-                Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                 if let positionMs = track.positionMs, let durationMs = track.durationMs, durationMs > 0 {
                     ProgressView(value: Double(positionMs), total: Double(durationMs))
                 }
