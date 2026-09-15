@@ -12,6 +12,7 @@ struct SettingsSectionView: View {
     @State private var exportDocument: BackupDocument?
     @State private var showingExportPicker = false
     @State private var showingImportPicker = false
+    @State private var showingAddAiKey = false
 
     private var localProviders: [ProviderRecord] {
         viewModel.providers.filter { $0.type == LocalFilesProvider.providerType }
@@ -74,16 +75,54 @@ struct SettingsSectionView: View {
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("AI FEATURES").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                SecureField("OpenAI API Key", text: $viewModel.openAIAPIKey)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .onSubmit { viewModel.saveOpenAIAPIKey() }
-                Text("Optional — during sync, lets the app ask OpenAI to guess better titles/show names from a file's path and existing tags (not its audio); also used to transcribe an episode's audio on playback, with the result saved on-device. Your key is stored only in this device's Keychain: we never see it or send it anywhere ourselves, it's used solely for direct requests from your device to OpenAI.")
+                HStack {
+                    Text("AI FEATURES").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    if viewModel.aiKeys.count > 1 {
+                        Button {
+                            viewModel.setAiKeyStrategy(viewModel.aiKeyStrategy == .sequential ? .roundRobin : .sequential)
+                        } label: {
+                            Text("\(viewModel.aiKeyStrategy.displayName) ▾").font(.caption)
+                        }
+                    }
+                }
+                ForEach(Array(viewModel.aiKeys.enumerated()), id: \.element.id) { index, key in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(key.vendor.displayName).font(.subheadline)
+                            Text("\(key.requestCount) request\(key.requestCount == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if viewModel.aiKeys.count > 1 {
+                            Button { viewModel.moveAiKey(key, direction: -1) } label: { Image(systemName: "chevron.up") }
+                                .disabled(index == 0)
+                            Button { viewModel.moveAiKey(key, direction: 1) } label: { Image(systemName: "chevron.down") }
+                                .disabled(index == viewModel.aiKeys.count - 1)
+                        }
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            viewModel.removeAiKey(key)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+                Button {
+                    showingAddAiKey = true
+                } label: {
+                    Label("Add AI Key", systemImage: "plus.circle")
+                }
+                Text("Optional — during sync, lets the app ask AI to guess better titles/show names from a file's path and existing tags (not its audio); OpenAI keys are also used to transcribe an episode's audio on playback, with the result saved on-device. Add more than one key (same or different vendor) to fall back automatically if one is rate-limited — Sequential keeps using the first working key; Round-robin spreads requests across all of them. Keys are stored only in this device's Keychain: we never see them or send them anywhere ourselves, they're used solely for direct requests from your device to that vendor.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal)
+            .sheet(isPresented: $showingAddAiKey) {
+                AddAiKeyView(viewModel: viewModel)
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("SYNC & BACKUP").font(.caption.weight(.semibold)).foregroundStyle(.secondary)

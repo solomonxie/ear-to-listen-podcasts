@@ -1,0 +1,67 @@
+import Foundation
+import GRDB
+
+struct NoAiKeyError: Error, LocalizedError {
+    var errorDescription: String? { "No AI key configured. Add one in Settings ▸ AI Features." }
+}
+
+/// Dispatches a chat completion across whichever AI keys are configured (`AiKeyStore`),
+/// trying each in turn — starting point depending on the chosen strategy — until one
+/// succeeds. Sequential is sticky: it keeps starting from the same key call after call,
+/// only moving the pointer on once that key itself errors (rate limit, quota, revoked,
+/// ...). Round-robin instead advances the starting point by one on every single call,
+/// win or lose, to spread load across keys rather than favor one. Either way, a failure
+/// falls through to the next configured key before giving up, so one dead key doesn't
+/// take AI features down entirely.
+enum AiRouter {
+    private static let strategyDefaultsKey = "aiKeys.strategy"
+    private static let cursorDefaultsKey = "aiKeys.cursor"
+
+    static var strategy: AiKeyStrategy {
+        get { AiKeyStrategy(rawValue: UserDefaults.standard.string(forKey: strategyDefaultsKey) ?? "") ?? .sequential }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: strategyDefaultsKey) }
+    }
+
+    private static var cursor: Int {
+        get { UserDefaults.standard.integer(forKey: cursorDefaultsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: cursorDefaultsKey) }
+    }
+
+    static func runChatCompletion(
+        messages: [ChatMessage], dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue
+    ) async throws -> String {
+        let store = AiKeyStore(dbQueue: dbQueue)
+        let keys = try store.all()
+        guard !keys.isEmpty else { throw NoAiKeyError() }
+
+        let currentStrategy = strategy
+        let startAt = cursor % keys.count
+        let order = Array(keys[startAt...]) + Array(keys[..<startAt])
+        if currentStrategy == .roundRobin {
+            cursor = (startAt + 1) % keys.count
+        }
+
+        var lastError: Error?
+        for (offset, key) in order.enumerated() {
+            guard let secret = try? store.secret(forKeyID: key.id), !secret.isEmpty else { continue }
+            try? store.bumpRequestCount(id: key.id)
+            do {
+                return try await runChatCompletion(vendor: key.vendor, apiKey: secret, messages: messages)
+            } catch {
+                lastError = error
+                if currentStrategy == .sequential {
+                    cursor = (startAt + offset + 1) % keys.count
+                }
+            }
+        }
+        throw lastError ?? NoAiKeyError()
+    }
+
+    /// Used both by the router above and by "test then save" when adding a key.
+    static func runChatCompletion(vendor: AiVendor, apiKey: String, messages: [ChatMessage]) async throws -> String {
+        switch vendor {
+        case .openAI: return try await OpenAIChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
+        case .anthropic: return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
+        }
+    }
+}

@@ -157,6 +157,18 @@ enum Migrations {
             try db.create(index: "idx_tracks_show", on: "tracks", columns: ["showID"])
         }
 
+        // Multiple AI keys, each tagged with a vendor, so one dead/rate-limited key
+        // doesn't take AI features down entirely — see AiKeyStore/AiRouter.
+        migrator.registerMigration("v7_ai_keys") { db in
+            try db.create(table: "aiKeys") { t in
+                t.column("id", .text).primaryKey()
+                t.column("vendor", .text).notNull()
+                t.column("requestCount", .integer).notNull().defaults(to: 0)
+                t.column("position", .integer).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }
