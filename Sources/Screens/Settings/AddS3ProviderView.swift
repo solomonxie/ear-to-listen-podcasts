@@ -137,10 +137,10 @@ struct AddS3ProviderView: View {
                 bucket: bucket,
                 keyPrefix: keyPrefix
             ) {
-                // Scans the bucket in the background so the new source isn't empty until
-                // the next scheduled/manual sync — not awaited here, since a large prefix
-                // can take a long time and shouldn't block "Save".
-                Task { _ = try? await SyncEngine().sync(providerRecord: record) }
+                // Queues the whole bucket instead of a single opaque background sync, so
+                // progress (and any per-file errors) show up in the sync queue right away
+                // rather than only after everything finishes.
+                Task { await SyncQueueManager.shared.enqueueConnection(providerID: record.id) }
             }
             dismiss()
         } catch {

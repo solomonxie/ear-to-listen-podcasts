@@ -108,18 +108,27 @@ struct TrackStore {
         var totalBytes: Int64
     }
 
-    func stats(forProvider providerID: String) throws -> ProviderStats {
+    /// `pathPrefix` scopes the stats to one folder (e.g. for a per-folder readout while
+    /// browsing a connection) — computed from already-collected metadata, not a live
+    /// rescan of the provider.
+    func stats(forProvider providerID: String, pathPrefix: String? = nil) throws -> ProviderStats {
         try dbQueue.read { db in
-            let count = try Track
-                .filter(Column("providerID") == providerID && Column("isLost") == false)
-                .fetchCount(db)
-            let lostCount = try Track
-                .filter(Column("providerID") == providerID && Column("isLost") == true)
-                .fetchCount(db)
+            let prefix = pathPrefix.flatMap { $0.isEmpty ? nil : ($0.hasSuffix("/") ? $0 : $0 + "/") }
+            let likeClause = prefix != nil ? "AND filePath LIKE ?" : ""
+            var arguments: [String] = [providerID]
+            if let prefix { arguments.append("\(prefix)%") }
+
+            let count = try Int.fetchOne(
+                db, sql: "SELECT COUNT(*) FROM tracks WHERE providerID = ? AND isLost = 0 \(likeClause)",
+                arguments: StatementArguments(arguments)
+            ) ?? 0
+            let lostCount = try Int.fetchOne(
+                db, sql: "SELECT COUNT(*) FROM tracks WHERE providerID = ? AND isLost = 1 \(likeClause)",
+                arguments: StatementArguments(arguments)
+            ) ?? 0
             let totalBytes = try Int64.fetchOne(
-                db,
-                sql: "SELECT COALESCE(SUM(sizeBytes), 0) FROM tracks WHERE providerID = ? AND isLost = 0",
-                arguments: [providerID]
+                db, sql: "SELECT COALESCE(SUM(sizeBytes), 0) FROM tracks WHERE providerID = ? AND isLost = 0 \(likeClause)",
+                arguments: StatementArguments(arguments)
             ) ?? 0
             return ProviderStats(count: count, lostCount: lostCount, totalBytes: totalBytes)
         }

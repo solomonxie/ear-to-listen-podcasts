@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// Embeddable "Remote" section for the single-page root layout — real S3 sources,
-/// each linking to `RemoteSourceDetailView` for sync controls and storage stats.
-/// "Continue Listening" lives at the top of Home instead of here, since it's about
-/// the library as a whole, not specifically about remote connections.
+/// each linking to `RemoteBrowserView` for browsing/syncing/playing. "Continue
+/// Listening" lives at the top of Home instead of here, since it's about the library
+/// as a whole, not specifically about remote connections.
 struct RemoteSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var syncQueue = SyncQueueManager.shared
@@ -33,7 +33,7 @@ struct RemoteSectionView: View {
                     ForEach(s3Providers) { record in
                         HStack(spacing: 4) {
                             NavigationLink {
-                                RemoteBrowserView(record: record, onDelete: { viewModel.delete(record) })
+                                RemoteBrowserView(record: record, viewModel: viewModel)
                             } label: {
                                 RemoteSourceRow(record: record)
                             }

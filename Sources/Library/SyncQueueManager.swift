@@ -39,17 +39,19 @@ final class SyncQueueManager: ObservableObject {
         }
     }
 
-    /// Lists `folder` one level deep (non-recursive) and enqueues any files not yet imported.
-    func enqueueFolder(providerID: String, folder: String?) async {
+    /// Lists the whole connection recursively and enqueues every not-yet-imported audio
+    /// file — run right after adding a source, so it fills in via the queue (visible
+    /// per-file progress, retryable) instead of one opaque background sync.
+    func enqueueConnection(providerID: String) async {
         guard
             let record = try? providerStore.all().first(where: { $0.id == providerID }),
             let provider = try? ProviderManager.shared.provider(for: record),
-            let listing = try? await provider.listDirectory(atFolder: folder)
+            let files = try? await provider.listFiles(inFolder: nil)
         else { return }
 
-        for file in listing.files {
+        for file in files where audioExtensions.contains((file.path as NSString).pathExtension.lowercased()) {
             guard (try? trackStore.find(providerID: providerID, filePath: file.path)) == nil else { continue }
-            try? jobStore.enqueue(providerID: providerID, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes)
+            _ = try? jobStore.enqueue(providerID: providerID, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes)
         }
         refresh()
         startDraining()
