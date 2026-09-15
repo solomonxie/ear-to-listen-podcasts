@@ -31,6 +31,7 @@ struct SyncQueueView: View {
                     Menu {
                         Stepper("Speed: \(manager.concurrency) at a time", value: $manager.concurrency, in: 1...8)
                         Divider()
+                        Button("Clear Synced") { manager.clearSynced() }
                         Button("Clear Queue", role: .destructive) { manager.clearQueue() }
                     } label: {
                         Image(systemName: "ellipsis.circle")
