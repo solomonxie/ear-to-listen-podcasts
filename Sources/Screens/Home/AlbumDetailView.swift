@@ -4,6 +4,8 @@ struct AlbumDetailView: View {
     let album: Album
     @State private var tracks: [Track] = []
     @State private var artistName: String?
+    @State private var showingEditSpeaker = false
+    @State private var editedSpeakerName = ""
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -17,8 +19,16 @@ struct AlbumDetailView: View {
                         .frame(height: 160)
                         .overlay { Image(systemName: "square.stack.fill").font(.system(size: 48)).foregroundStyle(.white) }
                     HStack {
-                        if let artistName {
-                            Text(artistName).font(.caption.weight(.semibold))
+                        // Tappable rather than plain text — embedded/guessed speaker
+                        // metadata is sometimes wrong (a shared uploader/collection name
+                        // instead of the actual speaker), so it needs to be correctable.
+                        Button {
+                            editedSpeakerName = artistName ?? ""
+                            showingEditSpeaker = true
+                        } label: {
+                            Text(artistName ?? "Set speaker")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(artistName == nil ? .secondary : .primary)
                         }
                         Spacer()
                         Text("\(tracks.count) episode\(tracks.count == 1 ? "" : "s")")
@@ -52,9 +62,23 @@ struct AlbumDetailView: View {
         .listStyle(.plain)
         .navigationTitle(album.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            tracks = (try? trackStore.tracks(forAlbum: album.id)) ?? []
-            artistName = album.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
+        .task { await load() }
+        .alert("Speaker", isPresented: $showingEditSpeaker) {
+            TextField("Speaker name", text: $editedSpeakerName)
+            Button("Save") {
+                let name = editedSpeakerName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { return }
+                _ = try? libraryStore.reassignAlbumArtist(albumID: album.id, artistName: name)
+                artistName = name
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Fixes every episode in this album — use this if the speaker shown was guessed wrong from the file's metadata.")
         }
+    }
+
+    private func load() async {
+        tracks = (try? trackStore.tracks(forAlbum: album.id)) ?? []
+        artistName = album.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
     }
 }
