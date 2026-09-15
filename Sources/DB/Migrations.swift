@@ -169,6 +169,15 @@ enum Migrations {
             }
         }
 
+        // Detects an in-place overwrite (same path, same size) via the provider's content
+        // fingerprint instead of relying on size alone — see SyncEngine.importFileIfNeeded.
+        migrator.registerMigration("v8_content_hash") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "contentHash", .text)
+                t.add(column: "remoteModifiedAt", .datetime)
+            }
+        }
+
         return migrator
     }
 }

@@ -136,10 +136,12 @@ struct TrackStore {
 
     /// Refreshes just the sync-derived columns for an already-known track, leaving its
     /// title/artist/album metadata (and search index) untouched.
-    func refresh(id: String, sizeBytes: Int64?, isLost: Bool) throws {
+    func refresh(id: String, sizeBytes: Int64?, contentHash: String?, remoteModifiedAt: Date?, isLost: Bool) throws {
         try dbQueue.write { db in
             guard var track = try Track.fetchOne(db, key: id) else { return }
             track.sizeBytes = sizeBytes
+            track.contentHash = contentHash
+            track.remoteModifiedAt = remoteModifiedAt
             track.isLost = isLost
             track.updatedAt = Date()
             try track.save(db)
