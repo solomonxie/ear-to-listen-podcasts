@@ -67,6 +67,12 @@ final class SyncQueueManager: ObservableObject {
         refresh()
     }
 
+    /// Removes only completed jobs; pending/running ones stay in the list.
+    func clearSynced() {
+        try? jobStore.clearSynced()
+        refresh()
+    }
+
     /// Re-queues a failed job and wakes the drain loop back up.
     func retry(_ job: SyncJob) {
         try? jobStore.retry(id: job.id)

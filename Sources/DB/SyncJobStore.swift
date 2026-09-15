@@ -57,10 +57,16 @@ struct SyncJobStore {
         }
     }
 
-    /// Drops every job except ones a worker is actively processing.
+    /// Drops every job regardless of status, including ones a worker is actively processing.
     func clearQueue() throws {
+        try dbQueue.write { db in try SyncJob.deleteAll(db) }
+    }
+
+    /// Drops only completed jobs, leaving pending/running (still syncing) and failed
+    /// (needs a retry decision) ones visible.
+    func clearSynced() throws {
         try dbQueue.write { db in
-            try SyncJob.filter(Column("status") != SyncJobStatus.running.rawValue).deleteAll(db)
+            try SyncJob.filter(Column("status") == SyncJobStatus.done.rawValue).deleteAll(db)
         }
     }
 }
