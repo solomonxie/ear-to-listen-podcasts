@@ -17,6 +17,7 @@ struct RemoteBrowserView: View {
 
     @State private var folders: [String] = []
     @State private var files: [CloudFile] = []
+    @State private var isLoadingListing = true
     @State private var errorMessage: String?
     @State private var showingFileInfo: CloudFile?
     @State private var loadingFileID: String?
@@ -47,20 +48,34 @@ struct RemoteBrowserView: View {
                 Text(errorMessage).foregroundStyle(.orange)
             }
             Section {
-                ForEach(folders, id: \.self) { name in
-                    NavigationLink {
-                        RemoteBrowserView(record: record, folder: childPath(name), title: name, viewModel: viewModel)
-                    } label: {
-                        Label(name, systemImage: "folder.fill")
+                if isLoadingListing {
+                    // Neither the (still-empty) list nor the stats footer below show while
+                    // this is in flight — otherwise the stats render first (a fast local DB
+                    // read) above an empty list, looking like an empty folder.
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
                     }
-                }
-                ForEach(files) { file in
-                    fileRow(file)
+                    .listRowSeparator(.hidden)
+                } else {
+                    ForEach(folders, id: \.self) { name in
+                        NavigationLink {
+                            RemoteBrowserView(record: record, folder: childPath(name), title: name, viewModel: viewModel)
+                        } label: {
+                            Label(name, systemImage: "folder.fill")
+                        }
+                    }
+                    ForEach(files) { file in
+                        fileRow(file)
+                    }
                 }
             } footer: {
                 // A compact stats line rather than its own section — it's a status readout,
                 // not another navigable tier alongside the folders above it.
-                Text(statsSummary).font(.caption)
+                if !isLoadingListing {
+                    Text(statsSummary).font(.caption)
+                }
             }
         }
         .listStyle(.plain)
@@ -170,6 +185,7 @@ struct RemoteBrowserView: View {
     }
 
     private func load() async {
+        defer { isLoadingListing = false }
         guard let provider = try? ProviderManager.shared.provider(for: record) else {
             errorMessage = "Couldn't connect to this source."
             return
