@@ -88,13 +88,13 @@ English + Simplified Chinese from the start, via a String Catalog
 ## Screenshots
 
 **Home**
-![Home](docs/screenshots/home-page.png)
+<img src="docs/screenshots/home-page.png" alt="Home" width="200">
 
 **Browse by speaker, year & topic**
-![Browse by speaker, year & topic](docs/screenshots/sections.png)
+<img src="docs/screenshots/sections.png" alt="Browse by speaker, year & topic" width="200">
 
 **Remote & Settings**
-![Remote & Settings](docs/screenshots/settings.png)
+<img src="docs/screenshots/settings.png" alt="Remote & Settings" width="200">
 
 **Now Playing**
-![Now Playing](docs/screenshots/player.png)
+<img src="docs/screenshots/player.png" alt="Now Playing" width="200">
