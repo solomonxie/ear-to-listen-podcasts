@@ -2,18 +2,27 @@
 
 Embedded in the single-page root (`HomeView`), not a standalone tab. Backed by
 the real `ProviderStore`/`SyncEngine` — `RemoteSectionView` lists actual S3
-`ProviderRecord`s (shared `SettingsViewModel` with the Settings section) and a
-"Continue Listening" shelf from `TrackStore.recentlyPlayed()`. Tapping a
-connection goes straight into `RemoteBrowserView` (no separate detail
-screen) — its root level (no folder) also carries the connection's sync
-controls, synced-episode list, and storage stats. It recursively browses the
-real provider one directory level at a time (`CloudProvider.listDirectory`),
-with a "Sync Folder" action that enqueues that level's files into the sync
-queue.
+`ProviderRecord`s (shared `SettingsViewModel` with the Settings section).
+Tapping a connection goes into `RemoteBrowserView` (no separate detail
+screen), which recursively browses the real provider one directory level at
+a time (`CloudProvider.listDirectory`). Every level — root or subfolder —
+carries the exact same "More" menu and a one-line stats footer scoped to
+that folder; there's no per-level distinction, since sync controls/delete
+act on the connection as a whole regardless of where you're browsing.
+Tapping a file plays it directly (importing it first if it isn't already
+synced), same as any other episode.
 
 Multiple connections can point at the same bucket with different key
 prefixes — each row shows a small gray `s3://bucket/prefix` subtitle so
 they're told apart (`ProviderManager.s3DisplayPath`).
+
+## Adding a connection
+
+`AddS3ProviderView` validates the bucket/credentials, saves the
+`ProviderRecord`, then calls `SyncQueueManager.enqueueConnection(providerID:)`
+to queue the whole bucket (recursively) rather than running one opaque
+background sync — so the new source's progress (and any per-file errors)
+shows up in the sync queue right away instead of only once everything's done.
 
 ## Sync queue
 
@@ -28,18 +37,17 @@ pending job and both try to insert the same track, tripping the
 `SyncEngine.sync(providerRecord:)` uses. Failed jobs can be retried individually
 (`SyncJobStore.retry`) rather than requiring a queue clear.
 
-The queue is global across every source, not per-bucket, so it isn't reached
-from inside `RemoteBrowserView`: `RemoteSectionView` shows a one-line status
-("Sync queue: N pending · concurrency") below the connections list, tapping
-into `SyncQueueView` for the full list, pause/resume, speed, and clear
-controls (all on the "Queue (N)" row itself, not a separate on/off toggle).
+The queue is global across every source, not per-bucket. `RemoteSectionView`
+shows a one-line status ("Sync queue: N pending · concurrency") below the
+connections list; each connection's own "More" menu also links straight to
+`SyncQueueView` for the full list, pause/resume, speed, and clear controls
+(all on the "Queue (N)" row itself, not a separate on/off toggle).
 
 ## Screen Composition
 
 ```
 RemoteSectionView.swift (embedded in HomeView, not a tab)
 ┌─────────────────────────────────────────┐
-│ "Continue Listening" shelf              │──→ TrackStore.recentlyPlayed() → RealPlayerView
 │ "Remote" header + add button            │──→ inline; opens AddS3ProviderView sheet
 │ ┌─────────────────────────────────────┐ │
 │ │ RemoteSourceRow (label + s3:// path) │ │──→ tap → RemoteBrowserView.swift
@@ -49,13 +57,15 @@ RemoteSectionView.swift (embedded in HomeView, not a tab)
 └─────────────────────────────────────────┘
         │
         ▼
-RemoteBrowserView.swift (pushes itself per subfolder)
+RemoteBrowserView.swift (pushes itself per subfolder, same UI at every level)
 ┌─────────────────────────────────────────┐
 │ Subfolders + files at this level         │──→ CloudProvider.listDirectory(atFolder:)
-│ Root only: one-line stats footer         │──→ TrackStore.stats(forProvider:)
+│   tap a file → import if needed, play    │──→ SyncEngine.importFileIfNeeded /
+│                                          │     PlaybackEngine.play(track:)
+│ One-line stats footer (this folder)      │──→ TrackStore.stats(forProvider:pathPrefix:)
 │ "More" toolbar menu:                     │
-│   sync this folder, frequency,           │──→ SyncQueueManager.enqueueFolder /
-│   last synced, sync now, delete (root)   │     ProviderStore.updateSyncFrequency /
-│                                          │     SyncEngine.sync(providerRecord:)
+│   frequency, last synced, sync now,      │──→ ProviderStore.updateSyncFrequency /
+│   sync queue, delete                     │     SyncEngine.sync(providerRecord:) /
+│                                          │     SettingsViewModel.delete(_:)
 └─────────────────────────────────────────┘
 ```

@@ -2,7 +2,9 @@ import AVFoundation
 import Foundation
 import GRDB
 
-private let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "flac", "aiff", "alac"]
+/// Not private: `SyncQueueManager.enqueueConnection` filters the same way when queuing
+/// a whole connection's files.
+let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "flac", "aiff", "alac"]
 
 enum SyncFrequency: Int, CaseIterable, Identifiable {
     case manual = 0
