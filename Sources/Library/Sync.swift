@@ -98,14 +98,17 @@ struct SyncEngine {
         return SyncResult(added: added, lost: lost, totalFiles: files.count)
     }
 
-    /// Imports one already-listed file if not yet known locally (or refreshes its size/lost
-    /// state if it is); shared by the whole-bucket `sync` above and the per-file sync queue.
-    /// Returns whether a new track was added.
+    /// Imports one already-listed file if not yet known locally (or refreshes its
+    /// size/hash/lost state if it's changed since); shared by the whole-bucket `sync`
+    /// above and the per-file sync queue. Returns whether a new track was added.
     @discardableResult
     func importFileIfNeeded(_ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider) async throws -> Bool {
         if let existing = try trackStore.find(providerID: record.id, filePath: file.path) {
-            if existing.isLost || existing.sizeBytes != file.sizeBytes {
-                try trackStore.refresh(id: existing.id, sizeBytes: file.sizeBytes, isLost: false)
+            if existing.isLost || hasChanged(existing, file) {
+                try trackStore.refresh(
+                    id: existing.id, sizeBytes: file.sizeBytes,
+                    contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt, isLost: false
+                )
             }
             return false
         }
@@ -133,11 +136,27 @@ struct SyncEngine {
             durationMs: metadata.durationMs,
             year: metadata.year,
             sizeBytes: file.sizeBytes,
+            contentHash: file.contentHash,
+            remoteModifiedAt: file.modifiedAt,
             isLost: false,
             updatedAt: Date()
         )
         try trackStore.upsert(track, artistName: artistName, albumName: albumName)
         return true
+    }
+
+    /// Whether the remote file looks like it's been overwritten in place since the last
+    /// sync. Prefers the provider's content fingerprint (no download needed) since same-path,
+    /// same-size overwrites are otherwise invisible; falls back to the remote modified date,
+    /// then to size, for providers/files that don't supply a hash.
+    private func hasChanged(_ existing: Track, _ file: CloudFile) -> Bool {
+        if let newHash = file.contentHash {
+            return newHash != existing.contentHash
+        }
+        if let newModifiedAt = file.modifiedAt, let oldModifiedAt = existing.remoteModifiedAt {
+            return newModifiedAt != oldModifiedAt
+        }
+        return existing.sizeBytes != file.sizeBytes
     }
 
     private func extractMetadata(provider: CloudProvider, fileID: String) async -> (title: String?, artist: String?, album: String?, durationMs: Int?, year: Int?) {

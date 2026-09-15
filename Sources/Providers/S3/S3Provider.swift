@@ -96,7 +96,8 @@ struct S3Provider: CloudProvider {
                     path: key,
                     sizeBytes: object.size.map(Int64.init),
                     mimeType: nil,
-                    modifiedAt: object.lastModified
+                    modifiedAt: object.lastModified,
+                    contentHash: unquoted(object.eTag)
                 ))
             }
             continuationToken = (output.isTruncated ?? false) ? output.nextContinuationToken : nil
@@ -112,8 +113,15 @@ struct S3Provider: CloudProvider {
             path: fileID,
             sizeBytes: output.contentLength.map(Int64.init),
             mimeType: output.contentType,
-            modifiedAt: output.lastModified
+            modifiedAt: output.lastModified,
+            contentHash: unquoted(output.eTag)
         )
+    }
+
+    /// S3 wraps ETags in literal double quotes (`"\"abc123\""`); strip them so the stored
+    /// value is a plain comparable hash.
+    private func unquoted(_ etag: String?) -> String? {
+        etag?.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
     }
 
     func streamURL(forFileID fileID: String) async throws -> URL {

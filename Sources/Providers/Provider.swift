@@ -7,6 +7,10 @@ struct CloudFile: Identifiable, Hashable {
     var sizeBytes: Int64?
     var mimeType: String?
     var modifiedAt: Date?
+    /// Provider-supplied content fingerprint (e.g. S3's ETag) — cheap to read from a
+    /// listing/head request, so it can flag an overwritten-in-place file without a
+    /// download. Providers that don't offer one leave this nil.
+    var contentHash: String? = nil
 }
 
 struct ConnectionTestResult {

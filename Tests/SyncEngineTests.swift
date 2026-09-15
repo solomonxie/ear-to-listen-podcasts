@@ -115,4 +115,26 @@ final class SyncEngineTests: XCTestCase {
         let track = try TrackStore(dbQueue: dbQueue).all().first
         XCTAssertEqual(track?.isLost, true)
     }
+
+    /// Same path, same size, different content — the case size-only comparison can't catch.
+    func testSyncDetectsInPlaceOverwriteViaContentHash() async throws {
+        let dbQueue = try makeDatabase()
+        let providerID = UUID().uuidString
+        Self.fakeFileLists[providerID] = [
+            CloudFile(id: "episode1.mp3", name: "episode1.mp3", path: "episode1.mp3", sizeBytes: 100, mimeType: nil, modifiedAt: nil, contentHash: "hash-a"),
+        ]
+        let record = makeRecord(providerID: providerID)
+        try ProviderStore(dbQueue: dbQueue).upsert(record)
+        let engine = try makeEngine(providerID: providerID, dbQueue: dbQueue)
+        _ = try await engine.sync(providerRecord: record)
+
+        Self.fakeFileLists[providerID] = [
+            CloudFile(id: "episode1.mp3", name: "episode1.mp3", path: "episode1.mp3", sizeBytes: 100, mimeType: nil, modifiedAt: nil, contentHash: "hash-b"),
+        ]
+        let result = try await engine.sync(providerRecord: record)
+
+        XCTAssertEqual(result.added, 0)
+        let track = try TrackStore(dbQueue: dbQueue).all().first
+        XCTAssertEqual(track?.contentHash, "hash-b")
+    }
 }
