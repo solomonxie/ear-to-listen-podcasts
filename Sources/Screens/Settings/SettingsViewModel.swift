@@ -5,17 +5,20 @@ final class SettingsViewModel: ObservableObject {
     @Published var providers: [ProviderRecord] = []
     @Published var testResults: [String: ConnectionTestResult] = [:]
     @Published var spotifyClientID: String = ""
-    @Published var openAIAPIKey: String = ""
+    @Published var aiKeys: [AiKey] = []
+    @Published var aiKeyStrategy: AiKeyStrategy = .sequential
     @Published var errorMessage: String?
     @Published var backupStatusMessage: String?
     @Published var isBackupBusy = false
 
-    /// Not private: `Sources/Library/ContentAnalyzer.swift` reads the same Keychain entry.
-    /// `nonisolated` so that off-main-actor code (sync runs in the background) can read this
-    /// constant without hopping to the main actor for a value that never changes.
+    /// Not private: `AiKeyStore` reads the same Keychain entry to migrate it into the
+    /// new multi-key list the first time that's read after this feature shipped.
+    /// `nonisolated` so that off-main-actor code (sync runs in the background) can read
+    /// this constant without hopping to the main actor for a value that never changes.
     nonisolated static let openAIAPIKeyKey = "openai.apiKey"
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let aiKeyStore = AiKeyStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let credentials = CredentialStore()
     private let backupService = BackupService()
 
@@ -27,10 +30,45 @@ final class SettingsViewModel: ObservableObject {
         do {
             providers = try providerStore.all()
             spotifyClientID = try credentials.get(SpotifyImportSource.clientIDKey) ?? ""
-            openAIAPIKey = try credentials.get(Self.openAIAPIKeyKey) ?? ""
+            aiKeys = try aiKeyStore.all()
+            aiKeyStrategy = AiRouter.strategy
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Tests the key with one real, cheap request before persisting it, same flow as
+    /// adding an S3 connection tests the bucket first. Throws (rather than going
+    /// through `errorMessage`) so the add-key sheet can show the failure inline.
+    func addAiKey(vendor: AiVendor, secret: String) async throws {
+        _ = try await AiRouter.runChatCompletion(vendor: vendor, apiKey: secret, messages: [
+            ChatMessage(role: .user, content: "Reply with \"ok\"."),
+        ])
+        try aiKeyStore.add(vendor: vendor, secret: secret)
+        aiKeys = try aiKeyStore.all()
+    }
+
+    func removeAiKey(_ key: AiKey) {
+        do {
+            try aiKeyStore.remove(id: key.id)
+            aiKeys = try aiKeyStore.all()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func moveAiKey(_ key: AiKey, direction: Int) {
+        do {
+            try aiKeyStore.move(id: key.id, direction: direction)
+            aiKeys = try aiKeyStore.all()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func setAiKeyStrategy(_ strategy: AiKeyStrategy) {
+        aiKeyStrategy = strategy
+        AiRouter.strategy = strategy
     }
 
     @discardableResult
@@ -129,18 +167,6 @@ final class SettingsViewModel: ObservableObject {
     func saveSpotifyClientID() {
         do {
             try credentials.set(spotifyClientID, forKey: SpotifyImportSource.clientIDKey)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    func saveOpenAIAPIKey() {
-        do {
-            if openAIAPIKey.isEmpty {
-                try credentials.delete(Self.openAIAPIKeyKey)
-            } else {
-                try credentials.set(openAIAPIKey, forKey: Self.openAIAPIKeyKey)
-            }
         } catch {
             errorMessage = error.localizedDescription
         }

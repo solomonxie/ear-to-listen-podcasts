@@ -8,7 +8,7 @@ enum TranscriberError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingAPIKey: "Set an OpenAI API key in Settings ▸ AI Features to transcribe episodes."
+        case .missingAPIKey: "Add an OpenAI key in Settings ▸ AI Features to transcribe episodes — transcription only works via OpenAI's Whisper."
         case .fileTooLarge: "This episode is over OpenAI's 25MB transcription limit."
         case .requestFailed: "Transcription request failed."
         case .invalidResponse: "Transcription returned an unexpected response."
@@ -19,9 +19,11 @@ enum TranscriberError: LocalizedError {
 /// Live, on-demand transcription via OpenAI's Whisper endpoint. Only plain timestamped
 /// segments come back — no speaker diarization. Runs against the actual audio (unlike
 /// `ContentAnalyzer`, which only ever sees a file's path), so it's triggered per-track on
-/// playback rather than during sync.
+/// playback rather than during sync. Whisper is OpenAI-specific — unlike chat completion
+/// (`AiRouter`), there's no other configured vendor this can fall back to, so it just
+/// takes the first OpenAI key configured in Settings ▸ AI Features.
 struct Transcriber {
-    private let credentials = CredentialStore()
+    private let aiKeyStore = AiKeyStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     private static let endpoint = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
     private static let model = "whisper-1"
@@ -29,7 +31,8 @@ struct Transcriber {
 
     func transcribe(track: Track, provider: CloudProvider) async throws -> [TranscriptSegment] {
         guard
-            let apiKey = try? credentials.get(SettingsViewModel.openAIAPIKeyKey),
+            let openAIKey = try? aiKeyStore.all().first(where: { $0.vendor == .openAI }),
+            let apiKey = try? aiKeyStore.secret(forKeyID: openAIKey.id),
             !apiKey.isEmpty
         else {
             throw TranscriberError.missingAPIKey
