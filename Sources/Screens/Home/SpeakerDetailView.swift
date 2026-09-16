@@ -20,10 +20,7 @@ struct SpeakerDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Circle()
-                        .fill(Color.secondary.opacity(0.3))
-                        .frame(width: 96, height: 96)
-                        .overlay { Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(.secondary) }
+                    SpeakerAvatar(photoFileName: currentSpeaker.photoFileName, size: 96)
                     if let bio = currentSpeaker.bio {
                         Text(bio).font(.callout).foregroundStyle(.secondary)
                     }

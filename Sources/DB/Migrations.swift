@@ -178,6 +178,14 @@ enum Migrations {
             }
         }
 
+        // Just a filename under `SpeakerPhotoStore`'s directory, not a full path — portable
+        // across devices/reinstalls, and how it travels in a `LibrarySnapshot` backup.
+        migrator.registerMigration("v10_speaker_photo") { db in
+            try db.alter(table: "artists") { t in
+                t.add(column: "photoFileName", .text)
+            }
+        }
+
         return migrator
     }
 }

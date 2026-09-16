@@ -296,10 +296,7 @@ private struct SpeakerCard: View {
     let artist: Artist
     var body: some View {
         VStack(spacing: 6) {
-            Circle()
-                .fill(Color.secondary.opacity(0.3))
-                .frame(width: 90, height: 90)
-                .overlay { Image(systemName: "person.fill").font(.largeTitle).foregroundStyle(.secondary) }
+            SpeakerAvatar(photoFileName: artist.photoFileName)
             Text(artist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 90)

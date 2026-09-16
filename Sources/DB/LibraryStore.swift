@@ -43,6 +43,14 @@ struct LibraryStore {
         }
     }
 
+    func updateArtistPhoto(id: String, photoFileName: String?) throws {
+        try dbQueue.write { db in
+            guard var artist = try Artist.fetchOne(db, key: id) else { return }
+            artist.photoFileName = photoFileName
+            try artist.update(db)
+        }
+    }
+
     func albums(forArtist artistID: String?) throws -> [Album] {
         try dbQueue.read { db in
             try Album.filter(Column("artistID") == artistID).order(Column("name")).fetchAll(db)
