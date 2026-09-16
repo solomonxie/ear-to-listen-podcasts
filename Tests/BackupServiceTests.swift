@@ -98,6 +98,31 @@ final class BackupServiceTests: XCTestCase {
         XCTAssertEqual(try PlaylistStore(dbQueue: dbQueue).tracks(inPlaylist: "pl1").count, 1)
     }
 
+    /// Exercises `ZipArchive` end to end: a speaker's bio/photo edit should survive
+    /// round-tripping through `archive`/`unarchive` and land back on the (re-upserted)
+    /// artist row via `apply`.
+    func testArchiveRoundTripsSnapshotAndSpeakerPhoto() throws {
+        let dbQueue = try makeDatabase()
+        let libraryStore = LibraryStore(dbQueue: dbQueue)
+        let artist = try libraryStore.upsertArtist(name: "Jane Doe")
+        let photoFileName = try SpeakerPhotoStore.save(Data("fake-jpeg-bytes".utf8))
+        addTeardownBlock { SpeakerPhotoStore.remove(photoFileName) }
+        try libraryStore.updateArtist(id: artist.id, name: artist.name, bio: "A great host")
+        try libraryStore.updateArtistPhoto(id: artist.id, photoFileName: photoFileName)
+
+        let service = BackupService(dbQueue: dbQueue)
+        let archived = try service.archive(try service.makeSnapshot())
+        let restoredSnapshot = try service.unarchive(archived)
+
+        XCTAssertEqual(restoredSnapshot.artists.map(\.name), ["Jane Doe"])
+        XCTAssertEqual(restoredSnapshot.artists.first?.bio, "A great host")
+
+        try service.apply(restoredSnapshot)
+        let restoredArtist = try libraryStore.artists().first { $0.name == "Jane Doe" }
+        XCTAssertEqual(restoredArtist?.photoFileName, photoFileName)
+        XCTAssertEqual(try Data(contentsOf: SpeakerPhotoStore.url(for: photoFileName)!), Data("fake-jpeg-bytes".utf8))
+    }
+
     func testApplySkipsProvidersAlreadyPresentLocally() throws {
         let dbQueue = try makeDatabase()
         try ProviderStore(dbQueue: dbQueue).upsert(
