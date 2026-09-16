@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// No separate "Test Connection" button — Save itself sends one real, cheap request
-/// through the chosen vendor's client and only persists the key once that succeeds,
-/// same flow as adding an S3 connection tests the bucket first.
+/// Half-height sheet, not a full page — a vendor picker and one text field don't need
+/// more room. No separate "Test Connection" button: Save itself sends one real, cheap
+/// request through the chosen vendor's client and only persists the key once that
+/// succeeds, same flow as adding an S3 connection tests the bucket first.
 struct AddAiKeyView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
@@ -15,27 +16,35 @@ struct AddAiKeyView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Vendor") {
+                Section {
                     Picker("Vendor", selection: $vendor) {
                         ForEach(AiVendor.allCases, id: \.self) { vendor in
                             Text(vendor.displayName).tag(vendor)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
-                Section("API Key") {
-                    SecureField(vendor == .openAI ? "sk-…" : "sk-ant-…", text: $secret)
+                    SecureField(vendor.keyHint, text: $secret)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                }
-                if let validationError {
-                    Section {
-                        Label(validationError, systemImage: "xmark.circle.fill")
-                            .foregroundStyle(.red)
-                            .font(.footnote)
+                } footer: {
+                    // Linked rather than just named, so adding a key doesn't require
+                    // already knowing where that vendor's console lives.
+                    HStack(spacing: 4) {
+                        Text("Don't have a \(vendor.displayName) key yet?")
+                        Link("Get one →", destination: vendor.docsURL)
                     }
+                    .font(.footnote)
                 }
+
+                if isTesting {
+                    Label("Testing the key…", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else if let validationError {
+                    Label(validationError, systemImage: "xmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
                 Section {
                     Text("Stored only in this device's Keychain — we never see it or send it anywhere ourselves, it's used solely for direct requests from your device to \(vendor.displayName).")
                         .font(.footnote)
@@ -49,15 +58,12 @@ struct AddAiKeyView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isTesting {
-                        ProgressView()
-                    } else {
-                        Button("Save") { Task { await save() } }
-                            .disabled(secret.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
+                    Button("Save") { Task { await save() } }
+                        .disabled(isTesting || secret.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
+        .presentationDetents([.medium, .large])
     }
 
     private func save() async {
@@ -68,7 +74,7 @@ struct AddAiKeyView: View {
             try await viewModel.addAiKey(vendor: vendor, secret: secret.trimmingCharacters(in: .whitespaces))
             dismiss()
         } catch {
-            validationError = error.localizedDescription
+            validationError = "Could not connect: \(error.localizedDescription)"
         }
     }
 }
