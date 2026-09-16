@@ -109,9 +109,15 @@ visible page.
 │  ├──────────●───────────────────────┤    │ ← custom scrubber, tap anywhere to seek
 │      ⏮       ⏸       ⏭                   │
 │  [ Details | Transcript ]                │
-│  Up Next (12)                       ＋   │ ← ＋ adds current track to a playlist
+│  ▼ Details/Transcript continue here…     │ ← the WHOLE page scrolls as one; the
+├──────────────────────────────────────────┤   artwork and transport scroll away
+│  Up Next (12)                       ＋   │ ← pinned; ＋ adds to a playlist
 └──────────────────────────────────────────┘
 ```
+
+Details and Transcript both run far longer than a phone screen, so neither gets its
+own scroller inside a fixed frame — a nested box would only ever show a sliver. Up Next
+is pinned instead, since it shouldn't be a scroll away past a 40-minute transcript.
 
 **Details** — grouped cards, not one flat list, so "who/what" doesn't blur into "which
 file". A row with no value hides itself rather than printing a dash, so a thin-metadata
@@ -181,7 +187,10 @@ bottom.
 
 ## Flows
 
-**1 · Add a connection → first import.** Add S3 → Save tests the bucket (scoped to the
+**1 · Add a connection → first import.** Credentials usually arrive as a lump of text, so
+the top of Add S3 is a paste box that fills the fields as you type (`:` or `=`, any
+spelling of the key names) — retyping a 40-character secret on a phone keyboard is where
+this goes wrong. Then: Save → Save tests the bucket (scoped to the
 prefix) and only persists on success → the whole bucket is listed recursively and every
 audio file is queued → progress is visible in the sync queue immediately. This is the
 one time the app scans without being asked.

@@ -19,98 +19,51 @@ struct RealPlayerView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
+            Group {
                 if let track = engine.currentTrack {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(LibraryArt.color(for: track.id).gradient)
-                        .frame(height: 220)
-                        .overlay { Image(systemName: LibraryArt.symbol(for: track.id)).font(.system(size: 64)).foregroundStyle(.white) }
-                        .padding(.horizontal)
+                    // One scroll for the whole screen, not a scrolling box under fixed
+                    // controls: Details and Transcript both run far longer than a phone,
+                    // and a nested scroller only ever shows a sliver of them. The artwork
+                    // and transport simply scroll away, which is also what makes the
+                    // transcript's self-scrolling read like lyrics.
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 20) {
+                                artwork(for: track)
+                                titles(for: track)
+                                Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
+                                    .padding(.horizontal)
+                                transport
+                                if let lastError = engine.lastError {
+                                    Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
+                                }
+                                Picker("View", selection: $tab) {
+                                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                }
+                                .pickerStyle(.segmented)
+                                .padding(.horizontal)
 
-                    VStack(spacing: 4) {
-                        Text(track.title).font(.title3.bold()).multilineTextAlignment(.center)
-                        // Tapping either jumps to that speaker's/album's own page — same
-                        // destinations as tapping through from Home, just reachable from
-                        // whatever's currently playing too. One line rather than stacked,
-                        // since together they're still just a single subtitle.
-                        HStack(spacing: 12) {
-                            if let artist {
-                                NavigationLink {
-                                    SpeakerDetailView(speaker: artist)
-                                } label: {
-                                    Text("Speaker: \(artist.name)")
+                                switch tab {
+                                case .details:
+                                    EpisodeDetailsPane(playingTrack: track)
+                                case .transcript:
+                                    TranscriptPane(currentTime: engine.currentTime, scrollProxy: proxy) { engine.seek(to: $0) }
                                 }
                             }
-                            if let album {
-                                NavigationLink {
-                                    AlbumDetailView(album: album)
-                                } label: {
-                                    Text("Album: \(album.name)")
-                                }
-                            }
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    }
-                    .padding(.horizontal)
-
-                    Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
-                        .padding(.horizontal)
-
-                    HStack(spacing: 48) {
-                        Button { engine.skipToPrevious() } label: { Image(systemName: "backward.fill").font(.title) }
-                        Button { engine.togglePlayPause() } label: {
-                            Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                                .font(.system(size: 56))
-                        }
-                        Button { engine.skipToNext() } label: { Image(systemName: "forward.fill").font(.title) }
-                    }
-
-                    if let lastError = engine.lastError {
-                        Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
-                    }
-
-                    Picker("View", selection: $tab) {
-                        ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-
-                    switch tab {
-                    case .details:
-                        EpisodeDetailsPane(playingTrack: track)
-                    case .transcript:
-                        TranscriptPane(currentTime: engine.currentTime) { engine.seek(to: $0) }
-                    }
-
-                    HStack {
-                        Button {
-                            showingUpNext = true
-                        } label: {
-                            Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
-                        }
-                        Spacer()
-                        Button {
-                            showingAddToPlaylist = true
-                        } label: {
-                            Label("Add to Playlist", systemImage: "text.badge.plus")
-                                .labelStyle(.iconOnly)
+                            .padding(.vertical)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom)
+                    // Pinned: the page is now arbitrarily long, and Up Next shouldn't be
+                    // a scroll away at the bottom of a 40-minute transcript.
+                    .safeAreaInset(edge: .bottom) { bottomBar }
                     .task(id: track.id) {
                         artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
                         album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
                     }
                 } else {
-                    Spacer()
                     ContentUnavailableView("Nothing playing", systemImage: "mic.slash")
-                    Spacer()
                 }
             }
-            .padding(.top)
             .background(Color.appBackground.ignoresSafeArea())
             .navigationTitle("Now Playing")
             .navigationBarTitleDisplayMode(.inline)
@@ -128,6 +81,75 @@ struct RealPlayerView: View {
                 }
             }
         }
+    }
+
+    private func artwork(for track: Track) -> some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(LibraryArt.color(for: track.id).gradient)
+            .frame(height: 220)
+            .overlay { Image(systemName: LibraryArt.symbol(for: track.id)).font(.system(size: 64)).foregroundStyle(.white) }
+            .padding(.horizontal)
+    }
+
+    private func titles(for track: Track) -> some View {
+        VStack(spacing: 4) {
+            Text(track.title).font(.title3.bold()).multilineTextAlignment(.center)
+            // Tapping either jumps to that speaker's/album's own page — same
+            // destinations as tapping through from Home, just reachable from
+            // whatever's currently playing too. One line rather than stacked,
+            // since together they're still just a single subtitle.
+            HStack(spacing: 12) {
+                if let artist {
+                    NavigationLink {
+                        SpeakerDetailView(speaker: artist)
+                    } label: {
+                        Text("Speaker: \(artist.name)")
+                    }
+                }
+                if let album {
+                    NavigationLink {
+                        AlbumDetailView(album: album)
+                    } label: {
+                        Text("Album: \(album.name)")
+                    }
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+        .padding(.horizontal)
+    }
+
+    private var transport: some View {
+        HStack(spacing: 48) {
+            Button { engine.skipToPrevious() } label: { Image(systemName: "backward.fill").font(.title) }
+            Button { engine.togglePlayPause() } label: {
+                Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 56))
+            }
+            Button { engine.skipToNext() } label: { Image(systemName: "forward.fill").font(.title) }
+        }
+    }
+
+    private var bottomBar: some View {
+        HStack {
+            Button {
+                showingUpNext = true
+            } label: {
+                Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
+            }
+            Spacer()
+            Button {
+                showingAddToPlaylist = true
+            } label: {
+                Label("Add to Playlist", systemImage: "text.badge.plus")
+                    .labelStyle(.iconOnly)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
     }
 }
 

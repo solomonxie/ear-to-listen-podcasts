@@ -7,6 +7,9 @@ import SwiftUI
 struct TranscriptPane: View {
     @ObservedObject var transcript = LiveTranscript.shared
     let currentTime: TimeInterval
+    /// The whole player page scrolls as one, so the lyric list doesn't own a scroller —
+    /// it drives the page's, which is what lets the artwork scroll away as lines advance.
+    let scrollProxy: ScrollViewProxy
     let onSeek: (TimeInterval) -> Void
 
     @State private var editing: TranscriptSegment?
@@ -104,27 +107,24 @@ struct TranscriptPane: View {
                      ? "Listening ahead — lines appear as they're recognised."
                      : "Pick a recogniser above to transcribe as you listen. Whatever gets done is saved, so you can stop and come back.")
             }
+            // Inside the page's scroller it would otherwise collapse to nothing.
+            .frame(minHeight: 220)
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(transcript.lines) { segment in
-                            TranscriptLine(
-                                segment: segment,
-                                isCurrent: segment.start == transcript.currentLine(at: currentTime)?.start,
-                                onTap: { editing = segment },
-                                onPlay: { onSeek(segment.start) }
-                            )
-                            .id(segment.start)
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
+            LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(transcript.lines) { segment in
+                    TranscriptLine(
+                        segment: segment,
+                        isCurrent: segment.start == transcript.currentLine(at: currentTime)?.start,
+                        onTap: { editing = segment },
+                        onPlay: { onSeek(segment.start) }
+                    )
+                    .id(segment.start)
                 }
-                .onChange(of: transcript.currentLine(at: currentTime)?.start) { _, start in
-                    guard let start else { return }
-                    withAnimation { proxy.scrollTo(start, anchor: .center) }
-                }
+            }
+            .padding(.horizontal)
+            .onChange(of: transcript.currentLine(at: currentTime)?.start) { _, start in
+                guard let start else { return }
+                withAnimation { scrollProxy.scrollTo(start, anchor: .center) }
             }
         }
     }

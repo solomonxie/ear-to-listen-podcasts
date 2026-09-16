@@ -8,6 +8,7 @@ struct AddS3ProviderView: View {
     @State private var secretAccessKey = ""
     @State private var bucket = ""
     @State private var keyPrefix = ""
+    @State private var pastedBlock = ""
     @State private var isValidating = false
     @State private var validationError: String?
 
@@ -20,6 +21,25 @@ struct AddS3ProviderView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Paste connection details") {
+                    TextEditor(text: $pastedBlock)
+                        .font(.footnote.monospaced())
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .frame(minHeight: 96)
+                        .overlay(alignment: .topLeading) {
+                            if pastedBlock.isEmpty {
+                                Text("bucket: my-bucket\nprefix: podcasts/\naccess_key_id: AKIA…\nsecret_access_key: …")
+                                    .font(.footnote.monospaced())
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.top, 8)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    Text("Fills the fields below as you paste. `:` or `=`, any spelling of the key names. Region is still detected automatically.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if !existingS3Providers.isEmpty {
                     Section("Fill from an existing connection") {
                         ForEach(existingS3Providers) { record in
@@ -71,6 +91,7 @@ struct AddS3ProviderView: View {
                         .font(.footnote)
                 }
             }
+            .onChange(of: pastedBlock) { _, text in apply(S3ConnectionDraft.parse(text)) }
             .navigationTitle("Add S3 Bucket")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -86,6 +107,17 @@ struct AddS3ProviderView: View {
                 }
             }
         }
+    }
+
+    /// Only overwrites what the block actually named, so a half-filled paste doesn't wipe
+    /// a field that was typed in by hand.
+    private func apply(_ draft: S3ConnectionDraft) {
+        guard !draft.isEmpty else { return }
+        validationError = nil
+        if let value = draft.bucket { bucket = value }
+        if let value = draft.keyPrefix { keyPrefix = value }
+        if let value = draft.accessKeyId { accessKeyId = value }
+        if let value = draft.secretAccessKey { secretAccessKey = value }
     }
 
     /// Copies another connection's fields in as a starting point — e.g. the same bucket
