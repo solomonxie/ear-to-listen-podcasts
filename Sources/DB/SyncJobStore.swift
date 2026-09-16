@@ -4,18 +4,41 @@ import GRDB
 struct SyncJobStore {
     let dbQueue: DatabaseQueue
 
+    /// One unfinished job per file. Adding a connection queues its whole listing, and a
+    /// "Sync Now" over the same listing would otherwise queue every path a second time —
+    /// two workers then import the same file at once. Returns the job already in flight
+    /// instead. Finished/failed rows don't block a fresh one, so a re-sync still works.
     @discardableResult
     func enqueue(
         providerID: String, filePath: String, displayName: String, sizeBytes: Int64?,
         contentHash: String? = nil, remoteModifiedAt: Date? = nil
     ) throws -> SyncJob {
-        let job = SyncJob(
-            id: UUID().uuidString, providerID: providerID, filePath: filePath, displayName: displayName,
-            sizeBytes: sizeBytes, contentHash: contentHash, remoteModifiedAt: remoteModifiedAt,
-            status: .pending, errorMessage: nil, createdAt: Date(), updatedAt: Date()
-        )
-        try dbQueue.write { db in try job.save(db) }
-        return job
+        try dbQueue.write { db in
+            if let existing = try Self.unfinished(providerID: providerID, filePath: filePath).fetchOne(db) {
+                return existing
+            }
+            let job = SyncJob(
+                id: UUID().uuidString, providerID: providerID, filePath: filePath, displayName: displayName,
+                sizeBytes: sizeBytes, contentHash: contentHash, remoteModifiedAt: remoteModifiedAt,
+                status: .pending, errorMessage: nil, createdAt: Date(), updatedAt: Date()
+            )
+            try job.save(db)
+            return job
+        }
+    }
+
+    /// Whether this file is already queued or being worked — lets `SyncEngine.sync` leave
+    /// it to the drain loop rather than importing it inline at the same time.
+    func hasUnfinished(providerID: String, filePath: String) throws -> Bool {
+        try dbQueue.read { db in
+            try Self.unfinished(providerID: providerID, filePath: filePath).fetchCount(db) > 0
+        }
+    }
+
+    private static func unfinished(providerID: String, filePath: String) -> QueryInterfaceRequest<SyncJob> {
+        SyncJob
+            .filter(Column("providerID") == providerID && Column("filePath") == filePath)
+            .filter([SyncJobStatus.pending.rawValue, SyncJobStatus.running.rawValue].contains(Column("status")))
     }
 
     /// Done jobs sink to the bottom so pending/running/failed ones — the ones still worth

@@ -7,6 +7,7 @@ struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @EnvironmentObject private var language: AppLanguageStore
     @State private var showingResetConfirmation = false
+    @State private var showingRemoveDemoConfirmation = false
     @State private var showingFolderPicker = false
     @State private var isScanning = false
     @State private var importMessage: String?
@@ -217,12 +218,20 @@ struct SettingsSectionView: View {
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    showingResetConfirmation = true
-                } label: {
-                    Label("Reset Demo Data", systemImage: "arrow.counterclockwise")
+                HStack(spacing: 12) {
+                    Button {
+                        showingResetConfirmation = true
+                    } label: {
+                        Label("Reset Demo Data", systemImage: "arrow.counterclockwise")
+                    }
+                    // Sits beside Reset rather than in its own group: same sample data,
+                    // opposite intent — put it back, or be rid of it.
+                    Button("(Remove demo data)", role: .destructive) {
+                        showingRemoveDemoConfirmation = true
+                    }
+                    .sectionRowSecondary()
                 }
-                Text("Restores the sample shows, speakers, and playlists in case you deleted something while exploring. Doesn't touch your real remote/local sources.")
+                Text("Reset restores the sample shows, speakers, and playlists in case you deleted something while exploring. Remove clears them for good, leaving only what you've synced. Neither touches your real remote/local sources.")
                     .sectionHint()
             }
             .padding(.horizontal)
@@ -233,6 +242,12 @@ struct SettingsSectionView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This puts back the sample shows, speakers, and playlists.")
+        }
+        .alert("Remove Demo Data?", isPresented: $showingRemoveDemoConfirmation) {
+            Button("Remove", role: .destructive) { try? DemoDataSeeder.removeAll() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can put the samples back with Reset Demo Data.")
         }
         .alert("Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },

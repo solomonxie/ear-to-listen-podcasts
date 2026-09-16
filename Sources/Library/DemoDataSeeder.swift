@@ -42,6 +42,13 @@ enum DemoDataSeeder {
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
+    /// Wipes the sample library without putting it back — once real sources are connected
+    /// the demo rows are just clutter in every shelf.
+    static func removeAll() throws {
+        try clear()
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
     static func clear() throws {
         try DatabaseManager.shared.dbQueue.write { db in
             // Cascades to the demo tracks, their transcripts, and any queued sync jobs.

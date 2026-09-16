@@ -138,3 +138,46 @@ final class SyncEngineTests: XCTestCase {
         XCTAssertEqual(track?.contentHash, "hash-b")
     }
 }
+
+/// The unique index on (providerID, filePath) is the real identity of a track — two
+/// importers racing on the same file each mint their own UUID, and before this the second
+/// insert failed with "UNIQUE constraint failed: tracks.providerID, tracks.filePath".
+final class TrackUpsertRaceTests: XCTestCase {
+    private func makeDatabase() throws -> DatabaseQueue {
+        let dbQueue = try DatabaseQueue()
+        try Migrations.migrator().migrate(dbQueue)
+        try ProviderStore(dbQueue: dbQueue).upsert(
+            ProviderRecord(id: "p1", type: "s3", label: "Bucket", configJSON: "", isActive: true, createdAt: Date())
+        )
+        return dbQueue
+    }
+
+    private func track(id: String, title: String) -> Track {
+        Track(
+            id: id, providerID: "p1", artistID: nil, albumID: nil, filePath: "a/ep.mp3",
+            title: title, trackNumber: nil, durationMs: nil, updatedAt: Date()
+        )
+    }
+
+    func testASecondImportOfTheSameFileUpdatesInPlaceInsteadOfColliding() throws {
+        let store = TrackStore(dbQueue: try makeDatabase())
+        try store.upsert(track(id: "first-uuid", title: "Episode"), artistName: nil, albumName: nil)
+
+        try store.upsert(track(id: "second-uuid", title: "Episode (better title)"), artistName: nil, albumName: nil)
+
+        let all = try store.all()
+        XCTAssertEqual(all.count, 1)
+        XCTAssertEqual(all.first?.id, "first-uuid")
+        XCTAssertEqual(all.first?.title, "Episode (better title)")
+    }
+
+    func testAReimportKeepsWhereTheListenerGotTo() throws {
+        let store = TrackStore(dbQueue: try makeDatabase())
+        try store.upsert(track(id: "first-uuid", title: "Episode"), artistName: nil, albumName: nil)
+        try store.recordProgress(id: "first-uuid", positionMs: 42_000)
+
+        try store.upsert(track(id: "second-uuid", title: "Episode"), artistName: nil, albumName: nil)
+
+        XCTAssertEqual(try store.find(id: "first-uuid")?.positionMs, 42_000)
+    }
+}

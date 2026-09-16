@@ -4,13 +4,27 @@ import GRDB
 struct TrackStore {
     let dbQueue: DatabaseQueue
 
+    /// A track's real identity is (providerID, filePath) — `id` is a UUID minted by
+    /// whoever imported it first. Two importers racing on the same file each mint their
+    /// own, so this resolves against the natural key inside the write transaction: the
+    /// second one updates the existing row instead of tripping
+    /// `idx_tracks_provider_path`.
     func upsert(_ track: Track, artistName: String?, albumName: String?) throws {
         try dbQueue.write { db in
-            try track.save(db)
-            try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [track.id])
+            var row = track
+            if let existing = try Track
+                .filter(Column("providerID") == track.providerID && Column("filePath") == track.filePath)
+                .fetchOne(db), existing.id != track.id {
+                row.id = existing.id
+                // Playback progress belongs to the listener, not to the import.
+                row.positionMs = existing.positionMs
+                row.lastPlayedAt = existing.lastPlayedAt
+            }
+            try row.save(db)
+            try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [row.id])
             try db.execute(
                 sql: "INSERT INTO trackSearchIndex(trackID, title, artist, album) VALUES (?, ?, ?, ?)",
-                arguments: [track.id, track.title, artistName ?? "", albumName ?? ""]
+                arguments: [row.id, row.title, artistName ?? "", albumName ?? ""]
             )
         }
     }
