@@ -15,9 +15,10 @@ struct RemoteSectionView: View {
     }
 
     var body: some View {
+        // Rows inherit `.sectionRow()`; headings and hints opt out explicitly.
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Remote").font(.title3.bold())
+                Text("Remote").sectionTitle()
                 Spacer()
                 Button { showingAddS3 = true } label: { Image(systemName: "plus.circle.fill") }
             }
@@ -25,8 +26,7 @@ struct RemoteSectionView: View {
 
             if s3Providers.isEmpty {
                 Text("No remote sources yet. Add an S3 bucket to browse and sync episodes from.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .sectionHint()
                     .padding(.horizontal)
             } else {
                 VStack(spacing: 0) {
@@ -61,10 +61,9 @@ struct RemoteSectionView: View {
                 Button { showingSyncQueue = true } label: {
                     HStack {
                         Text(syncQueueSummary)
-                        Image(systemName: "chevron.right").font(.caption2)
+                        Image(systemName: "chevron.right")
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .sectionHint()
                 }
                 .padding(.horizontal)
             }
@@ -75,6 +74,7 @@ struct RemoteSectionView: View {
         .sheet(isPresented: $showingSyncQueue) {
             NavigationStack { SyncQueueView() }
         }
+        .sectionRow()
         .onAppear {
             syncQueue.refresh()
         }
@@ -102,11 +102,10 @@ private struct RemoteSourceRow: View {
                 Text(record.label).font(.subheadline.weight(.semibold))
                 // Lets two connections to the same bucket (different prefixes) be told apart.
                 if let path {
-                    Text(path).font(.caption2).foregroundStyle(.secondary)
+                    Text(path).sectionRowSecondary()
                 }
                 Text(record.isActive ? "Active" : "Inactive")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .sectionRowSecondary()
             }
             Spacer()
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
