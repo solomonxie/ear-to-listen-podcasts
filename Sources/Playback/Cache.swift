@@ -39,9 +39,19 @@ actor AudioCache {
     }
 
     /// Drops a cached copy so the next play re-fetches it — used when a stream URL turns out
-    /// to be stale (e.g. an expired presigned URL) so the retry doesn't reuse the same file.
+    /// to be stale (e.g. an expired presigned URL), or when the user removes it from
+    /// `DownloadsView` — the track itself stays synced, just its local copy goes.
     func invalidate(providerID: String, filePath: String) {
         try? FileManager.default.removeItem(at: fileURL(providerID: providerID, filePath: filePath))
+    }
+
+    /// Size of the cached copy if one exists — `nil` means not downloaded. Doesn't bump the
+    /// LRU access date the way `cachedURL` does, since just listing what's downloaded
+    /// shouldn't protect an entry from eviction the way actually playing it does.
+    func cachedSize(providerID: String, filePath: String) -> Int64? {
+        let url = fileURL(providerID: providerID, filePath: filePath)
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]) else { return nil }
+        return values.fileSize.map(Int64.init)
     }
 
     private func fileURL(providerID: String, filePath: String) -> URL {
