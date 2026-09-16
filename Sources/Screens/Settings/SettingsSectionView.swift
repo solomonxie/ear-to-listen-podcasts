@@ -13,6 +13,7 @@ struct SettingsSectionView: View {
     @State private var showingExportPicker = false
     @State private var showingImportPicker = false
     @State private var showingAddAiKey = false
+    @State private var showingDownloads = false
 
     private var localProviders: [ProviderRecord] {
         viewModel.providers.filter { $0.type == LocalFilesProvider.providerType }
@@ -74,6 +75,21 @@ struct SettingsSectionView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("STORAGE").sectionHeading()
+                Button {
+                    showingDownloads = true
+                } label: {
+                    Label("Downloaded Episodes", systemImage: "arrow.down.circle")
+                }
+                Text("Episodes download automatically the first time you play them, for offline replay. Remove one here to free up space — it re-downloads next time you play it.")
+                    .sectionHint()
+            }
+            .padding(.horizontal)
+            .sheet(isPresented: $showingDownloads) {
+                NavigationStack { DownloadsView() }
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
