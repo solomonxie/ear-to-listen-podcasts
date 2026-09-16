@@ -178,6 +178,16 @@ enum Migrations {
             }
         }
 
+        // Carries the same content-fingerprint/modified-date fields as `CloudFile` so a
+        // job's file-changed check has full fidelity, not just size — see
+        // `SyncQueueManager.process`.
+        migrator.registerMigration("v9_sync_job_change_detection") { db in
+            try db.alter(table: "syncJobs") { t in
+                t.add(column: "contentHash", .text)
+                t.add(column: "remoteModifiedAt", .datetime)
+            }
+        }
+
         // Just a filename under `SpeakerPhotoStore`'s directory, not a full path — portable
         // across devices/reinstalls, and how it travels in a `LibrarySnapshot` backup.
         migrator.registerMigration("v10_speaker_photo") { db in

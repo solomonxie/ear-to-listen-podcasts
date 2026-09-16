@@ -4,13 +4,27 @@ Embedded in the single-page root (`HomeView`), not a standalone tab. Backed by
 the real `ProviderStore`/`SyncEngine` — `RemoteSectionView` lists actual S3
 `ProviderRecord`s (shared `SettingsViewModel` with the Settings section).
 Tapping a connection goes into `RemoteBrowserView` (no separate detail
-screen), which recursively browses the real provider one directory level at
-a time (`CloudProvider.listDirectory`). Every level — root or subfolder —
-carries the exact same "More" menu and a one-line stats footer scoped to
-that folder; there's no per-level distinction, since sync controls/delete
-act on the connection as a whole regardless of where you're browsing.
-Tapping a file plays it directly (importing it first if it isn't already
-synced), same as any other episode.
+screen), which recursively browses one directory level at a time. Every
+level — root or subfolder — carries the exact same "More" menu and a
+one-line stats footer scoped to that folder; there's no per-level
+distinction, since sync controls/delete act on the connection as a whole
+regardless of where you're browsing. Tapping a file plays it directly, same
+as any other episode.
+
+## When the network gets touched
+
+Browsing doesn't. Both the folder listing and the stats footer are built
+from already-synced rows (`TrackStore.directoryListing` /
+`TrackStore.stats`), so opening a bucket costs nothing and works offline.
+The provider is only listed:
+
+- once, when the connection is added — `enqueueConnection` walks the whole
+  bucket and queues every audio file;
+- on an explicit "Sync Now";
+- on a schedule, when that connection's `syncFrequencyMinutes` is set.
+
+A connection left on "Manual" therefore never fetches file headers on its
+own after that first import.
 
 Multiple connections can point at the same bucket with different key
 prefixes — each row shows a small gray `s3://bucket/prefix` subtitle so
@@ -36,6 +50,15 @@ pending job and both try to insert the same track, tripping the
 `SyncEngine.importFileIfNeeded` — the same import path the whole-bucket
 `SyncEngine.sync(providerRecord:)` uses. Failed jobs can be retried individually
 (`SyncJobStore.retry`) rather than requiring a queue clear.
+
+`sync(providerRecord:)` (manual "Sync Now", and the periodic background sync)
+runs its own sequential pass rather than going through `drain()` — but for
+every file that actually needs fetching (new, changed, or previously lost;
+already-synced unchanged files are skipped with no row at all) it still opens
+and closes a `SyncJob` row inline, posting `.syncQueueDidChange` so
+`SyncQueueManager` refreshes. That's what puts a whole-bucket sync's files in
+the same queue UI as a queued per-file import, instead of only the latter
+being visible while it runs.
 
 The queue is global across every source, not per-bucket. `RemoteSectionView`
 shows a one-line status ("Sync queue: N pending · concurrency") below the

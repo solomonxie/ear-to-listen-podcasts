@@ -18,10 +18,18 @@ struct SyncQueueView: View {
                             manager.retry(job)
                         }
                     }
+                    if manager.hasMore {
+                        Button {
+                            manager.loadMore()
+                        } label: {
+                            Text("Load \(manager.totalCount - manager.jobs.count) more…")
+                                .font(.subheadline)
+                        }
+                    }
                 }
             } header: {
                 HStack {
-                    Text("Queue (\(manager.jobs.count))")
+                    Text("Queue (\(manager.totalCount))")
                     Spacer()
                     Button {
                         manager.setPaused(!manager.isPaused)
