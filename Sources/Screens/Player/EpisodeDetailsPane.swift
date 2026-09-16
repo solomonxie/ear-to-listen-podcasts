@@ -23,66 +23,63 @@ struct EpisodeDetailsPane: View {
     private var track: Track { latest ?? playingTrack }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if track.isLost {
-                    Label("Missing from the last sync — the file wasn't in the bucket listing.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
+        VStack(alignment: .leading, spacing: 14) {
+            if track.isLost {
+                Label("Missing from the last sync — the file wasn't in the bucket listing.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
 
-                DetailCard("Episode") {
-                    if let artist {
-                        NavigationLink { SpeakerDetailView(speaker: artist) } label: {
-                            DetailRow("Speaker", artist.name, isLink: true)
-                        }
-                        .buttonStyle(.plain)
+            DetailCard("Episode") {
+                if let artist {
+                    NavigationLink { SpeakerDetailView(speaker: artist) } label: {
+                        DetailRow("Speaker", artist.name, isLink: true)
                     }
-                    if let album {
-                        NavigationLink { AlbumDetailView(album: album) } label: {
-                            DetailRow("Album", album.name, isLink: true)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    if let show {
-                        NavigationLink { ShowDetailView(show: show) } label: {
-                            DetailRow("Show", show.name, isLink: true)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    DetailRow("Year", track.year.map(String.init))
-                    DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
-                    DetailRow("Track no.", track.trackNumber.map(String.init))
-                    if !topics.isEmpty {
-                        TagRow(names: topics.map(\.name))
-                    }
+                    .buttonStyle(.plain)
                 }
-
-                DetailCard("File") {
-                    DetailRow("Connection", connectionLabel)
-                    DetailRow("Folder", folder)
-                    DetailRow("File", (track.filePath as NSString).lastPathComponent)
-                    DetailRow("Format", fileExtension)
-                    DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
-                    DetailRow("Downloaded", downloadedBytes.map { $0.formatted(.byteCount(style: .file)) } ?? "Not downloaded")
-                }
-
-                DetailCard("Dates") {
-                    DetailRow("Changed on storage", Self.formatted(track.remoteModifiedAt))
-                    DetailRow("Last synced", Self.formatted(track.updatedAt))
-                    DetailRow("Last played", Self.formatted(track.lastPlayedAt) ?? "Never")
-                    DetailRow("Stopped at", track.positionMs.map { Scrubber.formatted(Double($0) / 1000) })
-                }
-
-                if let summary = show?.summary, !summary.isEmpty {
-                    DetailCard("About the show") {
-                        Text(summary).font(.footnote).foregroundStyle(.secondary)
+                if let album {
+                    NavigationLink { AlbumDetailView(album: album) } label: {
+                        DetailRow("Album", album.name, isLink: true)
                     }
+                    .buttonStyle(.plain)
+                }
+                if let show {
+                    NavigationLink { ShowDetailView(show: show) } label: {
+                        DetailRow("Show", show.name, isLink: true)
+                    }
+                    .buttonStyle(.plain)
+                }
+                DetailRow("Year", track.year.map(String.init))
+                DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
+                DetailRow("Track no.", track.trackNumber.map(String.init))
+                if !topics.isEmpty {
+                    TagRow(names: topics.map(\.name))
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+
+            DetailCard("File") {
+                DetailRow("Connection", connectionLabel)
+                DetailRow("Folder", folder)
+                DetailRow("File", (track.filePath as NSString).lastPathComponent)
+                DetailRow("Format", fileExtension)
+                DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
+                DetailRow("Downloaded", downloadedBytes.map { $0.formatted(.byteCount(style: .file)) } ?? "Not downloaded")
+            }
+
+            DetailCard("Dates") {
+                DetailRow("Changed on storage", Self.formatted(track.remoteModifiedAt))
+                DetailRow("Last synced", Self.formatted(track.updatedAt))
+                DetailRow("Last played", Self.formatted(track.lastPlayedAt) ?? "Never")
+                DetailRow("Stopped at", track.positionMs.map { Scrubber.formatted(Double($0) / 1000) })
+            }
+
+            if let summary = show?.summary, !summary.isEmpty {
+                DetailCard("About the show") {
+                    Text(summary).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
         }
+        .padding(.horizontal)
         .task(id: playingTrack.id) { await load() }
     }
 
