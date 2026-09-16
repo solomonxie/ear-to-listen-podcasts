@@ -19,11 +19,13 @@ struct SettingsSectionView: View {
     }
 
     var body: some View {
+        // Rows inherit `.sectionRow()`; headings and hints opt out explicitly. Without it
+        // every Label falls back to `.body`, dwarfing its own section heading.
         VStack(alignment: .leading, spacing: 24) {
-            Text("Settings").font(.title3.bold()).padding(.horizontal)
+            Text("Settings").sectionTitle().padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("LOCAL FOLDERS").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text("LOCAL FOLDERS").sectionHeading()
                 Button {
                     showingFolderPicker = true
                 } label: {
@@ -65,8 +67,7 @@ struct SettingsSectionView: View {
                 }
                 if let importMessage {
                     Text(importMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .sectionHint()
                 }
                 Text("Scans a folder you pick on this device for audio files — they're read in place, never copied.")
                     .font(.footnote)
@@ -125,7 +126,7 @@ struct SettingsSectionView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("SYNC & BACKUP").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text("SYNC & BACKUP").sectionHeading()
 
                 Button {
                     exportDocument = viewModel.makeExportDocument()
@@ -167,8 +168,7 @@ struct SettingsSectionView: View {
 
                 if !viewModel.hasActiveRemoteProvider {
                     Text("Backup/Restore need an active remote (S3) source — see the Remote tab.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .sectionHint()
                 }
                 if viewModel.isBackupBusy {
                     ProgressView()
@@ -188,11 +188,11 @@ struct SettingsSectionView: View {
                     Label("Reset Demo Data", systemImage: "arrow.counterclockwise")
                 }
                 Text("Restores the sample shows, speakers, and playlists in case you deleted something while exploring. Doesn't touch your real remote/local sources.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .sectionHint()
             }
             .padding(.horizontal)
         }
+        .sectionRow()
         .alert("Reset Demo Data?", isPresented: $showingResetConfirmation) {
             Button("Reset", role: .destructive) { try? DemoDataSeeder.reseed() }
             Button("Cancel", role: .cancel) {}
