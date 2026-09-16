@@ -176,7 +176,7 @@ final class SettingsViewModel: ObservableObject {
     /// show, so it reflects the current DB rather than a stale snapshot from `load()`.
     func makeExportDocument() -> BackupDocument? {
         do {
-            return BackupDocument(data: try backupService.encode(try backupService.makeSnapshot()))
+            return BackupDocument(data: try backupService.archive(try backupService.makeSnapshot()))
         } catch {
             errorMessage = error.localizedDescription
             return nil
@@ -188,7 +188,7 @@ final class SettingsViewModel: ObservableObject {
         let didStartAccess = url.startAccessingSecurityScopedResource()
         defer { if didStartAccess { url.stopAccessingSecurityScopedResource() } }
         do {
-            let result = try backupService.apply(try backupService.decode(try Data(contentsOf: url)))
+            let result = try backupService.apply(try backupService.unarchive(try Data(contentsOf: url)))
             backupStatusMessage = summarize(result)
             load()
         } catch {

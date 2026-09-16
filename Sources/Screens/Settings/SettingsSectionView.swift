@@ -136,7 +136,7 @@ struct SettingsSectionView: View {
                 .fileExporter(
                     isPresented: $showingExportPicker,
                     document: exportDocument,
-                    contentType: .json,
+                    contentType: .zip,
                     defaultFilename: "byop-backup"
                 ) { _ in exportDocument = nil }
 
@@ -145,7 +145,7 @@ struct SettingsSectionView: View {
                 } label: {
                     Label("Import Library Data", systemImage: "square.and.arrow.down")
                 }
-                .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.json]) { result in
+                .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.zip]) { result in
                     if case .success(let url) = result {
                         viewModel.importSnapshot(from: url)
                     }
@@ -174,12 +174,10 @@ struct SettingsSectionView: View {
                     ProgressView()
                 } else if let backupStatusMessage = viewModel.backupStatusMessage {
                     Text(backupStatusMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .sectionHint()
                 }
-                Text("Export/Backup save your playlists and source list (not your files, not credentials). Restoring re-links playlist tracks that are already synced on this device; anything not synced yet is skipped until the next sync.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Text("Export/Backup save your playlists, source list, and any speaker bio/photo edits — as a .zip (not your episode files, not credentials). Restoring re-links playlist tracks that are already synced on this device; anything not synced yet is skipped until the next sync.")
+                    .sectionHint()
             }
             .padding(.horizontal)
 

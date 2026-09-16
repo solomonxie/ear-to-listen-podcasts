@@ -1,10 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Wraps a `LibrarySnapshot`'s encoded JSON for `.fileExporter`/`.fileImporter`
-/// (Export/Import Library Data in `SettingsSectionView`).
+/// Wraps a `LibrarySnapshot` zip archive (`BackupService.archive`/`unarchive`) for
+/// `.fileExporter`/`.fileImporter` (Export/Import Library Data in `SettingsSectionView`).
 struct BackupDocument: FileDocument {
-    static let readableContentTypes: [UTType] = [.json]
+    static let readableContentTypes: [UTType] = [.zip]
 
     var data: Data
 

@@ -29,6 +29,7 @@ struct BackupService {
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
     private var importSourceStore: ImportSourceStore { ImportSourceStore(dbQueue: dbQueue) }
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
+    private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
 
     init(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) {
         self.dbQueue = dbQueue
@@ -57,7 +58,13 @@ struct BackupService {
         let importSources = try importSourceStore.all().map {
             LibrarySnapshot.ImportSourceEntry(id: $0.id, type: $0.type, label: $0.label, createdAt: $0.createdAt)
         }
-        return LibrarySnapshot(exportedAt: Date(), playlists: playlists, providers: providers, importSources: importSources)
+        // Only speakers with a manual edit travel — everything else is just synced
+        // metadata `SyncEngine` rebuilds on its own.
+        let artists = try libraryStore.artists().compactMap { artist -> LibrarySnapshot.ArtistEntry? in
+            guard artist.bio != nil || artist.photoFileName != nil else { return nil }
+            return LibrarySnapshot.ArtistEntry(name: artist.name, bio: artist.bio, photoFileName: artist.photoFileName)
+        }
+        return LibrarySnapshot(exportedAt: Date(), playlists: playlists, providers: providers, importSources: importSources, artists: artists)
     }
 
     func encode(_ snapshot: LibrarySnapshot) throws -> Data {
@@ -75,6 +82,36 @@ struct BackupService {
             throw BackupError.unsupportedVersion(snapshot.version)
         }
         return snapshot
+    }
+
+    /// Bundles a snapshot with its referenced speaker photos into one zip archive — the
+    /// actual format shipped by Export/Backup. `snapshot.json` at the root, photos under
+    /// `photos/`.
+    func archive(_ snapshot: LibrarySnapshot) throws -> Data {
+        var entries = [ZipArchive.Entry(name: "snapshot.json", data: try encode(snapshot))]
+        for artist in snapshot.artists {
+            guard let fileName = artist.photoFileName,
+                  let url = SpeakerPhotoStore.url(for: fileName),
+                  let data = try? Data(contentsOf: url)
+            else { continue }
+            entries.append(ZipArchive.Entry(name: "photos/\(fileName)", data: data))
+        }
+        return ZipArchive.write(entries)
+    }
+
+    /// Unpacks a zip written by `archive(_:)` — writes any bundled photos to
+    /// `SpeakerPhotoStore` before returning, so `apply(_:)` can point restored speakers at
+    /// them right away.
+    func unarchive(_ data: Data) throws -> LibrarySnapshot {
+        let entries = ZipArchive.read(data)
+        guard let snapshotEntry = entries.first(where: { $0.name == "snapshot.json" }) else {
+            throw BackupError.noBackupFound
+        }
+        for entry in entries where entry.name.hasPrefix("photos/") {
+            let fileName = String(entry.name.dropFirst("photos/".count))
+            try? entry.data.write(to: SpeakerPhotoStore.directory.appendingPathComponent(fileName))
+        }
+        return try decode(snapshotEntry.data)
     }
 
     /// Merges a snapshot into the local DB. Provider/import-source rows restore
@@ -115,13 +152,22 @@ struct BackupService {
             }
         }
 
+        // Upserts by name (see `ArtistEntry`) so this both re-applies an edit onto a
+        // speaker already synced locally, and pre-seeds one that hasn't synced yet — a
+        // later sync's own `upsertArtist(name:)` will find and reuse this same row.
+        for entry in snapshot.artists {
+            let artist = try libraryStore.upsertArtist(name: entry.name)
+            try libraryStore.updateArtist(id: artist.id, name: entry.name, bio: entry.bio)
+            try libraryStore.updateArtistPhoto(id: artist.id, photoFileName: entry.photoFileName)
+        }
+
         return BackupImportResult(playlistsImported: snapshot.playlists.count, tracksMatched: matched, tracksUnmatched: unmatched)
     }
 
     // MARK: Remote (S3) backup/restore
 
     func backupToRemote() async throws {
-        try await activeS3Provider().uploadBackup(encode(makeSnapshot()))
+        try await activeS3Provider().uploadBackup(archive(makeSnapshot()))
     }
 
     @discardableResult
@@ -129,7 +175,7 @@ struct BackupService {
         guard let data = try await activeS3Provider().downloadBackup() else {
             throw BackupError.noBackupFound
         }
-        return try apply(decode(data))
+        return try apply(unarchive(data))
     }
 
     private func activeS3Provider() throws -> S3Provider {
