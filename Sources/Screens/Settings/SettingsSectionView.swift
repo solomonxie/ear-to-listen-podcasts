@@ -77,23 +77,25 @@ struct SettingsSectionView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("AI FEATURES").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("AI KEYS").sectionHeading()
                     Spacer()
-                    if viewModel.aiKeys.count > 1 {
-                        Button {
-                            viewModel.setAiKeyStrategy(viewModel.aiKeyStrategy == .sequential ? .roundRobin : .sequential)
-                        } label: {
-                            Text("\(viewModel.aiKeyStrategy.displayName) ▾").font(.caption)
-                        }
+                    // The fallback order only matters with more than one key, but the
+                    // control stays put either way so it doesn't appear out of nowhere.
+                    Button {
+                        viewModel.setAiKeyStrategy(viewModel.aiKeyStrategy == .sequential ? .roundRobin : .sequential)
+                    } label: {
+                        Text("\(viewModel.aiKeyStrategy.displayName) ▾").font(.caption.weight(.semibold))
                     }
+                    .disabled(viewModel.aiKeys.count < 2)
                 }
+                Text("Used to guess better titles/show names during sync, and to transcribe an episode on playback. Sent straight from this device to the chosen vendor — never stored or seen by us, and never included in backups. Add more than one to fall back automatically if one hits a rate limit.")
+                    .sectionHint()
                 ForEach(Array(viewModel.aiKeys.enumerated()), id: \.element.id) { index, key in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(key.vendor.displayName).font(.subheadline)
-                            Text("\(key.requestCount) request\(key.requestCount == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Text("\(key.requestCount) request\(key.requestCount == 1 ? "" : "s") sent")
+                                .sectionRowSecondary()
                         }
                         Spacer()
                         if viewModel.aiKeys.count > 1 {
@@ -102,12 +104,16 @@ struct SettingsSectionView: View {
                             Button { viewModel.moveAiKey(key, direction: 1) } label: { Image(systemName: "chevron.down") }
                                 .disabled(index == viewModel.aiKeys.count - 1)
                         }
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            viewModel.removeAiKey(key)
+                        // An explicit menu rather than only a long-press context menu —
+                        // deleting a key shouldn't be a hidden gesture.
+                        Menu {
+                            Button(role: .destructive) {
+                                viewModel.removeAiKey(key)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -116,9 +122,6 @@ struct SettingsSectionView: View {
                 } label: {
                     Label("Add AI Key", systemImage: "plus.circle")
                 }
-                Text("Optional — during sync, lets the app ask AI to guess better titles/show names from a file's path and existing tags (not its audio); OpenAI keys are also used to transcribe an episode's audio on playback, with the result saved on-device. Add more than one key (same or different vendor) to fall back automatically if one is rate-limited — Sequential keeps using the first working key; Round-robin spreads requests across all of them. Keys are stored only in this device's Keychain: we never see them or send them anywhere ourselves, they're used solely for direct requests from your device to that vendor.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal)
             .sheet(isPresented: $showingAddAiKey) {
@@ -150,6 +153,7 @@ struct SettingsSectionView: View {
                     if case .success(let url) = result {
                         viewModel.importSnapshot(from: url)
                     }
+                    .buttonStyle(.plain)
                 }
 
                 Button {

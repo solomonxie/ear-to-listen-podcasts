@@ -62,6 +62,15 @@ enum AiRouter {
         switch vendor {
         case .openAI: return try await OpenAIChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
         case .anthropic: return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
+        case .google: return try await GoogleChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
+        case .groq:
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .groq, apiKey: apiKey, messages: messages)
+        case .mistral:
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .mistral, apiKey: apiKey, messages: messages)
+        case .deepSeek:
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .deepSeek, apiKey: apiKey, messages: messages)
+        case .xai:
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .xai, apiKey: apiKey, messages: messages)
         }
     }
 }
