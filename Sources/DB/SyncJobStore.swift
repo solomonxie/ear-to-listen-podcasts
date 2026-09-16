@@ -5,17 +5,65 @@ struct SyncJobStore {
     let dbQueue: DatabaseQueue
 
     @discardableResult
-    func enqueue(providerID: String, filePath: String, displayName: String, sizeBytes: Int64?) throws -> SyncJob {
+    func enqueue(
+        providerID: String, filePath: String, displayName: String, sizeBytes: Int64?,
+        contentHash: String? = nil, remoteModifiedAt: Date? = nil
+    ) throws -> SyncJob {
         let job = SyncJob(
             id: UUID().uuidString, providerID: providerID, filePath: filePath, displayName: displayName,
-            sizeBytes: sizeBytes, status: .pending, errorMessage: nil, createdAt: Date(), updatedAt: Date()
+            sizeBytes: sizeBytes, contentHash: contentHash, remoteModifiedAt: remoteModifiedAt,
+            status: .pending, errorMessage: nil, createdAt: Date(), updatedAt: Date()
         )
         try dbQueue.write { db in try job.save(db) }
         return job
     }
 
-    func all() throws -> [SyncJob] {
-        try dbQueue.read { db in try SyncJob.order(Column("createdAt")).fetchAll(db) }
+    /// Done jobs sink to the bottom so pending/running/failed ones — the ones still worth
+    /// looking at — stay on top. Within each group the useful order differs: not-yet-done
+    /// jobs read in the order they were queued (which is also the order `dequeueNextPending`
+    /// will work them, so the top row is genuinely next up), while finished ones read
+    /// newest-first, since the interesting end of a completed pile is what just landed.
+    ///
+    /// `limit` keeps a bucket with thousands of queued files from loading in one go — see
+    /// `SyncQueueManager.loadMore`. Counting is `counts()`, which never loads rows.
+    func page(limit: Int) throws -> [SyncJob] {
+        try dbQueue.read { db in
+            try SyncJob
+                .order(sql: """
+                    status = 'done',
+                    CASE WHEN status = 'done' THEN NULL ELSE createdAt END ASC,
+                    CASE WHEN status = 'done' THEN updatedAt ELSE NULL END DESC
+                    """)
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
+    struct Counts {
+        /// Everything in the queue, for deciding whether there's another page to load.
+        var total: Int
+        /// Pending + running — what "N pending" in the UI means.
+        var active: Int
+    }
+
+    func counts() throws -> Counts {
+        try dbQueue.read { db in
+            let total = try SyncJob.fetchCount(db)
+            let active = try SyncJob
+                .filter([SyncJobStatus.pending.rawValue, SyncJobStatus.running.rawValue].contains(Column("status")))
+                .fetchCount(db)
+            return Counts(total: total, active: active)
+        }
+    }
+
+    /// Which providers have unfinished work, so a connection's own screen can show it's
+    /// syncing without holding every job row in memory.
+    func activeProviderIDs() throws -> Set<String> {
+        try dbQueue.read { db in
+            Set(try String.fetchAll(db, sql: """
+                SELECT DISTINCT providerID FROM syncJobs WHERE status IN (?, ?)
+                """, arguments: [SyncJobStatus.pending.rawValue, SyncJobStatus.running.rawValue]))
+        }
     }
 
     /// Atomically claims the oldest pending job in one write transaction — fetching and
@@ -32,6 +80,25 @@ struct SyncJobStore {
             job.updatedAt = Date()
             try job.save(db)
             return job
+        }
+    }
+
+    /// Flips an already-enqueued job straight to `.running` — for a caller that's about to
+    /// process it inline itself, rather than leaving it `.pending` for a drain loop to claim.
+    func markRunning(id: String) throws {
+        try update(id: id) { $0.status = .running }
+    }
+
+    /// A `.running` row can't outlive the process that was working it, so anything still
+    /// marked running at launch was orphaned by a kill/crash mid-drain. Put those back in
+    /// line — left alone they're worked by nobody, yet still count as active, which reads
+    /// as a connection that's permanently "Syncing…".
+    @discardableResult
+    func requeueOrphanedRunning() throws -> Int {
+        try dbQueue.write { db in
+            try SyncJob
+                .filter(Column("status") == SyncJobStatus.running.rawValue)
+                .updateAll(db, Column("status").set(to: SyncJobStatus.pending.rawValue), Column("updatedAt").set(to: Date()))
         }
     }
 

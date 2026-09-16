@@ -34,6 +34,20 @@ enum SyncFrequency: Int, CaseIterable, Identifiable {
         case .daily: return "Every day"
         }
     }
+
+    /// For showing the current setting on the row that opens the picker, where the full
+    /// `displayName` would crowd out everything else.
+    var shortName: String {
+        switch self {
+        case .manual: return "Manual"
+        case .minutes15: return "15 min"
+        case .minutes30: return "30 min"
+        case .hourly: return "Hourly"
+        case .hours6: return "6 hours"
+        case .hours12: return "12 hours"
+        case .daily: return "Daily"
+        }
+    }
 }
 
 struct SyncResult {
@@ -57,6 +71,7 @@ struct SyncEngine {
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
+    private var jobStore: SyncJobStore { SyncJobStore(dbQueue: dbQueue) }
     private let contentAnalyzer = ContentAnalyzer()
 
     /// `dbQueue` defaults to the shared app database; tests inject an in-memory one instead.
@@ -77,6 +92,12 @@ struct SyncEngine {
     /// Recursively lists the provider's files, adds any not yet in local metadata (reading
     /// embedded audio metadata, then optionally refining it via `ContentAnalyzer` if an
     /// OpenAI key is set), and marks any previously-known file no longer in the listing as lost.
+    ///
+    /// Runs sequentially rather than through `SyncQueueManager`'s drain loop — this is one
+    /// whole-bucket pass, not something to parallelize — but every file that actually needs
+    /// fetching (new, changed, or previously lost; unchanged files are skipped untouched)
+    /// still gets a `SyncJob` row around it, so it shows up live in the sync queue exactly
+    /// like a queued per-file import would.
     func sync(providerRecord record: ProviderRecord) async throws -> SyncResult {
         guard NetworkMonitor.shared.isConnected else { throw SyncEngineError.offline }
         let provider = try ProviderManager.shared.provider(for: record)
@@ -87,9 +108,24 @@ struct SyncEngine {
         var added = 0
         for file in files {
             seenPaths.insert(file.path)
-            if try await importFileIfNeeded(file, providerRecord: record, provider: provider) {
-                added += 1
+            let existing = try? trackStore.find(providerID: record.id, filePath: file.path)
+            guard existing == nil || existing!.isLost || hasChanged(existing!, file) else { continue }
+
+            let job = try? jobStore.enqueue(
+                providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
+                contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt
+            )
+            if let job { try? jobStore.markRunning(id: job.id) }
+            NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
+            do {
+                if try await importFileIfNeeded(file, providerRecord: record, provider: provider) {
+                    added += 1
+                }
+                if let job { try? jobStore.markDone(id: job.id) }
+            } catch {
+                if let job { try? jobStore.markFailed(id: job.id, error: error.localizedDescription) }
             }
+            NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
         }
 
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
@@ -142,6 +178,7 @@ struct SyncEngine {
             updatedAt: Date()
         )
         try trackStore.upsert(track, artistName: artistName, albumName: albumName)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
         return true
     }
 

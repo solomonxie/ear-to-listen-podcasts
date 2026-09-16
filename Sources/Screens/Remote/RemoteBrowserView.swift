@@ -4,11 +4,13 @@ import SwiftUI
 /// recurses by pushing itself with the tapped subfolder's path. There's no separate
 /// detail screen and no per-level distinction: every level carries the same "More" menu
 /// (frequency, last synced, sync now, sync queue, delete) and the same one-line
-/// storage-stats footer (scoped to that folder, from already-collected metadata — not a
-/// live rescan). The whole connection is queued for syncing right when it's added
-/// (`AddS3ProviderView`/`SyncQueueManager.enqueueConnection`), so there's no manual
-/// per-folder "sync this" action here. Tapping a file plays it directly — importing it
-/// first if it isn't already known — same as tapping any other synced episode.
+/// storage-stats footer, scoped to that folder.
+///
+/// Both the listing and the stats come from already-synced local metadata — browsing
+/// never calls out to the provider. The whole connection is listed and queued once when
+/// it's added (`AddS3ProviderView`/`SyncQueueManager.enqueueConnection`); after that only
+/// an explicit "Sync Now" or a scheduled `syncFrequencyMinutes` goes back out for file
+/// headers. Tapping a file plays it directly, same as tapping any other synced episode.
 struct RemoteBrowserView: View {
     @State var record: ProviderRecord
     var folder: String?
@@ -31,6 +33,7 @@ struct RemoteBrowserView: View {
     @State private var showingDeleteConfirm = false
 
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var queueManager = SyncQueueManager.shared
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -72,9 +75,17 @@ struct RemoteBrowserView: View {
                 }
             } footer: {
                 // A compact stats line rather than its own section — it's a status readout,
-                // not another navigable tier alongside the folders above it.
+                // not another navigable tier alongside the folders above it. The syncing
+                // indicator rides on the same line rather than its own row, since it's just
+                // a transient qualifier on those same numbers.
                 if !isLoadingListing {
-                    Text(statsSummary).font(.caption)
+                    HStack(spacing: 4) {
+                        Text(statsSummary).font(.caption)
+                        if isSyncing || isProviderSyncQueueActive {
+                            ProgressView().controlSize(.small)
+                            Text("Syncing…").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
         }
@@ -84,13 +95,24 @@ struct RemoteBrowserView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Picker("Sync frequency", selection: $frequency) {
-                        ForEach(SyncFrequency.allCases) { freq in
-                            Text(freq.displayName).tag(freq)
+                    // Nested rather than inline: seven frequencies would otherwise be most
+                    // of this menu, burying the actions underneath them. Persisting happens
+                    // in the binding's setter, since an `onChange` on a view inside a menu
+                    // only fires while that menu is open.
+                    Menu {
+                        Picker("Sync frequency", selection: Binding(
+                            get: { frequency },
+                            set: { newValue in
+                                frequency = newValue
+                                try? providerStore.updateSyncFrequency(id: record.id, minutes: newValue.minutes)
+                            }
+                        )) {
+                            ForEach(SyncFrequency.allCases) { freq in
+                                Text(freq.displayName).tag(freq)
+                            }
                         }
-                    }
-                    .onChange(of: frequency) { _, newValue in
-                        try? providerStore.updateSyncFrequency(id: record.id, minutes: newValue.minutes)
+                    } label: {
+                        Label("Sync: \(frequency.shortName)", systemImage: "clock.arrow.circlepath")
                     }
                     Text("Last synced: \(record.lastSyncedAt.map(formattedDate) ?? "Never")")
                     Button {
@@ -119,8 +141,16 @@ struct RemoteBrowserView: View {
                 }
             }
         }
-        .task { await load() }
+        .task { load() }
         .onAppear { loadStats() }
+        .onChange(of: isProviderSyncQueueActive) { wasActive, isActive in
+            // The queue's own jobs are the source of truth for progress; once they drain,
+            // pull the listing and the stats footer back in sync with what actually landed.
+            if wasActive && !isActive {
+                load()
+                loadStats()
+            }
+        }
         .confirmationDialog("Delete this connection?", isPresented: $showingDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 viewModel.delete(record)
@@ -170,6 +200,14 @@ struct RemoteBrowserView: View {
         }
     }
 
+    /// Whether this connection has any not-yet-finished sync queue job — covers both a
+    /// queued per-file import and a whole-bucket `syncNow()` run, since both now leave
+    /// their in-flight files in the same `syncJobs` table. Read off the manager's SQL-backed
+    /// set rather than `jobs`, which is only the visible page.
+    private var isProviderSyncQueueActive: Bool {
+        queueManager.activeProviderIDs.contains(record.id)
+    }
+
     private var statsSummary: String {
         guard let stats, stats.count > 0 else { return "No episodes synced yet." }
         var text = "\(stats.count) episodes synced · \(ByteCountFormatter.string(fromByteCount: stats.totalBytes, countStyle: .file))"
@@ -184,18 +222,25 @@ struct RemoteBrowserView: View {
         return folder.hasSuffix("/") ? folder + name : folder + "/" + name
     }
 
-    private func load() async {
+    /// Draws this level from already-synced local metadata — browsing never touches the
+    /// provider. The whole bucket is listed once when the connection is added
+    /// (`SyncQueueManager.enqueueConnection`), and after that only an explicit "Sync Now"
+    /// or a scheduled frequency goes back out for file headers, so opening a folder costs
+    /// nothing and works offline.
+    private func load() {
         defer { isLoadingListing = false }
-        guard let provider = try? ProviderManager.shared.provider(for: record) else {
-            errorMessage = "Couldn't connect to this source."
-            return
-        }
-        guard let listing = try? await provider.listDirectory(atFolder: folder) else {
-            errorMessage = "Couldn't list files."
+        guard let listing = try? trackStore.directoryListing(providerID: record.id, pathPrefix: folder) else {
+            errorMessage = "Couldn't read this folder's synced files."
             return
         }
         folders = listing.folders
-        files = listing.files
+        files = listing.tracks.map { track in
+            CloudFile(
+                id: track.filePath, name: (track.filePath as NSString).lastPathComponent, path: track.filePath,
+                sizeBytes: track.sizeBytes, mimeType: nil, modifiedAt: track.remoteModifiedAt,
+                contentHash: track.contentHash
+            )
+        }
     }
 
     private func loadStats() {
@@ -209,6 +254,8 @@ struct RemoteBrowserView: View {
             let result = try await SyncEngine().sync(providerRecord: record)
             syncMessage = "Added \(result.added), \(result.lost) missing, \(result.totalFiles) files found."
             record.lastSyncedAt = Date()
+            // Anything new the sync just pulled in is now local, so redraw this level.
+            load()
             loadStats()
         } catch {
             syncMessage = describeAWSError(error)

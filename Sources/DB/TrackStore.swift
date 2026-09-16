@@ -134,6 +134,33 @@ struct TrackStore {
         }
     }
 
+    /// Every already-synced track directly under `pathPrefix` (nil/empty = the connection's
+    /// root), plus the names of the immediate subfolders below it — enough to draw one level
+    /// of the remote browser from local metadata alone, without listing the provider.
+    func directoryListing(providerID: String, pathPrefix: String?) throws -> (folders: [String], tracks: [Track]) {
+        let prefix = pathPrefix.flatMap { $0.isEmpty ? nil : ($0.hasSuffix("/") ? $0 : $0 + "/") } ?? ""
+        let all = try dbQueue.read { db in
+            try Track
+                .filter(Column("providerID") == providerID)
+                .filter(prefix.isEmpty ? Column("filePath") != nil : Column("filePath").like("\(prefix)%"))
+                .order(Column("filePath"))
+                .fetchAll(db)
+        }
+
+        var folders: Set<String> = []
+        var tracks: [Track] = []
+        for track in all {
+            let relative = String(track.filePath.dropFirst(prefix.count))
+            guard !relative.isEmpty else { continue }
+            if let slashIndex = relative.firstIndex(of: "/") {
+                folders.insert(String(relative[relative.startIndex..<slashIndex]))
+            } else {
+                tracks.append(track)
+            }
+        }
+        return (folders.sorted(), tracks)
+    }
+
     /// Refreshes just the sync-derived columns for an already-known track, leaving its
     /// title/artist/album metadata (and search index) untouched.
     func refresh(id: String, sizeBytes: Int64?, contentHash: String?, remoteModifiedAt: Date?, isLost: Bool) throws {

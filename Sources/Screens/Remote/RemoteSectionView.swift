@@ -24,6 +24,12 @@ struct RemoteSectionView: View {
             }
             .padding(.horizontal)
 
+            // Syncing only reads file listings/metadata — the audio itself downloads on
+            // demand when you actually listen, not during a sync.
+            Text("Sync only fetches metadata — episodes download when you listen.")
+                .sectionHint()
+                .padding(.horizontal)
+
             if s3Providers.isEmpty {
                 Text("No remote sources yet. Add an S3 bucket to browse and sync episodes from.")
                     .sectionHint()
@@ -81,7 +87,8 @@ struct RemoteSectionView: View {
     }
 
     private var syncQueueSummary: String {
-        let pending = syncQueue.jobs.filter { $0.status == .pending || $0.status == .running }.count
+        // Counted in SQL, not off `jobs` — that's only the visible page.
+        let pending = syncQueue.activeCount
         guard pending > 0 else { return "Sync queue: idle" }
         let state = syncQueue.isPaused ? "paused" : "\(syncQueue.concurrency) at a time"
         return "Sync queue: \(pending) pending · \(state)"

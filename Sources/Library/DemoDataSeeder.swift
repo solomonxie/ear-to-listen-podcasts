@@ -3,9 +3,17 @@ import GRDB
 
 extension Notification.Name {
     /// Posted after the library's real DB content changes in a way that isn't already
-    /// covered by a targeted refresh (currently just demo data reset/reseed) — Home
-    /// observes this to reload its shelves.
+    /// covered by a targeted refresh — demo data reset/reseed, and (from
+    /// `SyncEngine.importFileIfNeeded`) each newly-synced file — so Home's shelves
+    /// (including newly-appearing speakers) update live instead of waiting for the
+    /// next full view reload.
     static let libraryDidChange = Notification.Name("libraryDidChange")
+
+    /// Posted by `SyncEngine.sync(providerRecord:)` around each per-file job it runs
+    /// inline (not through `SyncQueueManager`'s own drain loop), so the queue's
+    /// `@Published` state — and anything showing it — stays live during a whole-bucket
+    /// sync too, not just during queued imports.
+    static let syncQueueDidChange = Notification.Name("syncQueueDidChange")
 }
 
 /// Populates the real DB (not a parallel mock store) with a small sample library — a

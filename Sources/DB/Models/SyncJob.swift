@@ -15,6 +15,11 @@ struct SyncJob: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var filePath: String
     var displayName: String
     var sizeBytes: Int64?
+    /// Same fields as `CloudFile.contentHash`/`modifiedAt` — carried through so a queued
+    /// refresh (not just a brand-new import) can still detect an in-place overwrite via
+    /// hash rather than falling back to size alone.
+    var contentHash: String?
+    var remoteModifiedAt: Date?
     var status: SyncJobStatus
     var errorMessage: String?
     var createdAt: Date
