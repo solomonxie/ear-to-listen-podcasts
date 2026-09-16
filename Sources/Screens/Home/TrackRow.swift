@@ -12,6 +12,10 @@ struct TrackRow: View {
                 if let durationMs = track.durationMs, durationMs > 0 {
                     Text(Self.formattedDuration(durationMs))
                 }
+                if let folderHint {
+                    // Truncated at the head so the innermost (most telling) folder survives.
+                    Text(folderHint).lineLimit(1).truncationMode(.head)
+                }
                 if track.isLost {
                     Label("Missing", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                 }
@@ -20,6 +24,18 @@ struct TrackRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    /// A file with no usable embedded title falls back to its filename
+    /// (`SyncEngine.importFileIfNeeded`), which makes every `ep1.mp3` in a bucket look
+    /// identical in a list. When the title is just the filename, the containing folder is
+    /// the only thing telling them apart — so show it. Nothing to add when a real tag (or
+    /// an AI guess) named the episode, since that's already distinct.
+    private var folderHint: String? {
+        let fileName = (track.filePath as NSString).lastPathComponent
+        guard track.title == (fileName as NSString).deletingPathExtension else { return nil }
+        let folder = (track.filePath as NSString).deletingLastPathComponent
+        return folder.isEmpty ? nil : folder
     }
 
     static func formattedDuration(_ ms: Int) -> String {
