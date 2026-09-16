@@ -37,7 +37,10 @@ targets:
     info:
       path: Sources/App/Info.plist
       properties:
-        CFBundleDisplayName: Bring Your Own Podcasts
+        # Home-screen name. CFBundleName too, or iOS falls back to PRODUCT_NAME
+        # ("BringYourOwnPodcasts") wherever the display name isn't consulted.
+        CFBundleDisplayName: BYO Podcasts
+        CFBundleName: BYO Podcasts
         UIUserInterfaceStyle: Dark
         UILaunchScreen:
           UIColorName: AccentColor
