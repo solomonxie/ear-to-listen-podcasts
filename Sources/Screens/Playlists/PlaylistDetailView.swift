@@ -3,6 +3,7 @@ import SwiftUI
 struct PlaylistDetailView: View {
     let playlist: Playlist
     @State private var tracks: [Track] = []
+    @State private var showingAddTracks = false
 
     private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -23,8 +24,22 @@ struct PlaylistDetailView: View {
             }
         }
         .navigationTitle(playlist.name)
-        .task {
-            tracks = (try? playlistStore.tracks(inPlaylist: playlist.id)) ?? []
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingAddTracks = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+            }
         }
+        .task { await load() }
+        .sheet(isPresented: $showingAddTracks, onDismiss: { Task { await load() } }) {
+            AddTracksToPlaylistView(playlist: playlist)
+        }
+    }
+
+    private func load() async {
+        tracks = (try? playlistStore.tracks(inPlaylist: playlist.id)) ?? []
     }
 }

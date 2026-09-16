@@ -6,7 +6,9 @@ struct RealPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var tab: Tab = .details
     @State private var showingUpNext = false
-    @State private var artistName: String?
+    @State private var showingAddToPlaylist = false
+    @State private var artist: Artist?
+    @State private var album: Album?
     @State private var showSummary: String?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -28,9 +30,29 @@ struct RealPlayerView: View {
 
                     VStack(spacing: 4) {
                         Text(track.title).font(.title3.bold()).multilineTextAlignment(.center)
-                        if let artistName {
-                            Text(artistName).font(.subheadline).foregroundStyle(.secondary)
+                        // Tapping either jumps to that speaker's/album's own page — same
+                        // destinations as tapping through from Home, just reachable from
+                        // whatever's currently playing too. One line rather than stacked,
+                        // since together they're still just a single subtitle.
+                        HStack(spacing: 12) {
+                            if let artist {
+                                NavigationLink {
+                                    SpeakerDetailView(speaker: artist)
+                                } label: {
+                                    Text("Speaker: \(artist.name)")
+                                }
+                            }
+                            if let album {
+                                NavigationLink {
+                                    AlbumDetailView(album: album)
+                                } label: {
+                                    Text("Album: \(album.name)")
+                                }
+                            }
                         }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     }
                     .padding(.horizontal)
 
@@ -67,14 +89,25 @@ struct RealPlayerView: View {
                         TranscriptSection(engine: engine)
                     }
 
-                    Button {
-                        showingUpNext = true
-                    } label: {
-                        Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
+                    HStack {
+                        Button {
+                            showingUpNext = true
+                        } label: {
+                            Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
+                        }
+                        Spacer()
+                        Button {
+                            showingAddToPlaylist = true
+                        } label: {
+                            Label("Add to Playlist", systemImage: "text.badge.plus")
+                                .labelStyle(.iconOnly)
+                        }
                     }
+                    .padding(.horizontal)
                     .padding(.bottom)
                     .task(id: track.id) {
-                        artistName = track.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
+                        artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
+                        album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
                         showSummary = track.showID.flatMap { try? libraryStore.show(id: $0) }?.summary
                     }
                 } else {
@@ -94,6 +127,11 @@ struct RealPlayerView: View {
             }
             .sheet(isPresented: $showingUpNext) {
                 UpNextView()
+            }
+            .sheet(isPresented: $showingAddToPlaylist) {
+                if let track = engine.currentTrack {
+                    AddToPlaylistSheet(track: track)
+                }
             }
         }
     }
