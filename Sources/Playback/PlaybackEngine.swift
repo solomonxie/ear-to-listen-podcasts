@@ -12,22 +12,13 @@ final class PlaybackEngine: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var lastError: String?
-    @Published private(set) var transcript: [TranscriptSegment] = []
-    @Published private(set) var isTranscribing = false
 
     private let player = AVQueuePlayer()
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
-    private let transcriptStore = TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
-    private let transcriber = Transcriber()
     private var itemStatusObservation: NSKeyValueObservation?
     private var hasRetriedCurrentTrack = false
     private var lastPersistedProgressAt = Date.distantPast
-
-    /// The transcript line current playback has reached, for highlighting in the UI.
-    var currentTranscriptSegment: TranscriptSegment? {
-        transcript.last { $0.start <= currentTime }
-    }
 
     private init() {
         configureAudioSession()
@@ -49,36 +40,9 @@ final class PlaybackEngine: ObservableObject {
         queue = newQueue.isEmpty ? [track] : newQueue
         currentTrack = track
         hasRetriedCurrentTrack = false
-        transcript = []
         try? trackStore.touchLastPlayed(id: track.id)
+        LiveTranscript.shared.attach(track: track)
         Task { await loadAndPlay(track: track) }
-        Task { await loadTranscript(track: track) }
-    }
-
-    /// Loads a cached transcript instantly, or transcribes live via OpenAI and saves it
-    /// locally for next time. Best-effort: a failure here doesn't interrupt playback.
-    private func loadTranscript(track: Track) async {
-        if let cached = try? transcriptStore.find(trackID: track.id) {
-            guard currentTrack?.id == track.id else { return }
-            transcript = cached
-            return
-        }
-        guard
-            let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
-            let provider = try? ProviderManager.shared.provider(for: record)
-        else { return }
-
-        isTranscribing = true
-        defer { isTranscribing = false }
-        do {
-            let segments = try await transcriber.transcribe(track: track, provider: provider)
-            try? transcriptStore.save(trackID: track.id, segments: segments)
-            guard currentTrack?.id == track.id else { return }
-            transcript = segments
-        } catch {
-            guard currentTrack?.id == track.id else { return }
-            lastError = error.localizedDescription
-        }
     }
 
     private func loadAndPlay(track: Track) async {

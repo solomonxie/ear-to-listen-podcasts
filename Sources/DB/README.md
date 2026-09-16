@@ -12,6 +12,12 @@ with sample rows on first launch (or via "Reset Demo Data"), tagged
 `isDemo = true` so they can be wiped and reseeded without touching anything
 actually synced.
 
+`transcripts` holds one JSON blob of timestamped segments per track, each carrying
+the span it covers so a half-finished transcript can be resumed rather than redone;
+`transcriptEdits` keeps every correction as its own row — the diff view's history and
+the vocabulary hint handed to the next transcription pass
+(`Sources/Library/Transcription/`).
+
 ## Sync Workflow
 
 The one real workflow that touches every store here — a scheduled tick,

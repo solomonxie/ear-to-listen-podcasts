@@ -196,6 +196,26 @@ enum Migrations {
             }
         }
 
+        // Transcripts stop being one all-or-nothing blob: segments carry an end time (in
+        // `segmentsJSON`) so a partially transcribed episode can be resumed gap-by-gap,
+        // and every user correction is kept as its own row — the audit trail behind
+        // "see my edits" and the vocabulary hint fed back into the next request.
+        migrator.registerMigration("v11_transcript_editing") { db in
+            try db.alter(table: "transcripts") { t in
+                t.add(column: "engine", .text)
+                t.add(column: "updatedAt", .datetime)
+            }
+
+            try db.create(table: "transcriptEdits") { t in
+                t.column("id", .text).primaryKey()
+                t.column("trackID", .text).notNull().indexed().references("tracks", onDelete: .cascade)
+                t.column("segmentStart", .double).notNull()
+                t.column("originalText", .text).notNull()
+                t.column("editedText", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

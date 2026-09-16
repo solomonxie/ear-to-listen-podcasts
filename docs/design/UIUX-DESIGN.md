@@ -113,6 +113,48 @@ visible page.
 └──────────────────────────────────────────┘
 ```
 
+**Details** — grouped cards, not one flat list, so "who/what" doesn't blur into "which
+file". A row with no value hides itself rather than printing a dash, so a thin-metadata
+episode shows a short card instead of a column of blanks.
+
+```
+EPISODE          Speaker · Album · Show  (each pushes that page) · Year ·
+                 Duration · Track no. · Topics as chips
+FILE             Connection · Folder · File · Format · Size ·
+                 Downloaded (size, or "Not downloaded")
+DATES            Changed on storage · Last synced · Last played · Stopped at
+ABOUT THE SHOW   the show's summary, only if there is one
+```
+
+**Transcript** — lyric-style. One bright line, everything else dimmed, scrolling itself.
+
+```
+┌──────────────────────────────────────────┐
+│ ⌁ On-device ▾            3 edits         │ ← one menu: Off / On-device / OpenAI
+│ Transcribing 12:00–13:00… · 46% done     │   Whisper, + "Transcribe again…"
+├──────────────────────────────────────────┤
+│  …so the model runs entirely locally.    │ ← dim
+│  Which matters once you pipe in          │ ← BRIGHT = the line being spoken,
+│  personal data.                          │   scrolls itself to centre
+│  12:14 ✎ edited                          │ ← tap any line to correct it
+└──────────────────────────────────────────┘
+```
+
+Rules this encodes:
+- Off / free-and-offline / paid-and-better is **one** choice, so it's one control, not a
+  toggle plus a picker.
+- Off by default. Transcribing either spends battery or sends audio somewhere — the
+  listener opts in.
+- Tap corrects; "play from here" is on the line's context menu. Correcting is the one
+  thing only a human can do here, so it gets the primary gesture.
+- Every window is saved the moment it lands, so quitting mid-episode keeps what got done
+  and coming back resumes at the first hole — never from the top.
+- Silence is stored too (as an empty line, hidden), or a music bed would be re-sent to
+  the recogniser on every pass, forever.
+- Corrections are kept, not just applied: "3 edits" opens a word-level diff, and the
+  words the user added are fed back as vocabulary hints so the same misheard name stops
+  coming back wrong.
+
 ### Playlists
 
 Two entry points, because they answer different questions:
@@ -174,6 +216,7 @@ local copy; the episode stays synced and re-downloads next play.
 | Remote browser | spinner in place of the list; footer held back too | "No episodes synced yet." | listing read fails → orange line above the list |
 | Sync queue | — | "Nothing queued. Sync a folder from a remote source to add files here." | failed job shows its provider error inline + Retry |
 | Now playing | — | "Nothing playing" | "You're offline. Connect to the internet to stream this track." |
+| Transcript | "Transcribing 12:00–13:00… · 46% done" inline, lines appear as they land | off: "Pick a recogniser above…"; on: "Listening ahead — lines appear as they're recognised." | orange line above the list; on-device needs the Speech permission, Whisper needs an OpenAI key |
 | Downloads | spinner | "No downloaded episodes yet. Anything you play is saved here automatically." | — |
 | Add S3 / Add AI key | inline "Testing…" on Save | — | inline red line, never an alert |
 
@@ -194,6 +237,10 @@ Cross-cutting:
 - "Keys never leave this device, including in backups."
 - "Folder (key prefix)" — not the raw S3 term.
 - "N items need a sync first" on restore — better than silently dropping them.
+- "Your corrections are kept — they're used as hints for the new pass." — re-transcribing
+  otherwise reads like it throws the user's typing away.
+- "Saved on this device, and used as a hint for the rest of the episode" — says what a
+  correction is *for*, not just that it saved.
 - "Added X, Y missing, Z files found." after a manual sync.
 
 
