@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 /// live in `RemoteSectionView`; this covers on-device storage and app-wide settings.
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @EnvironmentObject private var language: AppLanguageStore
     @State private var showingResetConfirmation = false
     @State private var showingFolderPicker = false
     @State private var isScanning = false
@@ -71,8 +72,22 @@ struct SettingsSectionView: View {
                         .sectionHint()
                 }
                 Text("Scans a folder you pick on this device for audio files — they're read in place, never copied.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .sectionHint()
+            }
+            .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("LANGUAGE").sectionHeading()
+                // A menu-style picker: one row showing the current choice, options on tap.
+                // Three of them don't warrant a pushed page.
+                Picker("Language", selection: $language.language) {
+                    ForEach(AppLanguage.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                Text("Applies right away. \"System\" follows your device's language setting.")
+                    .sectionHint()
             }
             .padding(.horizontal)
 
@@ -132,6 +147,7 @@ struct SettingsSectionView: View {
                             Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)
                         }
                     }
+                    .buttonStyle(.plain)
                 }
                 Button {
                     showingAddAiKey = true
@@ -169,7 +185,6 @@ struct SettingsSectionView: View {
                     if case .success(let url) = result {
                         viewModel.importSnapshot(from: url)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 Button {

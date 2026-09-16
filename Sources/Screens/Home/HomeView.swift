@@ -185,7 +185,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private func resultSection<Item: Identifiable, RowContent: View>(
-        _ title: String, _ items: [Item], @ViewBuilder row: @escaping (Item) -> RowContent
+        _ title: LocalizedStringKey, _ items: [Item], @ViewBuilder row: @escaping (Item) -> RowContent
     ) -> some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -223,13 +223,13 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private func shelf<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func shelf<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         shelf(title, trailing: { EmptyView() }, content: content)
     }
 
     @ViewBuilder
     private func shelf<Content: View, Trailing: View>(
-        _ title: String,
+        _ title: LocalizedStringKey,
         @ViewBuilder trailing: () -> Trailing,
         @ViewBuilder content: () -> Content
     ) -> some View {
