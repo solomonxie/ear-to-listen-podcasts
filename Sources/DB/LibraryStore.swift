@@ -171,6 +171,17 @@ struct LibraryStore {
         try dbQueue.write { db in try ShowTopic(showID: showID, topicID: topicID).save(db) }
     }
 
+    func topics(forShow showID: String) throws -> [Topic] {
+        try dbQueue.read { db in
+            try Topic.fetchAll(db, sql: """
+                SELECT topics.* FROM topics
+                JOIN showTopics ON showTopics.topicID = topics.id
+                WHERE showTopics.showID = ?
+                ORDER BY topics.name
+                """, arguments: [showID])
+        }
+    }
+
     func shows(forTopic topicID: String) throws -> [Show] {
         try dbQueue.read { db in
             try Show.fetchAll(db, sql: """

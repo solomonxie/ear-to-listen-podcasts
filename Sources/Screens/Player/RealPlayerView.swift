@@ -9,7 +9,6 @@ struct RealPlayerView: View {
     @State private var showingAddToPlaylist = false
     @State private var artist: Artist?
     @State private var album: Album?
-    @State private var showSummary: String?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -80,13 +79,9 @@ struct RealPlayerView: View {
 
                     switch tab {
                     case .details:
-                        ScrollView {
-                            Text(showSummary ?? "No details for this episode.")
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal)
-                        }
+                        EpisodeDetailsPane(playingTrack: track)
                     case .transcript:
-                        TranscriptSection(engine: engine)
+                        TranscriptPane(currentTime: engine.currentTime) { engine.seek(to: $0) }
                     }
 
                     HStack {
@@ -108,7 +103,6 @@ struct RealPlayerView: View {
                     .task(id: track.id) {
                         artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
                         album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
-                        showSummary = track.showID.flatMap { try? libraryStore.show(id: $0) }?.summary
                     }
                 } else {
                     Spacer()
@@ -141,7 +135,7 @@ struct RealPlayerView: View {
 /// `PlaybackEngine`'s periodic `currentTime` publishing (every 0.5s) can't yank the thumb
 /// back mid-drag. A zero-distance drag gesture also means tapping anywhere on the track
 /// jumps straight there, not just dragging the thumb.
-private struct Scrubber: View {
+struct Scrubber: View {
     let currentTime: TimeInterval
     let duration: TimeInterval
     let onSeek: (TimeInterval) -> Void
@@ -197,37 +191,6 @@ private struct Scrubber: View {
         guard time.isFinite, time >= 0 else { return "0:00" }
         let total = Int(time)
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-private struct TranscriptSection: View {
-    @ObservedObject var engine: PlaybackEngine
-
-    var body: some View {
-        if engine.isTranscribing {
-            ProgressView("Transcribing…")
-        } else if engine.transcript.isEmpty {
-            ContentUnavailableView("No transcript for this episode", systemImage: "text.bubble")
-        } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(engine.transcript.enumerated()), id: \.offset) { _, segment in
-                            let isCurrent = segment.start == engine.currentTranscriptSegment?.start
-                            Text(segment.text)
-                                .font(isCurrent ? .body.weight(.semibold) : .body)
-                                .foregroundStyle(isCurrent ? .primary : .secondary)
-                                .id(segment.start)
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .onChange(of: engine.currentTranscriptSegment?.start) { _, newValue in
-                    guard let newValue else { return }
-                    withAnimation { proxy.scrollTo(newValue, anchor: .center) }
-                }
-            }
-        }
     }
 }
 

@@ -36,9 +36,16 @@ ContentView.swift
 │ │ SettingsSectionView                        ││──→ Sources/Screens/Settings/
 │ └───────────────────────────────────────────┘│
 │ MiniPlayerBar (docked, safeAreaInset bottom) │──→ Sources/Screens/Player/MiniPlayerBar.swift
-│   tap → sheet → NowPlayingView               │──→ Sources/Screens/NowPlaying/NowPlayingView.swift
+│   tap → sheet → RealPlayerView               │──→ Sources/Screens/Player/RealPlayerView.swift
+│     ├ Details  (tags, file, dates)           │──→ Sources/Screens/Player/EpisodeDetailsPane.swift
+│     └ Transcript (lyric-style, editable)     │──→ Sources/Screens/Player/TranscriptPane.swift
 └─────────────────────────────────────────────┘
 ```
+
+The transcript pane is driven by `LiveTranscript`
+(`Sources/Library/Transcription/`), which fills in only the stretches of an episode
+that have no text yet — on-device (Apple `Speech`) or OpenAI Whisper — saving each
+window as it lands and folding the listener's corrections back in as vocabulary hints.
 
 Home's shelves/search read `MockLibraryStore`/`PlaybackMockState`
 (`Sources/Screens/Mock/README.md`); Remote and Settings read the real

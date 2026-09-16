@@ -45,6 +45,9 @@ targets:
           - audio
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        NSSpeechRecognitionUsageDescription: >-
+          Transcribes episodes on this device so you can read and correct them.
+          Audio stays on your phone.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.byopo
