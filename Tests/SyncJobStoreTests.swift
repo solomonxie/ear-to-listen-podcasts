@@ -28,6 +28,28 @@ final class SyncJobStoreTests: XCTestCase {
         try dbQueue.write { db in try job.save(db) }
     }
 
+    func testQueuingTheSameFileTwiceReusesTheJobAlreadyInFlight() throws {
+        let store = SyncJobStore(dbQueue: try makeDatabase())
+
+        let first = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
+        let second = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
+
+        XCTAssertEqual(first.id, second.id)
+        XCTAssertEqual(try store.counts().total, 1)
+        XCTAssertTrue(try store.hasUnfinished(providerID: "p1", filePath: "a/ep.mp3"))
+    }
+
+    func testAFinishedJobDoesNotBlockQueuingThatFileAgain() throws {
+        let store = SyncJobStore(dbQueue: try makeDatabase())
+        let first = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
+        try store.markDone(id: first.id)
+
+        let second = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
+
+        XCTAssertNotEqual(first.id, second.id)
+        XCTAssertFalse(try store.hasUnfinished(providerID: "p1", filePath: "b/other.mp3"))
+    }
+
     func testPageOrdersUnfinishedByQueuedOrderAndFinishedByMostRecentFirst() throws {
         let dbQueue = try makeDatabase()
         let store = SyncJobStore(dbQueue: dbQueue)

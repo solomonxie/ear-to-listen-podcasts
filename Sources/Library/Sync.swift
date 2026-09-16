@@ -110,6 +110,9 @@ struct SyncEngine {
             seenPaths.insert(file.path)
             let existing = try? trackStore.find(providerID: record.id, filePath: file.path)
             guard existing == nil || existing!.isLost || hasChanged(existing!, file) else { continue }
+            // Already queued (adding a connection queues the whole listing) — let the
+            // drain loop have it rather than importing the same file twice at once.
+            if (try? jobStore.hasUnfinished(providerID: record.id, filePath: file.path)) == true { continue }
 
             let job = try? jobStore.enqueue(
                 providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
