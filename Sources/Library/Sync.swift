@@ -31,18 +31,18 @@ enum SyncFrequency: Int, CaseIterable, Identifiable {
         }
     }
 
-    /// For the button that opens the picker. It carries the word "Sync" itself because
+    /// For the button that opens the picker. It names the question it answers, because
     /// it sits next to "Sync Now" as a second pill — on its own, "Manual" is a setting
     /// with no subject, and nobody reads a clock icon as "how often".
     var buttonLabel: String {
         switch self {
-        case .manual: return "Sync: manual"
-        case .minutes15: return "Sync: every 15 min"
-        case .minutes30: return "Sync: every 30 min"
-        case .hourly: return "Sync: every hour"
-        case .hours6: return "Sync: every 6 hours"
-        case .hours12: return "Sync: every 12 hours"
-        case .daily: return "Sync: every day"
+        case .manual: return "How often: manual"
+        case .minutes15: return "How often: every 15 min"
+        case .minutes30: return "How often: every 30 min"
+        case .hourly: return "How often: every hour"
+        case .hours6: return "How often: every 6 hours"
+        case .hours12: return "How often: every 12 hours"
+        case .daily: return "How often: every day"
         }
     }
 }
