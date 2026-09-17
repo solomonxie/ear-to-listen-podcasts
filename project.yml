@@ -72,9 +72,12 @@ targets:
         # the README. Simulator builds still build without one; the iCloud row in
         # Settings reports itself unavailable rather than pretending.
         CODE_SIGN_ENTITLEMENTS: Sources/App/BringYourOwnPodcasts.entitlements
-        # Simulator builds don't need a team; set DEVELOPMENT_TEAM before archiving for TestFlight.
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+        # The team that owns the bundle id and the iCloud container. Written here rather
+        # than read from the environment: a regenerate without the variable set produced a
+        # project that builds for the simulator and fails to sign for a device, which is a
+        # confusing way to find out. Fork this repo and it's the one line to change.
+        DEVELOPMENT_TEAM: REPLACE_WITH_YOUR_TEAM_ID
 
   BringYourOwnPodcastsTests:
     type: bundle.unit-test
