@@ -31,17 +31,18 @@ enum SyncFrequency: Int, CaseIterable, Identifiable {
         }
     }
 
-    /// For showing the current setting on the row that opens the picker, where the full
-    /// `displayName` would crowd out everything else.
-    var shortName: String {
+    /// For the button that opens the picker. It carries the word "Sync" itself because
+    /// it sits next to "Sync Now" as a second pill — on its own, "Manual" is a setting
+    /// with no subject, and nobody reads a clock icon as "how often".
+    var buttonLabel: String {
         switch self {
-        case .manual: return "Manual"
-        case .minutes15: return "15 min"
-        case .minutes30: return "30 min"
-        case .hourly: return "Hourly"
-        case .hours6: return "6 hours"
-        case .hours12: return "12 hours"
-        case .daily: return "Daily"
+        case .manual: return "Sync: manual"
+        case .minutes15: return "Sync: every 15 min"
+        case .minutes30: return "Sync: every 30 min"
+        case .hourly: return "Sync: every hour"
+        case .hours6: return "Sync: every 6 hours"
+        case .hours12: return "Sync: every 12 hours"
+        case .daily: return "Sync: every day"
         }
     }
 }
