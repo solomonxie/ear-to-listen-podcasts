@@ -238,12 +238,56 @@ Nothing is written until `Save`, and a saved edit outranks the embedded tags fro
 
 ### Settings
 
-Sections: Local Folders · Storage (Downloaded Episodes) · AI Keys · Sync & Backup ·
-Sample Library. The sample library is never loaded on its own — a fresh install is an
-empty library with one offer to load it, because sample content sitting in the same
-shelves as synced content can't be told apart from it. Each carries a short hint under its heading, not a paragraph at the
-bottom. Row labels say what the row does, not what it is: "Scan local folder for
-podcasts", not "Add a Folder".
+Sections: Language (one line, no heading) · AI Keys · Sync & Backup · Add Episodes. Each
+carries a short hint under its heading, not a paragraph at the bottom. Row labels say
+what the row does, not what it is: "Import podcasts from Files", not "Add a Folder".
+
+Settings holds only what has nowhere better to live. A control belongs beside the thing
+it acts on, not in a settings list that grows a section per feature:
+
+- **Importing** is one link, not a section — picking episodes (or a whole folder) out of
+  Files, read where they sit. Existing sources are listed under it only when there are
+  any, to switch off or delete.
+- **Downloaded episodes** are managed from the `Downloaded` shelf's own `More` button on
+  Home, not a Storage section repeating what the shelf already shows.
+- **Backing app data up to a bucket** is a toggle on that connection's row in Remote,
+  next to `Sync Now` and its frequency — same bucket, same question. An ordinary switch
+  on its own row: pressed into the pill row beside two buttons, it read as a third button.
+- **Adding episodes** — your own files, or the samples — is the last group, two links,
+  not two sections.
+
+Tapping an AI key opens its own page: every call made with that key, newest first, with
+the model, tokens in and out, and an estimated cost, and the prompt and reply behind a
+tap. A request count is the only thing a key can otherwise show, and it answers none of
+the questions people actually have — what is this spending money on, why did the bill
+jump, is this key failing? Failures are kept too, with the vendor's own words, since a
+key that's been refused all week is the thing the page exists to make visible. The cost
+says "estimated" everywhere it appears: it's list price × tokens, and the vendor's
+invoice is the only real number.
+
+Backup destinations are one switch each and nothing else — on means every change goes
+there, off means none do. iCloud comes first: it's the only one with nothing to set up.
+Flipping it on backs up immediately, so "did that work?" is answered by the row rather
+than by a `Sync Now` button beside it. When the folder can't be used, the row says which
+of the four causes it is, in place of the location line, and only the one the listener
+can fix carries directions — spelled out in full, since the setting is four levels down
+under their own name:
+
+```
+ iCloud Drive                                         ●──
+ Files → iCloud Drive → BYO Podcasts · Last: Sep 16
+
+ iCloud Drive                                         ──○   ← disabled
+ iCloud Drive is off on this device.
+ Settings → your name → iCloud → iCloud Drive → turn on     ← accent, here only
+
+ iCloud Drive                                         ──○
+ This build of the app isn't signed for iCloud.             ← no second line
+```
+
+The sample library is never loaded on its own — a fresh install is an empty library with
+one offer to load it, because sample content sitting in the same shelves as synced
+content can't be told apart from it.
 
 
 ## Flows
@@ -279,13 +323,23 @@ A connection on Manual fetches nothing on its own — not even file headers.
 Edit renames; Album → tap the speaker line reassigns to a *different* speaker, which
 repoints every track that carries its own copy. Photo/bio edits survive backup.
 
-**6 · Backup / restore.** Export writes a zip (`snapshot.json` + `photos/`); Backup
-uploads the same bytes to a fixed key in the active bucket. Restore merges: inserts only
-what's missing, matches tracks by (connection, file path) and speakers by name, and
-reports what didn't match rather than dropping it.
+**6 · Backup / restore.** Export writes a zip (`snapshot.json` + `photos/`); the same
+bytes go to one always-overwritten file in iCloud Drive and to a fixed key in the active
+bucket.
+Restore merges: inserts only what's missing, matches tracks by (connection, file path)
+and speakers by name, and reports what didn't match rather than dropping it.
 
-**7 · Free up space.** Settings → Downloaded Episodes → swipe to remove. Drops only the
-local copy; the episode stays synced and re-downloads next play.
+**7a · Where did the AI spend go?** Settings → AI Keys → tap the key → the last 100
+calls with tokens and estimated cost, tap one to read the prompt and the reply.
+
+**7 · Delete the app, reinstall it.** First launch finds an empty library, pulls the
+newest iCloud archive back and applies it without asking — there's nothing to overwrite,
+and no context yet for a "restore from backup?" dialog. Playlist order, hand edits and
+transcripts name episodes that haven't synced yet, so they're reported as waiting and
+re-applied automatically after each sync until none are left.
+
+**8 · Free up space.** Home → Downloaded → More → swipe to remove. Drops only the local
+copy; the episode stays synced and re-downloads next play.
 
 
 ## States

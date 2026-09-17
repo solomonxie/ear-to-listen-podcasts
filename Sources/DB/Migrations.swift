@@ -320,6 +320,24 @@ enum Migrations {
             }
         }
 
+        // What each AI key has actually been used for. A request count says a key is
+        // being used; it can't say what it's spending the money on, or that every call
+        // through it has been failing since Tuesday.
+        migrator.registerMigration("v18_ai_query_history") { db in
+            try db.create(table: "aiQueries") { t in
+                t.column("id", .text).primaryKey()
+                t.column("keyID", .text).notNull().indexed()
+                t.column("vendor", .text).notNull()
+                t.column("model", .text).notNull()
+                t.column("prompt", .text).notNull()
+                t.column("response", .text)
+                t.column("errorMessage", .text)
+                t.column("promptTokens", .integer)
+                t.column("completionTokens", .integer)
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

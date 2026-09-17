@@ -10,28 +10,33 @@ struct SettingsSectionView: View {
     @State private var showingResetConfirmation = false
     @State private var showingRemoveDemoConfirmation = false
     @State private var hasDemoData = DemoDataSeeder.isLoaded
-    @State private var showingFolderPicker = false
+    @State private var showingFilePicker = false
     @State private var isScanning = false
     @State private var importMessage: String?
     @State private var exportDocument: BackupDocument?
     @State private var showingExportPicker = false
     @State private var showingImportPicker = false
     @State private var showingAddAiKey = false
-    @State private var showingDownloads = false
 
-    /// On by default once a bucket is connected, so say what it's doing and when it last
-    /// did it — an automatic upload nobody can see is just an unexplained network bill.
-    private var autoBackupHint: String {
-        guard autoBackup.isEnabled else {
-            return "Off — your playlists, edits and transcripts stay on this device until you back up by hand."
+    /// Says which of the four reasons an iCloud folder can be unusable applies, because
+    /// they need four different things said — and the explanation *replaces* the location
+    /// line rather than piling up next to it.
+    private var cloudDriveHint: String {
+        switch autoBackup.cloudDriveStatus {
+        case .notEntitled: return "This build of the app isn't signed for iCloud."
+        case .driveOff: return "iCloud Drive is off on this device."
+        case .notReady: return "Setting up your iCloud folder — try again shortly."
+        case .ready: break
         }
-        if let error = autoBackup.lastError {
-            return "Last automatic backup failed: \(error)"
+        if let error = autoBackup.cloudDriveError {
+            return "Last backup to iCloud failed: \(error)"
         }
-        guard let lastBackupAt = autoBackup.lastBackupAt else {
-            return "Uploads your app data to the connected bucket when it changes, at most every 15 minutes. Your episode files are never uploaded."
+        let location = "Files → iCloud Drive → BYO Podcasts"
+        guard autoBackup.isCloudDriveEnabled else {
+            return "\(location). Switch on to keep a copy that outlives deleting the app — a reinstall puts it back on its own."
         }
-        return "Uploaded when it changes, at most every 15 minutes. Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))."
+        guard let lastBackupAt = autoBackup.lastCloudDriveBackupAt else { return location }
+        return "\(location) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private func loadDemoData() {
@@ -49,85 +54,15 @@ struct SettingsSectionView: View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Settings").sectionTitle().padding(.horizontal)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("LOCAL FOLDERS").sectionHeading()
-                Button {
-                    showingFolderPicker = true
-                } label: {
-                    if isScanning {
-                        Label {
-                            Text("Scanning…")
-                        } icon: {
-                            ProgressView()
-                        }
-                    } else {
-                        Label("Scan local folder for podcasts", systemImage: "folder.badge.plus")
-                    }
+            // One line, no heading: it's a single choice out of three, and it says what
+            // it is. "System" follows the device, and every label switches as you pick.
+            Picker("Language", selection: $language.language) {
+                ForEach(AppLanguage.allCases) { option in
+                    Text(option.displayName).tag(option)
                 }
-                .disabled(isScanning)
-                .fileImporter(
-                    isPresented: $showingFolderPicker,
-                    allowedContentTypes: [.folder]
-                ) { result in
-                    Task { await handleFolderPick(result) }
-                }
-
-                ForEach(localProviders) { record in
-                    HStack {
-                        Label(record.label, systemImage: "folder")
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { record.isActive },
-                            set: { _ in viewModel.toggleActive(record) }
-                        ))
-                        .labelsHidden()
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            viewModel.delete(record)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-                if let importMessage {
-                    Text(importMessage)
-                        .sectionHint()
-                }
-                Text("Scans a folder you pick on this device for audio files — they're read in place, never copied.")
-                    .sectionHint()
             }
+            .pickerStyle(.menu)
             .padding(.horizontal)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("LANGUAGE").sectionHeading()
-                // A menu-style picker: one row showing the current choice, options on tap.
-                // Three of them don't warrant a pushed page.
-                Picker("Language", selection: $language.language) {
-                    ForEach(AppLanguage.allCases) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                }
-                .pickerStyle(.menu)
-                Text("Applies right away. \"System\" follows your device's language setting.")
-                    .sectionHint()
-            }
-            .padding(.horizontal)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("STORAGE").sectionHeading()
-                Button {
-                    showingDownloads = true
-                } label: {
-                    Label("Downloaded Episodes", systemImage: "arrow.down.circle")
-                }
-                Text("Episodes download automatically the first time you play them, for offline replay. Remove one here to free up space — it re-downloads next time you play it.")
-                    .sectionHint()
-            }
-            .padding(.horizontal)
-            .sheet(isPresented: $showingDownloads) {
-                NavigationStack { DownloadsView() }
-            }
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -146,11 +81,18 @@ struct SettingsSectionView: View {
                     .sectionHint()
                 ForEach(Array(viewModel.aiKeys.enumerated()), id: \.element.id) { index, key in
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(key.vendor.displayName).font(.subheadline)
-                            Text("\(key.requestCount) request\(key.requestCount == 1 ? "" : "s") sent")
-                                .sectionRowSecondary()
+                        // The key's own page: what it's been asked, what came back, and
+                        // what that cost. A request count alone explains nothing.
+                        NavigationLink {
+                            AiKeyDetailView(key: key)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(key.vendor.displayName).font(.subheadline)
+                                Text("\(key.requestCount) request\(key.requestCount == 1 ? "" : "s") sent")
+                                    .sectionRowSecondary()
+                            }
                         }
+                        .buttonStyle(.plain)
                         Spacer()
                         if viewModel.aiKeys.count > 1 {
                             Button { viewModel.moveAiKey(key, direction: -1) } label: { Image(systemName: "chevron.up") }
@@ -186,6 +128,23 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("SYNC & BACKUP").sectionHeading()
 
+                // A destination is one switch and nothing else: on means every change
+                // goes there, off means none do. iCloud comes first — it's the only one
+                // with nothing to set up.
+                Toggle(isOn: $autoBackup.isCloudDriveEnabled) {
+                    Label("iCloud Drive", systemImage: "icloud")
+                }
+                .disabled(!autoBackup.cloudDriveStatus.isReady)
+                Text(cloudDriveHint)
+                    .sectionHint()
+                // Directions only for the one state the listener can act on, spelled out
+                // in full — the setting is four levels down, under their own name.
+                if autoBackup.cloudDriveStatus == .driveOff {
+                    Text("Settings → your name → iCloud → iCloud Drive → turn on")
+                        .sectionHint()
+                        .foregroundStyle(Color.accentColor)
+                }
+
                 Button {
                     exportDocument = viewModel.makeExportDocument()
                     showingExportPicker = exportDocument != nil
@@ -210,60 +169,81 @@ struct SettingsSectionView: View {
                     }
                 }
 
-                Button {
-                    viewModel.backupToRemote()
-                } label: {
-                    Label("Backup to Remote Now", systemImage: "arrow.clockwise.icloud")
-                }
-                .disabled(viewModel.isBackupBusy)
-
-                Button {
-                    viewModel.restoreFromRemote()
-                } label: {
-                    Label("Restore from Remote", systemImage: "icloud.and.arrow.down")
-                }
-                .disabled(viewModel.isBackupBusy)
-
-                if !viewModel.hasActiveRemoteProvider {
-                    Text("Backup/Restore need an active remote (S3) source — see the Remote tab.")
-                        .sectionHint()
-                }
-
-                Toggle("Keep the bucket up to date", isOn: $autoBackup.isEnabled)
-                    .disabled(!viewModel.hasActiveRemoteProvider)
-                Text(autoBackupHint)
-                    .sectionHint()
-                if viewModel.isBackupBusy {
-                    ProgressView()
-                } else if let backupStatusMessage = viewModel.backupStatusMessage {
+                if let backupStatusMessage = viewModel.backupStatusMessage {
                     Text(backupStatusMessage)
                         .sectionHint()
                 }
-                Text("Export/Backup save your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — as a .zip (not your episode files, not credentials). Restoring re-links playlist tracks that are already synced on this device; anything not synced yet is skipped until the next sync.")
+                Text("Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync.")
                     .sectionHint()
             }
             .padding(.horizontal)
 
+            // Both ways of putting episodes in the library that aren't a remote source —
+            // your own files, or the samples — as two links, not two sections.
             VStack(alignment: .leading, spacing: 8) {
+                Text("ADD EPISODES").sectionHeading()
+
+                Button {
+                    showingFilePicker = true
+                } label: {
+                    if isScanning {
+                        Label { Text("Importing…") } icon: { ProgressView() }
+                    } else {
+                        Text("Import podcasts from Files")
+                    }
+                }
+                .disabled(isScanning)
+                .fileImporter(
+                    isPresented: $showingFilePicker,
+                    allowedContentTypes: [.audio, .folder],
+                    allowsMultipleSelection: true
+                ) { result in
+                    Task { await handleFilePick(result) }
+                }
+                Text("Pick episodes, or a whole folder — read where they sit, never copied.")
+                    .sectionHint()
+
+                // Only what's already here: the rows exist to switch a source off or throw
+                // it away, and there's nothing to say when there are none.
+                ForEach(localProviders) { record in
+                    HStack {
+                        Text(record.label)
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { record.isActive },
+                            set: { _ in viewModel.toggleActive(record) }
+                        ))
+                        .labelsHidden()
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            viewModel.delete(record)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+                if let importMessage {
+                    Text(importMessage)
+                        .sectionHint()
+                }
+
                 HStack(spacing: 12) {
                     Button {
                         if hasDemoData { showingResetConfirmation = true } else { loadDemoData() }
                     } label: {
-                        Label(
-                            hasDemoData ? "Reset Sample Library" : "Load Sample Library",
-                            systemImage: hasDemoData ? "arrow.counterclockwise" : "square.and.arrow.down"
-                        )
+                        Text(hasDemoData ? "Reset sample library" : "Load sample library")
                     }
-                    // Sits beside it rather than in its own group: same sample data,
-                    // opposite intent — put it back, or be rid of it.
+                    // Beside it rather than under: same sample data, opposite intent —
+                    // put it back, or be rid of it.
                     if hasDemoData {
-                        Button("Remove sample library", role: .destructive) {
+                        Button("Remove", role: .destructive) {
                             showingRemoveDemoConfirmation = true
                         }
                         .sectionRowSecondary()
                     }
                 }
-                Text("A few sample shows, speakers, and playlists with three short clips, for looking around before you connect anything. Never loaded on its own — nothing appears in your library that you didn't put there. Removing it leaves only what you've synced.")
+                Text("A few sample shows and clips to look around with — never loaded on its own.")
                     .sectionHint()
             }
             .padding(.horizontal)
@@ -297,20 +277,31 @@ struct SettingsSectionView: View {
         }
     }
 
-    private func handleFolderPick(_ result: Result<URL, Error>) async {
-        switch result {
-        case .failure(let error):
-            importMessage = error.localizedDescription
-        case .success(let folderURL):
-            isScanning = true
-            defer { isScanning = false }
-
-            guard let record = viewModel.addLocalProvider(folderURL: folderURL) else {
-                importMessage = "Couldn't add that folder."
-                return
-            }
-            let result = try? await SyncEngine().sync(providerRecord: record)
-            importMessage = "Found \(result?.totalFiles ?? 0) file\(result?.totalFiles == 1 ? "" : "s")."
+    /// One picker for both: a folder becomes a source of its own, while loose episodes all
+    /// join the single "Files" source, so importing twice doesn't split a library in two.
+    private func handleFilePick(_ result: Result<[URL], Error>) async {
+        guard case .success(let urls) = result else {
+            if case .failure(let error) = result { importMessage = error.localizedDescription }
+            return
         }
+        isScanning = true
+        defer { isScanning = false }
+
+        let folders = urls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+        let files = urls.filter { !folders.contains($0) }
+        var records = folders.compactMap { viewModel.addLocalProvider(folderURL: $0) }
+        if !files.isEmpty, let record = viewModel.addPickedFiles(files) {
+            records.append(record)
+        }
+        guard !records.isEmpty else {
+            importMessage = "Couldn't read what you picked."
+            return
+        }
+
+        var found = 0
+        for record in records {
+            found += (try? await SyncEngine().sync(providerRecord: record))?.totalFiles ?? 0
+        }
+        importMessage = "Found \(found) file\(found == 1 ? "" : "s")."
     }
 }

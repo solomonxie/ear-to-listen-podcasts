@@ -65,9 +65,14 @@ Home's shelves/search, Remote and Settings all read the real DB/Provider layers
 (`Sources/DB/README.md`, `Sources/Providers/README.md`) — sample content flows
 through the same tables, so it appears exactly as a synced source would.
 
-Connecting an S3 bucket also turns on automatic backup of the app's own data —
-playlists, hand edits and their images, transcripts and corrections — into that
-same bucket (`Sources/Backup/README.md`). Episode audio is never uploaded.
+The app's own data — playlists, hand edits and their images, transcripts and
+corrections — is backed up automatically to either or both of two places
+(`Sources/Backup/README.md`): the listener's own iCloud Drive (one switch in
+Settings, nothing to set up, visible in Files under "BYO Podcasts") and the
+connected S3 bucket (a switch on that connection's row). Episode audio is never
+uploaded. Deleting and reinstalling the app puts the data back by itself on
+first launch, and the parts that need the episode files re-link themselves as
+the next sync fetches them.
 
 ## Quickstart
 
@@ -87,7 +92,11 @@ xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts 
 ## Release (TestFlight)
 
 Signing is automatic; set your Apple Developer Team ID for device/archive
-builds (simulator builds don't need one):
+builds (simulator builds don't need one). iCloud backup needs the
+`iCloud.com.example.byopo` container entitlement
+(`Sources/App/BringYourOwnPodcasts.entitlements`), which needs a paid developer
+account — a free-team build still builds and runs, and the iCloud row in
+Settings reports itself unavailable instead of pretending:
 
 ```sh
 DEVELOPMENT_TEAM=YOURTEAMID xcodegen generate

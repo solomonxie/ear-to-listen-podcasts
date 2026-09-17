@@ -12,7 +12,7 @@ enum OpenAIChatClient {
         model: "gpt-4o-mini"
     )
 
-    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> String {
+    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         try await OpenAICompatibleChatClient.runChatCompletion(config: config, apiKey: apiKey, messages: messages)
     }
 }

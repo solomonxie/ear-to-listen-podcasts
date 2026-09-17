@@ -18,16 +18,49 @@ hand-rolled `ZipArchive` — store-only, no compression): `snapshot.json` at
 the root plus any referenced speaker photos under `photos/`, so a photo
 edit survives a reinstall/new-device restore the same as a bio edit does.
 
-`AutoBackup` keeps the remote copy current on its own: switched on when an S3
-connection is added (an explicit "off" is respected), foreground-only like
-`SyncScheduler`, and it uploads only when something changed and at most every
-15 minutes. `markChanged()` is called from `.libraryDidChange` plus the
-transcript paths that don't post it.
+`AutoBackup` keeps those copies current on its own — foreground-only like
+`SyncScheduler`, one archive built per run and shipped to every destination
+that's switched on, only when something changed and at most every 15 minutes.
+`markChanged()` is called from `.libraryDidChange` plus the transcript paths
+that don't post it. Two destinations, each its own switch:
 
-Two front ends, one archive format, wired in `Sources/Screens/Settings`:
+- **iCloud Drive** (`CloudDrive`) — the one with nothing to set up, so it's the
+  default offer, and the one that outlives deleting the app. Archives only,
+  never the live SQLite file: iCloud syncs file-at-a-time and knows nothing
+  about WAL sidecars. One file, `Documents/byo-podcasts-backup.zip`,
+  overwritten every run: the job is surviving a reinstall, not keeping a
+  history, and the folder is document-scope public
+  (`NSUbiquitousContainers`) — somewhere the listener opens in Files, where a
+  pile of dated zips is something to tidy up rather than to restore. A fresh
+  install finds it as an undownloaded placeholder, so the read asks iCloud for
+  it and waits.
+  `CloudDriveStatus` splits "unavailable" into the four causes that need four
+  different things said (`notEntitled` / `driveOff` / `notReady` / `ready`),
+  checking the build's entitlement *before* `ubiquityIdentityToken` — that
+  token needs the iCloud entitlement itself, so in a free-team build it reads
+  nil and is indistinguishable from a signed-out account.
+- **The S3 bucket** — switched on when a connection is added (an explicit "off"
+  is respected), toggled from the connection's own row in `RemoteSectionView`.
+
+Two manual front ends, same archive format, in `Sources/Screens/Settings`:
 - Export/Import: `.fileExporter`/`.fileImporter` — user picks the `.zip` file.
 - Backup/Restore: `S3Provider.uploadBackup`/`downloadBackup` — fixed key in
   the active S3 provider's bucket, no picker.
+
+## Coming Back After a Reinstall
+
+`FirstRunRestore` runs on launch, once, and only onto a library with nothing in
+it: it pulls the newest iCloud archive back and applies it without asking —
+on a first launch nobody has the context to answer "restore from backup?", and
+getting the data back is the point of having taken it. A container that isn't
+ready yet isn't a failure; the flag stays unset and it tries again next launch.
+
+The catch is ordering: a reinstall restores before a single episode has synced,
+so everything keyed to a file — playlist track order, hand edits, transcripts —
+has nothing to attach to yet. `PendingRestore` keeps the archive and re-applies
+it (`BackupApplyScope.needsSyncedTracks`) after every `SyncEngine.sync`, until
+`awaitingSync` reaches zero. That scope deliberately leaves sources, playlists
+and speakers alone, so a playlist deleted since the restore stays deleted.
 
 ## Restore Workflow
 

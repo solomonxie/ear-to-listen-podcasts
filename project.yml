@@ -48,6 +48,14 @@ targets:
           - audio
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        # Makes the app's iCloud folder show up in Files under its own name, so a backup
+        # kept there can actually be got at. A container that syncs but stays hidden is
+        # worse than a local file.
+        NSUbiquitousContainers:
+          iCloud.com.example.byopo:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: BYO Podcasts
+            NSUbiquitousContainerSupportedFolderLevels: Any
         NSSpeechRecognitionUsageDescription: >-
           Transcribes episodes on this device so you can read and correct them.
           Audio stays on your phone.
@@ -60,6 +68,10 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # iCloud backup needs the container entitlement, which needs a paid team — see
+        # the README. Simulator builds still build without one; the iCloud row in
+        # Settings reports itself unavailable rather than pretending.
+        CODE_SIGN_ENTITLEMENTS: Sources/App/BringYourOwnPodcasts.entitlements
         # Simulator builds don't need a team; set DEVELOPMENT_TEAM before archiving for TestFlight.
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}

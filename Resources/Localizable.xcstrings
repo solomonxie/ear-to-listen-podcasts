@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "A few sample shows and clips to look around with — never loaded on its own.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A few sample shows and clips to look around with — never loaded on its own."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "几个示例节目和片段，供你先看看 —— 绝不会自行加载。"
+          }
+        }
+      }
+    },
+    "ADD EPISODES": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ADD EPISODES"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加单集"
+          }
+        }
+      }
+    },
     "AI KEYS": {
       "localizations": {
         "en": {
@@ -193,18 +225,18 @@
         }
       }
     },
-    "Applies right away. \"System\" follows your device's language setting.": {
+    "Auto sync app data to this bucket": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Applies right away. \"System\" follows your device's language setting."
+            "value": "Auto sync app data to this bucket"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "立即生效。“跟随系统”将使用设备的语言设置。"
+            "value": "自动同步应用数据到此存储桶"
           }
         }
       }
@@ -237,6 +269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "备份/恢复需要一个已启用的 S3 存储源 — 见“个人私有云端”。"
+          }
+        }
+      }
+    },
+    "Backup/Restore to a bucket need an active remote source — see Remote, above.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backup/Restore to a bucket need an active remote source — see Remote, above."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份/恢复到存储桶需要一个启用的远程源 —— 见上方「远程」。"
           }
         }
       }
@@ -321,6 +369,22 @@
         }
       }
     },
+    "Clear": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除"
+          }
+        }
+      }
+    },
     "Clear Queue": {
       "localizations": {
         "en": {
@@ -349,6 +413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "清除已同步"
+          }
+        }
+      }
+    },
+    "Clear this key's history?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear this key's history?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除这个密钥的记录？"
           }
         }
       }
@@ -385,6 +465,22 @@
         }
       }
     },
+    "Connect an S3 bucket, or import episodes from Files below, and they appear here as they sync.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect an S3 bucket, or import episodes from Files below, and they appear here as they sync."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接一个 S3 存储桶，或在下方从「文件」导入单集，同步后就会出现在这里。"
+          }
+        }
+      }
+    },
     "Continue Listening": {
       "localizations": {
         "en": {
@@ -397,6 +493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "继续收听"
+          }
+        }
+      }
+    },
+    "Couldn't read what you picked.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't read what you picked."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取你选择的内容。"
           }
         }
       }
@@ -657,6 +769,22 @@
         }
       }
     },
+    "Estimated cost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated cost"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预计花费"
+          }
+        }
+      }
+    },
     "Export Library Data": {
       "localizations": {
         "en": {
@@ -801,6 +929,38 @@
         }
       }
     },
+    "Import podcasts from Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import podcasts from Files"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从「文件」导入播客"
+          }
+        }
+      }
+    },
+    "Importing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importing…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在导入…"
+          }
+        }
+      }
+    },
     "Key prefix (optional)": {
       "localizations": {
         "en": {
@@ -829,22 +989,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "类型"
-          }
-        }
-      }
-    },
-    "LANGUAGE": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "LANGUAGE"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "语言"
           }
         }
       }
@@ -893,6 +1037,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "资料库"
+          }
+        }
+      }
+    },
+    "Load sample library": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load sample library"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载示例库"
           }
         }
       }
@@ -1153,6 +1313,22 @@
         }
       }
     },
+    "Nothing sent with this key yet. It's used to guess episode titles during sync, and to transcribe on playback.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing sent with this key yet. It's used to guess episode titles during sync, and to transcribe on playback."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有用这个密钥发过请求。它用于同步时猜测单集标题，以及播放时转写。"
+          }
+        }
+      }
+    },
     "Now Playing": {
       "localizations": {
         "en": {
@@ -1181,6 +1357,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅使用该 Bucket 中此文件夹下的文件。Region 会自动检测。"
+          }
+        }
+      }
+    },
+    "Only the record of what was sent — the key itself stays.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the record of what was sent — the key itself stays."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只清除发送记录 —— 密钥本身会保留。"
+          }
+        }
+      }
+    },
+    "Pick episodes, or a whole folder — read where they sit, never copied.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick episodes, or a whole folder — read where they sit, never copied."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择单集或整个文件夹 —— 原地读取，绝不复制。"
           }
         }
       }
@@ -1233,6 +1441,22 @@
         }
       }
     },
+    "Recent calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent calls"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近的调用"
+          }
+        }
+      }
+    },
     "Remote": {
       "localizations": {
         "en": {
@@ -1249,6 +1473,22 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        }
+      }
+    },
     "Remove Photo": {
       "localizations": {
         "en": {
@@ -1261,6 +1501,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除照片"
+          }
+        }
+      }
+    },
+    "Reply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reply"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回复"
+          }
+        }
+      }
+    },
+    "Requests": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请求次数"
           }
         }
       }
@@ -1309,6 +1581,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "要重置示例数据吗?"
+          }
+        }
+      }
+    },
+    "Reset sample library": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset sample library"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置示例库"
           }
         }
       }
@@ -1597,6 +1885,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "设置"
+          }
+        }
+      }
+    },
+    "Settings → your name → iCloud → iCloud Drive → turn on": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings → your name → iCloud → iCloud Drive → turn on"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置 → 你的名字 → iCloud → iCloud 云盘 → 打开"
           }
         }
       }
@@ -1997,6 +2301,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "等待中"
+          }
+        }
+      }
+    },
+    "iCloud Drive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud 云盘"
           }
         }
       }

@@ -16,6 +16,9 @@ struct BringYourOwnPodcastsApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // A reinstall gets its data back before anything is shown, without being
+                // asked — on a first launch there's no context for that question.
+                .task { await FirstRunRestore.runIfNeeded() }
                 .environmentObject(playback)
                 .environmentObject(language)
                 // Drives which localization every `Text("…")` resolves to, so the picker

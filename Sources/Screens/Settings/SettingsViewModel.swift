@@ -9,7 +9,6 @@ final class SettingsViewModel: ObservableObject {
     @Published var aiKeyStrategy: AiKeyStrategy = .sequential
     @Published var errorMessage: String?
     @Published var backupStatusMessage: String?
-    @Published var isBackupBusy = false
 
     /// Not private: `AiKeyStore` reads the same Keychain entry to migrate it into the
     /// new multi-key list the first time that's read after this feature shipped.
@@ -97,6 +96,58 @@ final class SettingsViewModel: ObservableObject {
             // aren't rebuilt by a resync.
             AutoBackup.shared.enableForNewRemote()
             AutoBackup.shared.markChanged()
+            load()
+            // Connecting a bucket to a device with nothing on it is the other half of the
+            // reinstall story: the app data may be sitting in that bucket too.
+            Task { await FirstRunRestore.runAfterConnectingRemote() }
+            return record
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Episodes the listener picked one by one out of Files. They all land in a single
+    /// source rather than one per pick, so importing twice doesn't leave two half-full
+    /// entries in the list — and an episode already imported is left as it is, keeping the
+    /// path its track, edits and transcript are keyed by.
+    ///
+    /// `urls` are security-scoped from a `.fileImporter`; access is only needed long
+    /// enough to mint each bookmark.
+    @discardableResult
+    func addPickedFiles(_ urls: [URL]) -> ProviderRecord? {
+        let existing = providers.first {
+            $0.type == LocalFilesProvider.providerType
+                && LocalFilesProvider.entries(in: ProviderManager.shared.settings(for: $0.id) ?? [:]) != nil
+        }
+        let id = existing?.id ?? UUID().uuidString
+        var entries = existing.flatMap { LocalFilesProvider.entries(in: ProviderManager.shared.settings(for: $0.id) ?? [:]) } ?? []
+        var bookmarks = Set(entries.map(\.bookmark))
+
+        for url in urls {
+            let didStartAccess = url.startAccessingSecurityScopedResource()
+            defer { if didStartAccess { url.stopAccessingSecurityScopedResource() } }
+            guard let bookmark = try? url.bookmarkData().base64EncodedString(), !bookmarks.contains(bookmark) else { continue }
+            let path = LocalFileEntry.uniquePath(for: url.lastPathComponent, avoiding: Set(entries.map(\.path)))
+            entries.append(LocalFileEntry(path: path, bookmark: bookmark))
+            bookmarks.insert(bookmark)
+        }
+        guard !entries.isEmpty else { return nil }
+
+        do {
+            try ProviderManager.shared.saveSettings(
+                [LocalFileEntry.settingsKey: try LocalFilesProvider.encode(entries)], forProviderID: id
+            )
+            let record = ProviderRecord(
+                id: id,
+                type: LocalFilesProvider.providerType,
+                label: "Files",
+                configJSON: "",
+                isActive: true,
+                createdAt: existing?.createdAt ?? Date()
+            )
+            try providerStore.upsert(record)
+            ProviderManager.shared.invalidate(providerID: id)
             load()
             return record
         } catch {
@@ -193,7 +244,7 @@ final class SettingsViewModel: ObservableObject {
         let didStartAccess = url.startAccessingSecurityScopedResource()
         defer { if didStartAccess { url.stopAccessingSecurityScopedResource() } }
         do {
-            let result = try backupService.apply(try backupService.unarchive(try Data(contentsOf: url)))
+            let result = try backupService.applyAndKeepWaiting(try Data(contentsOf: url))
             backupStatusMessage = summarize(result)
             load()
         } catch {
@@ -201,39 +252,12 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    func backupToRemote() {
-        guard !isBackupBusy else { return }
-        isBackupBusy = true
-        Task {
-            defer { isBackupBusy = false }
-            do {
-                try await backupService.backupToRemote()
-                backupStatusMessage = "Backed up to remote."
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    func restoreFromRemote() {
-        guard !isBackupBusy else { return }
-        isBackupBusy = true
-        Task {
-            defer { isBackupBusy = false }
-            do {
-                let result = try await backupService.restoreFromRemote()
-                backupStatusMessage = summarize(result)
-                load()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
     private func summarize(_ result: BackupImportResult) -> String {
         var message = "Restored \(result.playlistsImported) playlist\(result.playlistsImported == 1 ? "" : "s")"
-        if result.tracksUnmatched > 0 {
-            message += ", \(result.tracksUnmatched) track\(result.tracksUnmatched == 1 ? "" : "s") not synced yet"
+        // Said rather than swallowed, but said as a wait and not a loss: these land by
+        // themselves once a sync has fetched the episodes they name.
+        if result.awaitingSync > 0 {
+            message += ", \(result.awaitingSync) item\(result.awaitingSync == 1 ? "" : "s") waiting for the next sync"
         }
         return message + "."
     }

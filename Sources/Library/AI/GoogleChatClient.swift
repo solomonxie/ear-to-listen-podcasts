@@ -6,7 +6,7 @@ import Foundation
 enum GoogleChatClient {
     private static let model = "gemini-1.5-flash"
 
-    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> String {
+    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         let systemInstruction = messages
             .filter { $0.role == .system }
             .map(\.content)
@@ -58,7 +58,12 @@ enum GoogleChatClient {
                 }
                 var content: Content
             }
+            struct UsageMetadata: Decodable {
+                var promptTokenCount: Int?
+                var candidatesTokenCount: Int?
+            }
             var candidates: [Candidate]
+            var usageMetadata: UsageMetadata?
         }
         guard
             let decoded = try? JSONDecoder().decode(GenerateContentResponse.self, from: data),
@@ -66,6 +71,10 @@ enum GoogleChatClient {
         else {
             throw AiClientError(code: .unknown, message: "Unexpected response shape from Google.")
         }
-        return text
+        return ChatCompletionResult(
+            text: text, model: model,
+            promptTokens: decoded.usageMetadata?.promptTokenCount,
+            completionTokens: decoded.usageMetadata?.candidatesTokenCount
+        )
     }
 }
