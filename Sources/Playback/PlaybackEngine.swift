@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import MediaPlayer
+import UIKit
 
 @MainActor
 final class PlaybackEngine: ObservableObject {
@@ -12,6 +13,9 @@ final class PlaybackEngine: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var lastError: String?
+    /// Raised when the listener picked an episode themselves, so the root can bring the
+    /// full player up with it.
+    @Published var isPresentingPlayer = false
 
     private let player = AVQueuePlayer()
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -24,6 +28,23 @@ final class PlaybackEngine: ObservableObject {
         configureAudioSession()
         configureRemoteCommands()
         observeTime()
+        observeLibraryChanges()
+    }
+
+    /// An episode can be renamed or re-arted (`EpisodeEditView`) while it's playing, so
+    /// re-read the rows behind the player — title, artwork and lock screen follow the
+    /// edit, playback itself is left alone.
+    private func observeLibraryChanges() {
+        NotificationCenter.default.addObserver(forName: .libraryDidChange, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.reloadTrackMetadata() }
+        }
+    }
+
+    private func reloadTrackMetadata() {
+        queue = queue.map { ((try? trackStore.find(id: $0.id)) ?? nil) ?? $0 }
+        guard let current = currentTrack else { return }
+        currentTrack = queue.first { $0.id == current.id } ?? ((try? trackStore.find(id: current.id)) ?? nil) ?? current
+        if let track = currentTrack { updateNowPlayingInfo(track: track) }
     }
 
     private func configureAudioSession() {
@@ -135,6 +156,16 @@ final class PlaybackEngine: ObservableObject {
         updateNowPlayingPlaybackState()
     }
 
+    /// Starts playback *because someone tapped this episode*, and opens the player with
+    /// it. Deliberately separate from `play`: finishing an episode auto-advances through
+    /// the same `play`, and that must never throw the full player over whatever you were
+    /// doing. Five list screens called `play` directly and only two of them opened the
+    /// player, so tapping an episode inside an album looked like nothing happened.
+    func open(track: Track, queue: [Track]) {
+        play(track: track, queue: queue)
+        isPresentingPlayer = true
+    }
+
     func seek(to time: TimeInterval) {
         player.seek(to: CMTime(seconds: time, preferredTimescale: 600))
     }
@@ -200,6 +231,10 @@ final class PlaybackEngine: ObservableObject {
 
     private func updateNowPlayingInfo(track: Track) {
         var info: [String: Any] = [MPMediaItemPropertyTitle: track.title]
+        if let url = ImageFileStore.artwork.url(for: track.artworkFileName),
+           let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        }
         info[MPMediaItemPropertyPlaybackDuration] = duration
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info

@@ -19,6 +19,13 @@ final class HomeLibraryViewModel: ObservableObject {
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
 
+    /// Nothing synced and no sample library loaded — a fresh install, where shelves of
+    /// empty headings would read as a broken screen rather than an empty one.
+    var isEmpty: Bool {
+        tracks.isEmpty && albums.isEmpty && artists.isEmpty
+            && shows.isEmpty && topics.isEmpty && playlists.isEmpty
+    }
+
     func refresh() async {
         tracks = (try? trackStore.all()) ?? []
         recentTracks = (try? trackStore.recentlyPlayed()) ?? []

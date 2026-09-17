@@ -25,7 +25,14 @@ struct DownloadsView: View {
             } else {
                 ForEach(entries, id: \.track.id) { entry in
                     HStack {
-                        Text(entry.track.title).lineLimit(1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.track.title).lineLimit(1)
+                            Text(TrackRow.pathHint(for: entry.track))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                        }
                         Spacer()
                         Text(ByteCountFormatter.string(fromByteCount: entry.sizeBytes, countStyle: .file))
                             .font(.caption)

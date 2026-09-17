@@ -54,7 +54,9 @@ struct S3Provider: CloudProvider {
         let secretAccessKey = try setting("secretAccessKey")
         let region = try setting("region")
         bucket = try setting("bucket")
-        keyPrefix = config.settings["keyPrefix"].flatMap { $0.isEmpty ? nil : $0 }
+        // Normalized on read as well as on save, so connections stored before folders were
+        // required (a prefix with no trailing slash) start behaving like folders too.
+        keyPrefix = S3FolderPath.normalized(config.settings["keyPrefix"])
 
         let identity = AWSCredentialIdentity(accessKey: accessKeyId, secret: secretAccessKey)
         let resolver = StaticAWSCredentialIdentityResolver(identity)
@@ -105,6 +107,47 @@ struct S3Provider: CloudProvider {
         return files
     }
 
+    /// One folder level, asked of S3 directly: `delimiter: "/"` makes it return immediate
+    /// subfolders as `commonPrefixes` and only the keys sitting in this folder, instead of
+    /// every key underneath it. That's what makes live browsing affordable — the default
+    /// implementation would pull the whole subtree back just to show one level of it.
+    func listDirectory(atFolder folderID: String?) async throws -> (folders: [String], files: [CloudFile]) {
+        let prefix = S3FolderPath.normalized(folderID) ?? keyPrefix ?? ""
+        var folders: [String] = []
+        var files: [CloudFile] = []
+        var continuationToken: String?
+        repeat {
+            let output = try await client.listObjectsV2(input: ListObjectsV2Input(
+                bucket: bucket,
+                continuationToken: continuationToken,
+                delimiter: "/",
+                prefix: prefix
+            ))
+            for common in output.commonPrefixes ?? [] {
+                guard let path = common.prefix, path != prefix else { continue }
+                // Whole key, minus the trailing slash: that's what gets passed back in to
+                // list the next level down.
+                folders.append(String(path.dropLast(path.hasSuffix("/") ? 1 : 0)))
+            }
+            for object in output.contents ?? [] {
+                // A folder created through the console is a zero-byte key ending in "/" —
+                // that's the folder itself, not a file in it.
+                guard let key = object.key, key != prefix, !key.hasSuffix("/") else { continue }
+                files.append(CloudFile(
+                    id: key,
+                    name: (key as NSString).lastPathComponent,
+                    path: key,
+                    sizeBytes: object.size.map(Int64.init),
+                    mimeType: nil,
+                    modifiedAt: object.lastModified,
+                    contentHash: unquoted(object.eTag)
+                ))
+            }
+            continuationToken = (output.isTruncated ?? false) ? output.nextContinuationToken : nil
+        } while continuationToken != nil
+        return (folders.sorted(), files.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
+    }
+
     func metadata(forFileID fileID: String) async throws -> CloudFile {
         let output = try await client.headObject(input: HeadObjectInput(bucket: bucket, key: fileID))
         return CloudFile(
@@ -140,22 +183,43 @@ struct S3Provider: CloudProvider {
         }
     }
 
-    /// Fixed key so "Backup to Remote"/"Restore from Remote" don't need a picker; `.json`
-    /// keeps it out of `SyncEngine`'s audio-extension listing filter, so it never shows up
-    /// as a track.
-    private var backupKey: String { (keyPrefix ?? "") + "byop-backup.json" }
+    /// Fixed key so "Backup to Remote"/"Restore from Remote" don't need a picker. Tucked
+    /// into a dot-folder so the app's own files stay clear of the user's, and named for
+    /// what it actually is — a zip.
+    private var backupKey: String { (keyPrefix ?? "") + ".byop/library-backup.zip" }
 
-    func uploadBackup(_ data: Data) async throws {
-        _ = try await client.putObject(input: PutObjectInput(body: .data(data), bucket: bucket, contentType: "application/json", key: backupKey))
+    /// The original name: a zip called `.json`, chosen only so it would fall outside the
+    /// old extension-based "is this an episode" filter. `FileKind` decides that properly
+    /// now, so the name no longer has to lie — but backups already sitting in buckets do,
+    /// and they still have to restore.
+    private var legacyBackupKey: String { (keyPrefix ?? "") + "byop-backup.json" }
+
+    var isWritable: Bool { true }
+
+    /// `path` is a whole key, as `listFiles` hands them out — not relative to `keyPrefix`.
+    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+        _ = try await client.putObject(input: PutObjectInput(
+            body: .data(data), bucket: bucket, contentType: contentType, key: path
+        ))
     }
 
-    /// `nil` means no backup has been made yet, not an error.
+    func uploadBackup(_ data: Data) async throws {
+        _ = try await client.putObject(input: PutObjectInput(
+            body: .data(data), bucket: bucket, contentType: "application/zip", key: backupKey
+        ))
+    }
+
+    /// `nil` means no backup has been made yet, not an error. Falls back to the legacy key
+    /// so a backup written by an older build still restores.
     func downloadBackup() async throws -> Data? {
-        do {
-            let output = try await client.getObject(input: GetObjectInput(bucket: bucket, key: backupKey))
-            return try await output.body?.readData()
-        } catch let error as AWSServiceError where error.errorCode == "NoSuchKey" {
-            return nil
+        for key in [backupKey, legacyBackupKey] {
+            do {
+                let output = try await client.getObject(input: GetObjectInput(bucket: bucket, key: key))
+                if let data = try await output.body?.readData() { return data }
+            } catch let error as AWSServiceError where error.errorCode == "NoSuchKey" {
+                continue
+            }
         }
+        return nil
     }
 }

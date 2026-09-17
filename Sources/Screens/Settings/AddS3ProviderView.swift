@@ -9,6 +9,7 @@ struct AddS3ProviderView: View {
     @State private var bucket = ""
     @State private var keyPrefix = ""
     @State private var pastedBlock = ""
+    @State private var isPasting = false
     @State private var isValidating = false
     @State private var validationError: String?
 
@@ -21,25 +22,6 @@ struct AddS3ProviderView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Paste connection details") {
-                    TextEditor(text: $pastedBlock)
-                        .font(.footnote.monospaced())
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .frame(minHeight: 96)
-                        .overlay(alignment: .topLeading) {
-                            if pastedBlock.isEmpty {
-                                Text("bucket: my-bucket\nprefix: podcasts/\naccess_key_id: AKIA…\nsecret_access_key: …")
-                                    .font(.footnote.monospaced())
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.top, 8)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                    Text("Fills the fields below as you paste. `:` or `=`, any spelling of the key names. Region is still detected automatically.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
                 if !existingS3Providers.isEmpty {
                     Section("Fill from an existing connection") {
                         ForEach(existingS3Providers) { record in
@@ -57,22 +39,53 @@ struct AddS3ProviderView: View {
                         }
                     }
                 }
-                Section("S3 Bucket") {
-                    TextField("Bucket name", text: $bucket)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    TextField("Folder (key prefix)", text: $keyPrefix)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    TextField("Access Key ID", text: $accessKeyId)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    SecureField("Secret Access Key", text: $secretAccessKey)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    Text("Only files under this folder in the bucket are used. Region is detected automatically.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                Section {
+                    if isPasting {
+                        TextEditor(text: $pastedBlock)
+                            .font(.footnote.monospaced())
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .frame(minHeight: 96)
+                            .overlay(alignment: .topLeading) {
+                                if pastedBlock.isEmpty {
+                                    Text("bucket: my-bucket\nfolder: podcasts/\naccess_key_id: AKIA…\nsecret_access_key: …")
+                                        .font(.footnote.monospaced())
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.top, 8)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                        Text("`:` or `=`, any spelling of the key names. Fills the fields as you paste. Region is still detected automatically.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        TextField("Bucket name", text: $bucket)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        TextField("Folder path (e.g. podcasts/)", text: $keyPrefix)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        TextField("Access Key ID", text: $accessKeyId)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        SecureField("Secret Access Key", text: $secretAccessKey)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        Text("Only files under this folder in the bucket are used. Leave it empty for the whole bucket — a trailing / is added for you. Region is detected automatically.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    HStack(spacing: 4) {
+                        Text("S3 Bucket")
+                        Button(isPasting ? "(back to fields)" : "(paste info to add)") {
+                            pastedBlock = ""
+                            isPasting.toggle()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                    }
+                    .textCase(nil)
                 }
                 if let validationError {
                     Section {
@@ -91,7 +104,16 @@ struct AddS3ProviderView: View {
                         .font(.footnote)
                 }
             }
-            .onChange(of: pastedBlock) { _, text in apply(S3ConnectionDraft.parse(text)) }
+            .onChange(of: pastedBlock) { previous, text in
+                let draft = S3ConnectionDraft.parse(text)
+                guard !draft.isEmpty else { return }
+                apply(draft)
+                // Only a real paste snaps back to the filled fields; typing by hand keeps
+                // the box open so the next line can still be entered.
+                guard text.count - previous.count > 1 else { return }
+                pastedBlock = ""
+                isPasting = false
+            }
             .navigationTitle("Add S3 Bucket")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -112,7 +134,6 @@ struct AddS3ProviderView: View {
     /// Only overwrites what the block actually named, so a half-filled paste doesn't wipe
     /// a field that was typed in by hand.
     private func apply(_ draft: S3ConnectionDraft) {
-        guard !draft.isEmpty else { return }
         validationError = nil
         if let value = draft.bucket { bucket = value }
         if let value = draft.keyPrefix { keyPrefix = value }
@@ -139,6 +160,9 @@ struct AddS3ProviderView: View {
         let accessKeyId = accessKeyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let secretAccessKey = secretAccessKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let bucket = bucket.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Folders only, always slash-terminated — a bare `pod` would otherwise also match
+        // `podcasts-old/`, quietly syncing a folder nobody picked.
+        let keyPrefix = S3FolderPath.normalized(keyPrefix) ?? ""
 
         do {
             let region = try await S3Provider.detectRegion(bucket: bucket)

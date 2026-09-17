@@ -28,32 +28,62 @@ struct CloudProviderConfig: Codable {
 protocol CloudProvider: Sendable {
     var type: String { get }
     func listFiles(inFolder folderID: String?) async throws -> [CloudFile]
+    /// One directory level. Subfolders come back as whole paths, not bare names, so the
+    /// caller can pass one straight back in without knowing where the provider's own root
+    /// sits. Declared here, not just as an extension, so a provider that can ask its
+    /// backend for exactly one level (S3 with a delimiter) is actually the one that runs —
+    /// an extension-only default would be picked statically and quietly recurse.
+    func listDirectory(atFolder folderID: String?) async throws -> (folders: [String], files: [CloudFile])
     func metadata(forFileID fileID: String) async throws -> CloudFile
     func streamURL(forFileID fileID: String) async throws -> URL
     func testConnection() async -> ConnectionTestResult
+
+    /// Whether this source takes writes. Sidecar transcripts are the only thing the app
+    /// ever puts back, and only where they're wanted.
+    ///
+    /// Declared here rather than only in the extension for the same reason
+    /// `listDirectory` is: an extension-only member is dispatched statically, so a
+    /// provider's own implementation would be silently skipped.
+    var isWritable: Bool { get }
+    func upload(_ data: Data, toPath path: String, contentType: String) async throws
+}
+
+enum CloudProviderError: LocalizedError {
+    case readOnly(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .readOnly(let type): return "This \(type) source is read-only, so the transcript stayed on this device."
+        }
+    }
 }
 
 extension CloudProvider {
-    /// One directory level: immediate subfolder names and files directly in `folderID`.
-    /// Derived from `listFiles`'s recursive listing since providers don't expose a
-    /// delimiter-aware listing of their own.
+    var isWritable: Bool { false }
+
+    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+        throw CloudProviderError.readOnly(type)
+    }
+
+    /// Fallback for providers with no one-level listing of their own: derive it from the
+    /// recursive one.
     func listDirectory(atFolder folderID: String?) async throws -> (folders: [String], files: [CloudFile]) {
         let all = try await listFiles(inFolder: folderID)
         let prefix = folderID.map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
 
-        var folderNames: Set<String> = []
+        var folderPaths: Set<String> = []
         var directFiles: [CloudFile] = []
         for file in all {
             guard file.path.hasPrefix(prefix) else { continue }
             let relative = String(file.path.dropFirst(prefix.count))
             guard !relative.isEmpty else { continue }
             if let slashIndex = relative.firstIndex(of: "/") {
-                folderNames.insert(String(relative[relative.startIndex..<slashIndex]))
+                folderPaths.insert(prefix + relative[relative.startIndex..<slashIndex])
             } else {
                 directFiles.append(file)
             }
         }
-        return (folderNames.sorted(), directFiles)
+        return (folderPaths.sorted(), directFiles)
     }
 }
 

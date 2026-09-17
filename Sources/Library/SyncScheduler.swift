@@ -35,6 +35,9 @@ final class SyncScheduler: ObservableObject {
     }
 
     private func syncDueProviders() async {
+        // Pausing the queue pauses the schedule with it — otherwise the one control that
+        // says "stop syncing" wouldn't stop the syncing that happens on its own.
+        guard !SyncQueuePolicy.isPaused else { return }
         guard let records = try? providerStore.active() else { return }
         let now = Date()
         for record in records {

@@ -15,6 +15,7 @@ struct EpisodeDetailsPane: View {
     @State private var topics: [Topic] = []
     @State private var connectionLabel: String?
     @State private var downloadedBytes: Int64?
+    @State private var showingEdit = false
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -55,6 +56,14 @@ struct EpisodeDetailsPane: View {
                 if !topics.isEmpty {
                     TagRow(names: topics.map(\.name))
                 }
+                Button("Edit Details", systemImage: "pencil") { showingEdit = true }
+                    .font(.footnote)
+            }
+
+            if let notes = track.notes, !notes.isEmpty {
+                DetailCard("Notes") {
+                    Text(notes).font(.footnote).foregroundStyle(.secondary)
+                }
             }
 
             DetailCard("File") {
@@ -70,6 +79,7 @@ struct EpisodeDetailsPane: View {
                 DetailRow("Changed on storage", Self.formatted(track.remoteModifiedAt))
                 DetailRow("Last synced", Self.formatted(track.updatedAt))
                 DetailRow("Last played", Self.formatted(track.lastPlayedAt) ?? "Never")
+                DetailRow("Details edited", Self.formatted(track.metadataEditedAt))
                 DetailRow("Stopped at", track.positionMs.map { Scrubber.formatted(Double($0) / 1000) })
             }
 
@@ -81,6 +91,12 @@ struct EpisodeDetailsPane: View {
         }
         .padding(.horizontal)
         .task(id: playingTrack.id) { await load() }
+        // Saving an edit doesn't change which track is playing, so `task(id:)` won't fire —
+        // this is what puts a new title/speaker/notes on screen right away.
+        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
+            Task { await load() }
+        }
+        .sheet(isPresented: $showingEdit) { EpisodeEditView(track: track) }
     }
 
     private var folder: String? {

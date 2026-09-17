@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A speaker's profile photo (or the person-icon placeholder when there isn't one),
-/// loaded off `SpeakerPhotoStore` by filename. Shared by Home's shelf card, the detail
+/// loaded off `ImageFileStore.speakerPhotos` by filename. Shared by Home's shelf card, the detail
 /// header, and the edit screen's picker so all three show the same thing.
 struct SpeakerAvatar: View {
     let photoFileName: String?
@@ -26,7 +26,7 @@ struct SpeakerAvatar: View {
     }
 
     private func load() {
-        guard let url = SpeakerPhotoStore.url(for: photoFileName), let data = try? Data(contentsOf: url) else {
+        guard let url = ImageFileStore.speakerPhotos.url(for: photoFileName), let data = try? Data(contentsOf: url) else {
             image = nil
             return
         }

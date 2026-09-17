@@ -2,6 +2,29 @@ import XCTest
 @testable import BringYourOwnPodcasts
 
 final class S3ConnectionDraftTests: XCTestCase {
+    /// A folder is the only thing a connection can point at: a bare `pod` would also match
+    /// `podcasts-old/`, so the trailing slash is added rather than asked for again.
+    func testFolderPathsAlwaysEndInASlash() {
+        XCTAssertEqual(S3FolderPath.normalized("podcasts"), "podcasts/")
+        XCTAssertEqual(S3FolderPath.normalized("podcasts/"), "podcasts/")
+        XCTAssertEqual(S3FolderPath.normalized("/podcasts/2019"), "podcasts/2019/")
+        XCTAssertEqual(S3FolderPath.normalized("  podcasts//2019//  "), "podcasts/2019/")
+    }
+
+    /// Empty means the whole bucket, not a folder called "".
+    func testAnEmptyFolderPathIsNil() {
+        XCTAssertNil(S3FolderPath.normalized(nil))
+        XCTAssertNil(S3FolderPath.normalized(""))
+        XCTAssertNil(S3FolderPath.normalized("   "))
+        XCTAssertNil(S3FolderPath.normalized("/"))
+    }
+
+    func testAPastedFolderIsNormalizedAsItLands() {
+        let draft = S3ConnectionDraft.parse("bucket: my-archive\nfolder: podcasts")
+
+        XCTAssertEqual(draft.keyPrefix, "podcasts/")
+    }
+
     func testParsesTheDocumentedBlock() {
         let draft = S3ConnectionDraft.parse("""
             bucket: my-archive

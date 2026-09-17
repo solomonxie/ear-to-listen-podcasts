@@ -6,11 +6,15 @@ import SwiftUI
 /// (frequency, last synced, sync now, sync queue, delete) and the same one-line
 /// storage-stats footer, scoped to that folder.
 ///
-/// Both the listing and the stats come from already-synced local metadata — browsing
-/// never calls out to the provider. The whole connection is listed and queued once when
-/// it's added (`AddS3ProviderView`/`SyncQueueManager.enqueueConnection`); after that only
-/// an explicit "Sync Now" or a scheduled `syncFrequencyMinutes` goes back out for file
-/// headers. Tapping a file plays it directly, same as tapping any other synced episode.
+/// The listing is live: every level asks the provider for that one folder
+/// (`listDirectory`, a delimited S3 request), so what's on screen is what's in the bucket
+/// right now — files added since the last sync included. Only when that call can't be made
+/// (offline, or it errors) does it fall back to already-synced local metadata, and says so.
+/// The stats footer stays local, since it's reporting what this device has synced.
+///
+/// A bucket holds whatever the user keeps there, so only audio is treated as an episode
+/// (`FileKind`). Tapping an episode plays it; tapping a transcript or any other text file
+/// shows its contents; anything else offers its details and nothing more.
 struct RemoteBrowserView: View {
     @State var record: ProviderRecord
     var folder: String?
@@ -21,9 +25,10 @@ struct RemoteBrowserView: View {
     @State private var files: [CloudFile] = []
     @State private var isLoadingListing = true
     @State private var errorMessage: String?
+    @State private var isShowingSyncedFallback = false
     @State private var showingFileInfo: CloudFile?
+    @State private var previewingFile: CloudFile?
     @State private var loadingFileID: String?
-    @State private var isShowingPlayer = false
     @State private var showingQueue = false
 
     @State private var frequency: SyncFrequency
@@ -62,15 +67,22 @@ struct RemoteBrowserView: View {
                     }
                     .listRowSeparator(.hidden)
                 } else {
-                    ForEach(folders, id: \.self) { name in
+                    ForEach(folders, id: \.self) { path in
+                        let name = (path as NSString).lastPathComponent
                         NavigationLink {
-                            RemoteBrowserView(record: record, folder: childPath(name), title: name, viewModel: viewModel)
+                            RemoteBrowserView(record: record, folder: path, title: name, viewModel: viewModel)
                         } label: {
                             Label(name, systemImage: "folder.fill")
                         }
                     }
                     ForEach(files) { file in
                         fileRow(file)
+                    }
+                    if folders.isEmpty, files.isEmpty {
+                        Text(isShowingSyncedFallback
+                             ? "Couldn't reach this source, and nothing here has been synced yet."
+                             : "This folder is empty.")
+                            .foregroundStyle(.secondary)
                     }
                 }
             } footer: {
@@ -80,10 +92,20 @@ struct RemoteBrowserView: View {
                 // a transient qualifier on those same numbers.
                 if !isLoadingListing {
                     HStack(spacing: 4) {
-                        Text(statsSummary).font(.caption)
+                        Text(isShowingSyncedFallback ? "Last synced · \(statsSummary)" : statsSummary)
+                            .font(.caption)
                         if isSyncing || isProviderSyncQueueActive {
-                            ProgressView().controlSize(.small)
-                            Text("Syncing…").font(.caption).foregroundStyle(.secondary)
+                            // Tappable: "Syncing…" is the moment you want to see what's
+                            // actually being worked, and the queue is otherwise two taps
+                            // away in the More menu.
+                            Button { showingQueue = true } label: {
+                                HStack(spacing: 4) {
+                                    ProgressView().controlSize(.small)
+                                    Text("Syncing…").font(.caption)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.accentColor)
                         }
                     }
                 }
@@ -95,36 +117,11 @@ struct RemoteBrowserView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    // Nested rather than inline: seven frequencies would otherwise be most
-                    // of this menu, burying the actions underneath them. Persisting happens
-                    // in the binding's setter, since an `onChange` on a view inside a menu
-                    // only fires while that menu is open.
-                    Menu {
-                        Picker("Sync frequency", selection: Binding(
-                            get: { frequency },
-                            set: { newValue in
-                                frequency = newValue
-                                try? providerStore.updateSyncFrequency(id: record.id, minutes: newValue.minutes)
-                            }
-                        )) {
-                            ForEach(SyncFrequency.allCases) { freq in
-                                Text(freq.displayName).tag(freq)
-                            }
-                        }
-                    } label: {
-                        Label("Sync: \(frequency.shortName)", systemImage: "clock.arrow.circlepath")
-                    }
+                    // Sync Now and the frequency picker used to live here. They're
+                    // decisions about a *connection*, not about the folder you happen to
+                    // have open, so they sit on the source's own row in the Remote
+                    // section — visible without opening anything.
                     Text("Last synced: \(record.lastSyncedAt.map(formattedDate) ?? "Never")")
-                    Button {
-                        Task { await syncNow() }
-                    } label: {
-                        Text(isSyncing ? "Syncing…" : "Sync Now")
-                    }
-                    .disabled(isSyncing)
-                    if let syncMessage {
-                        Text(syncMessage)
-                    }
-                    Divider()
                     Button {
                         showingQueue = true
                     } label: {
@@ -141,15 +138,12 @@ struct RemoteBrowserView: View {
                 }
             }
         }
-        .task { load() }
+        .task { await load() }
         .onAppear { loadStats() }
         .onChange(of: isProviderSyncQueueActive) { wasActive, isActive in
-            // The queue's own jobs are the source of truth for progress; once they drain,
-            // pull the listing and the stats footer back in sync with what actually landed.
-            if wasActive && !isActive {
-                load()
-                loadStats()
-            }
+            // Only the footer's synced numbers depend on the queue — the listing above it
+            // is live and owes the queue nothing.
+            if wasActive && !isActive { loadStats() }
         }
         .confirmationDialog("Delete this connection?", isPresented: $showingDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -162,8 +156,8 @@ struct RemoteBrowserView: View {
         .sheet(item: $showingFileInfo) { file in
             FileInfoSheet(file: file)
         }
-        .sheet(isPresented: $isShowingPlayer) {
-            RealPlayerView()
+        .sheet(item: $previewingFile) { file in
+            FilePreviewSheet(file: file, record: record)
         }
         .sheet(isPresented: $showingQueue) {
             NavigationStack { SyncQueueView() }
@@ -172,12 +166,16 @@ struct RemoteBrowserView: View {
 
     @ViewBuilder
     private func fileRow(_ file: CloudFile) -> some View {
+        let kind = FileKind(path: file.path)
         HStack {
             Button {
-                Task { await play(file) }
+                open(file, kind: kind)
             } label: {
                 HStack {
-                    Label(file.name, systemImage: "waveform")
+                    Label(file.name, systemImage: kind.symbol)
+                        // Only an episode reads as the main event; everything else is
+                        // context, not something the user came here to tap.
+                        .foregroundStyle(kind.isPlayable ? .primary : .secondary)
                     Spacer()
                     if loadingFileID == file.id {
                         ProgressView().controlSize(.small)
@@ -208,29 +206,59 @@ struct RemoteBrowserView: View {
         queueManager.activeProviderIDs.contains(record.id)
     }
 
+    /// Leads with what's actually in the folder right now, because that's what the list
+    /// above it is showing; what this device has synced is the follow-up, not the headline.
+    /// Reading "No episodes synced yet" under a list of files was the old version's fault.
     private var statsSummary: String {
-        guard let stats, stats.count > 0 else { return "No episodes synced yet." }
-        var text = "\(stats.count) episodes synced · \(ByteCountFormatter.string(fromByteCount: stats.totalBytes, countStyle: .file))"
-        if stats.lostCount > 0 {
-            text += " · \(stats.lostCount) missing since last sync"
+        var parts: [String] = []
+        if !files.isEmpty {
+            let bytes = files.compactMap(\.sizeBytes).reduce(Int64(0), +)
+            var here = "\(files.count) file\(files.count == 1 ? "" : "s") here"
+            if bytes > 0 { here += " · \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))" }
+            parts.append(here)
         }
-        return text
+        if !folders.isEmpty {
+            parts.append("\(folders.count) folder\(folders.count == 1 ? "" : "s")")
+        }
+        if let stats, stats.count > 0 {
+            parts.append("\(stats.count) synced")
+            if stats.lostCount > 0 { parts.append("\(stats.lostCount) missing since last sync") }
+        }
+        return parts.isEmpty ? "Nothing in this folder." : parts.joined(separator: " · ")
     }
 
-    private func childPath(_ name: String) -> String {
-        guard let folder, !folder.isEmpty else { return name }
-        return folder.hasSuffix("/") ? folder + name : folder + "/" + name
-    }
-
-    /// Draws this level from already-synced local metadata — browsing never touches the
-    /// provider. The whole bucket is listed once when the connection is added
-    /// (`SyncQueueManager.enqueueConnection`), and after that only an explicit "Sync Now"
-    /// or a scheduled frequency goes back out for file headers, so opening a folder costs
-    /// nothing and works offline.
-    private func load() {
+    /// One listing request for this one folder, straight to the provider. Deliberately
+    /// nothing to do with syncing or the queue: listing keys is cheap and immediate, while
+    /// the queue is about pulling each file's metadata into the library — a different job
+    /// with a different cost. Falls back to synced local rows only when the provider can't
+    /// be reached.
+    private func load() async {
+        isLoadingListing = true
         defer { isLoadingListing = false }
-        guard let listing = try? trackStore.directoryListing(providerID: record.id, pathPrefix: folder) else {
-            errorMessage = "Couldn't read this folder's synced files."
+        do {
+            let provider = try ProviderManager.shared.provider(for: record)
+            let listing = try await provider.listDirectory(atFolder: folder)
+            folders = listing.folders
+            files = listing.files
+            isShowingSyncedFallback = false
+            errorMessage = nil
+            return
+        } catch {
+            // Worth showing: at this level a failure is a credentials/permissions problem
+            // far more often than an empty folder, and silently falling back to local rows
+            // made the two look identical.
+            errorMessage = NetworkMonitor.shared.isConnected
+                ? "Couldn't list this folder: \(describeAWSError(error))"
+                : "You're offline — showing what's already synced."
+        }
+        loadSynced()
+    }
+
+    private func loadSynced() {
+        isShowingSyncedFallback = true
+        guard let listing = try? trackStore.directoryListing(providerID: record.id, pathPrefix: folder ?? rootFolder) else {
+            folders = []
+            files = []
             return
         }
         folders = listing.folders
@@ -244,7 +272,14 @@ struct RemoteBrowserView: View {
     }
 
     private func loadStats() {
-        stats = try? trackStore.stats(forProvider: record.id, pathPrefix: folder)
+        stats = try? trackStore.stats(forProvider: record.id, pathPrefix: folder ?? rootFolder)
+    }
+
+    /// Where this connection starts inside its bucket. The live listing gets this from the
+    /// provider itself; the local fallback and the stats work in whole keys, so they need
+    /// it spelled out.
+    private var rootFolder: String? {
+        S3FolderPath.normalized(ProviderManager.shared.s3Settings(for: record)?["keyPrefix"])
     }
 
     private func syncNow() async {
@@ -254,8 +289,11 @@ struct RemoteBrowserView: View {
             let result = try await SyncEngine().sync(providerRecord: record)
             syncMessage = "Added \(result.added), \(result.lost) missing, \(result.totalFiles) files found."
             record.lastSyncedAt = Date()
+            if result.stoppedAtQueueLimit {
+                syncMessage = (syncMessage ?? "") + " Stopped at the queue limit — sync again to carry on."
+            }
             // Anything new the sync just pulled in is now local, so redraw this level.
-            load()
+            await load()
             loadStats()
         } catch {
             syncMessage = describeAWSError(error)
@@ -268,6 +306,18 @@ struct RemoteBrowserView: View {
 
     /// Plays a file like any other synced episode — importing it first (and persisting
     /// that) if it isn't already known, rather than requiring a sync to happen first.
+    /// Audio plays, text opens, everything else can only be inspected — this app doesn't
+    /// pretend a backup or a cover image is an episode.
+    private func open(_ file: CloudFile, kind: FileKind) {
+        if kind.isPlayable {
+            Task { await play(file) }
+        } else if kind.isReadableAsText {
+            previewingFile = file
+        } else {
+            showingFileInfo = file
+        }
+    }
+
     private func play(_ file: CloudFile) async {
         guard let provider = try? ProviderManager.shared.provider(for: record) else {
             errorMessage = "Couldn't connect to this source."
@@ -285,9 +335,10 @@ struct RemoteBrowserView: View {
             errorMessage = "Couldn't load that file."
             return
         }
-        let knownQueue = files.compactMap { try? trackStore.find(providerID: record.id, filePath: $0.path) }
-        PlaybackEngine.shared.play(track: track, queue: knownQueue.isEmpty ? [track] : knownQueue)
-        isShowingPlayer = true
+        let knownQueue = files
+            .filter { FileKind(path: $0.path).isPlayable }
+            .compactMap { try? trackStore.find(providerID: record.id, filePath: $0.path) }
+        PlaybackEngine.shared.open(track: track, queue: knownQueue.isEmpty ? [track] : knownQueue)
     }
 
     static func formattedSize(_ bytes: Int64) -> String {
@@ -308,12 +359,15 @@ private struct FileInfoSheet: View {
                 if let modifiedAt = file.modifiedAt {
                     LabeledContent("Modified", value: modifiedAt.formatted())
                 }
+                LabeledContent("Kind", value: FileKind(path: file.path).displayName)
                 Section {
-                    Text("Tapping this file plays it directly — if it isn't already synced, it's imported first so future syncs recognize it.")
+                    Text(FileKind(path: file.path).isPlayable
+                         ? "Tapping this file plays it directly — if it isn't already synced, it's imported first so future syncs recognize it."
+                         : "Not an audio file, so it's never synced as an episode. It's listed because it's in this folder.")
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Episode file")
+            .navigationTitle(FileKind(path: file.path).displayName)
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium])

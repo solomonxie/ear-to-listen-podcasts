@@ -28,6 +28,44 @@ final class SyncJobStoreTests: XCTestCase {
         try dbQueue.write { db in try job.save(db) }
     }
 
+    func testTheQueueStopsAcceptingWorkAtItsCeiling() throws {
+        let store = SyncJobStore(dbQueue: try makeDatabase())
+        for index in 0..<3 {
+            try store.enqueue(providerID: "p1", filePath: "a/\(index).mp3", displayName: "\(index).mp3", sizeBytes: 1, capacity: 3)
+        }
+
+        XCTAssertThrowsError(
+            try store.enqueue(providerID: "p1", filePath: "a/4.mp3", displayName: "4.mp3", sizeBytes: 1, capacity: 3)
+        ) { error in
+            XCTAssertTrue(error is SyncQueuePolicy.FullError)
+        }
+        XCTAssertEqual(try store.counts().active, 3)
+    }
+
+    /// Finishing work frees the slot — the ceiling is on what's still waiting, not on how
+    /// much has ever been queued.
+    func testFinishedJobsDontCountTowardsTheCeiling() throws {
+        let dbQueue = try makeDatabase()
+        let store = SyncJobStore(dbQueue: dbQueue)
+        let first = try store.enqueue(providerID: "p1", filePath: "a/1.mp3", displayName: "1.mp3", sizeBytes: 1, capacity: 1)
+        try store.markDone(id: first.id)
+
+        XCTAssertNoThrow(
+            try store.enqueue(providerID: "p1", filePath: "a/2.mp3", displayName: "2.mp3", sizeBytes: 1, capacity: 1)
+        )
+    }
+
+    /// Re-queuing a file already in flight isn't an addition, so it mustn't be refused by
+    /// a queue that's already at its ceiling.
+    func testAFileAlreadyInFlightIsReturnedEvenAtTheCeiling() throws {
+        let store = SyncJobStore(dbQueue: try makeDatabase())
+        let first = try store.enqueue(providerID: "p1", filePath: "a/1.mp3", displayName: "1.mp3", sizeBytes: 1, capacity: 1)
+
+        let again = try store.enqueue(providerID: "p1", filePath: "a/1.mp3", displayName: "1.mp3", sizeBytes: 1, capacity: 1)
+
+        XCTAssertEqual(first.id, again.id)
+    }
+
     func testQueuingTheSameFileTwiceReusesTheJobAlreadyInFlight() throws {
         let store = SyncJobStore(dbQueue: try makeDatabase())
 

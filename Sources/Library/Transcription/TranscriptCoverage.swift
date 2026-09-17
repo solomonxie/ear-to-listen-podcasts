@@ -72,4 +72,23 @@ enum TranscriptCoverage {
         let behind = chunks.filter { $0.end <= playhead }
         return ahead + behind
     }
+
+    /// Whether a window already being worked on is still the one worth spending on.
+    ///
+    /// Drifting forward out of it isn't enough on its own — it's only dropped once the
+    /// playhead has left it by a clear margin *and* a different stretch now wants doing
+    /// first. Without that second half, a playhead parked in an already-transcribed part
+    /// of the episode would keep cancelling the distant window it's waiting on.
+    static func isWorthFinishing(
+        _ window: TimeWindow,
+        in segments: [TranscriptSegment],
+        duration: Double,
+        windowSeconds: Double,
+        playhead: Double
+    ) -> Bool {
+        let grace = windowSeconds
+        guard playhead < window.start - grace || playhead > window.end + grace else { return true }
+        let next = windows(in: segments, duration: duration, windowSeconds: windowSeconds, from: playhead).first
+        return next == nil || next == window
+    }
 }

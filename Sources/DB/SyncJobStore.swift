@@ -8,19 +8,26 @@ struct SyncJobStore {
     /// "Sync Now" over the same listing would otherwise queue every path a second time —
     /// two workers then import the same file at once. Returns the job already in flight
     /// instead. Finished/failed rows don't block a fresh one, so a re-sync still works.
+    ///
+    /// Throws `SyncQueuePolicy.FullError` once `capacity` files are already waiting. The
+    /// count is taken inside the same transaction as the insert, so two callers queueing
+    /// at once can't both see room for the last slot. A file already in flight is returned
+    /// as-is and never counts against the ceiling — that's not an addition.
     @discardableResult
     func enqueue(
         providerID: String, filePath: String, displayName: String, sizeBytes: Int64?,
-        contentHash: String? = nil, remoteModifiedAt: Date? = nil
+        contentHash: String? = nil, remoteModifiedAt: Date? = nil,
+        capacity: Int = SyncQueuePolicy.capacity
     ) throws -> SyncJob {
         try dbQueue.write { db in
             if let existing = try Self.unfinished(providerID: providerID, filePath: filePath).fetchOne(db) {
                 return existing
             }
+            guard try Self.unfinishedCount(db) < capacity else { throw SyncQueuePolicy.FullError() }
             let job = SyncJob(
                 id: UUID().uuidString, providerID: providerID, filePath: filePath, displayName: displayName,
                 sizeBytes: sizeBytes, contentHash: contentHash, remoteModifiedAt: remoteModifiedAt,
-                status: .pending, errorMessage: nil, createdAt: Date(), updatedAt: Date()
+                status: .pending, stage: .queued, errorMessage: nil, createdAt: Date(), updatedAt: Date()
             )
             try job.save(db)
             return job
@@ -33,6 +40,12 @@ struct SyncJobStore {
         try dbQueue.read { db in
             try Self.unfinished(providerID: providerID, filePath: filePath).fetchCount(db) > 0
         }
+    }
+
+    private static func unfinishedCount(_ db: Database) throws -> Int {
+        try SyncJob
+            .filter([SyncJobStatus.pending.rawValue, SyncJobStatus.running.rawValue].contains(Column("status")))
+            .fetchCount(db)
     }
 
     private static func unfinished(providerID: String, filePath: String) -> QueryInterfaceRequest<SyncJob> {
@@ -112,6 +125,10 @@ struct SyncJobStore {
         try update(id: id) { $0.status = .running }
     }
 
+    func markStage(id: String, _ stage: SyncJobStage) throws {
+        try update(id: id) { $0.stage = stage }
+    }
+
     /// A `.running` row can't outlive the process that was working it, so anything still
     /// marked running at launch was orphaned by a kill/crash mid-drain. Put those back in
     /// line — left alone they're worked by nobody, yet still count as active, which reads
@@ -135,7 +152,7 @@ struct SyncJobStore {
 
     /// Re-queues a failed job for another attempt.
     func retry(id: String) throws {
-        try update(id: id) { $0.status = .pending; $0.errorMessage = nil }
+        try update(id: id) { $0.status = .pending; $0.stage = .queued; $0.errorMessage = nil }
     }
 
     private func update(id: String, _ mutate: (inout SyncJob) -> Void) throws {

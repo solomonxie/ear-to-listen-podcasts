@@ -2,10 +2,6 @@ import AVFoundation
 import Foundation
 import GRDB
 
-/// Not private: `SyncQueueManager.enqueueConnection` filters the same way when queuing
-/// a whole connection's files.
-let audioExtensions: Set<String> = ["mp3", "m4a", "aac", "wav", "flac", "aiff", "alac"]
-
 enum SyncFrequency: Int, CaseIterable, Identifiable {
     case manual = 0
     case minutes15 = 15
@@ -54,14 +50,19 @@ struct SyncResult {
     var added: Int
     var lost: Int
     var totalFiles: Int
+    /// The pass stopped early because the queue hit `SyncQueuePolicy.capacity`. What's
+    /// left isn't missing, just not queued yet — the next sync carries on from there.
+    var stoppedAtQueueLimit: Bool = false
 }
 
 enum SyncEngineError: Error, LocalizedError {
     case offline
+    case queuePaused
 
     var errorDescription: String? {
         switch self {
         case .offline: return "You're offline. Connect to the internet to sync your library."
+        case .queuePaused: return "The sync queue is paused. Resume it to sync."
         }
     }
 }
@@ -99,34 +100,52 @@ struct SyncEngine {
     /// still gets a `SyncJob` row around it, so it shows up live in the sync queue exactly
     /// like a queued per-file import would.
     func sync(providerRecord record: ProviderRecord) async throws -> SyncResult {
+        // Pause means pause: a scheduled or manual pass mustn't quietly keep importing
+        // while the queue it reports into is stopped.
+        guard !SyncQueuePolicy.isPaused else { throw SyncEngineError.queuePaused }
         guard NetworkMonitor.shared.isConnected else { throw SyncEngineError.offline }
         let provider = try ProviderManager.shared.provider(for: record)
         let files = try await provider.listFiles(inFolder: nil)
-            .filter { audioExtensions.contains(($0.path as NSString).pathExtension.lowercased()) }
+            .filter { FileKind(path: $0.path).isPlayable }
 
-        var seenPaths: Set<String> = []
+        // Taken from the listing rather than accumulated as the loop goes: what exists
+        // remotely is what was listed, not how far the import got, and this pass can now
+        // stop early (paused, or the queue filled up). Building it as it went would mark
+        // everything past the stopping point as lost.
+        let seenPaths = Set(files.map(\.path))
         var added = 0
+        var stoppedAtQueueLimit = false
         for file in files {
-            seenPaths.insert(file.path)
+            // Pausing mid-pass stops it where it stands rather than letting the rest of a
+            // long listing run to completion.
+            if SyncQueuePolicy.isPaused { break }
             let existing = try? trackStore.find(providerID: record.id, filePath: file.path)
             guard existing == nil || existing!.isLost || hasChanged(existing!, file) else { continue }
             // Already queued (adding a connection queues the whole listing) — let the
             // drain loop have it rather than importing the same file twice at once.
             if (try? jobStore.hasUnfinished(providerID: record.id, filePath: file.path)) == true { continue }
 
-            let job = try? jobStore.enqueue(
-                providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
-                contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt
-            )
-            if let job { try? jobStore.markRunning(id: job.id) }
+            let job: SyncJob
+            do {
+                job = try jobStore.enqueue(
+                    providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
+                    contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt
+                )
+            } catch {
+                // The queue ceiling. Stop here instead of hammering it with every remaining
+                // file — the rest come in on the next sync.
+                stoppedAtQueueLimit = true
+                break
+            }
+            try? jobStore.markRunning(id: job.id)
             NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
             do {
-                if try await importFileIfNeeded(file, providerRecord: record, provider: provider) {
+                if try await importFileIfNeeded(file, providerRecord: record, provider: provider, jobID: job.id) {
                     added += 1
                 }
-                if let job { try? jobStore.markDone(id: job.id) }
+                try? jobStore.markDone(id: job.id)
             } catch {
-                if let job { try? jobStore.markFailed(id: job.id, error: error.localizedDescription) }
+                try? jobStore.markFailed(id: job.id, error: error.localizedDescription)
             }
             NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
         }
@@ -134,14 +153,32 @@ struct SyncEngine {
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
         try providerStore.updateLastSynced(id: record.id, at: Date())
 
-        return SyncResult(added: added, lost: lost, totalFiles: files.count)
+        return SyncResult(
+            added: added, lost: lost, totalFiles: files.count, stoppedAtQueueLimit: stoppedAtQueueLimit
+        )
     }
 
     /// Imports one already-listed file if not yet known locally (or refreshes its
     /// size/hash/lost state if it's changed since); shared by the whole-bucket `sync`
     /// above and the per-file sync queue. Returns whether a new track was added.
     @discardableResult
-    func importFileIfNeeded(_ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider) async throws -> Bool {
+    func importFileIfNeeded(
+        _ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider, jobID: String? = nil
+    ) async throws -> Bool {
+        /// Reported per stage rather than per file, so the queue can say what's slow —
+        /// reading tags off a remote file and waiting on an AI call take very different
+        /// amounts of time and look identical otherwise.
+        func stage(_ stage: SyncJobStage) {
+            guard let jobID else { return }
+            try? jobStore.markStage(id: jobID, stage)
+            NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
+        }
+
+        // The caller usually filters already, but this is the one door every episode comes
+        // through — a backup or a cover image reaching it would become a silent, unplayable
+        // "episode" that then syncs forever.
+        guard FileKind(path: file.path).isPlayable else { return false }
+
         if let existing = try trackStore.find(providerID: record.id, filePath: file.path) {
             if existing.isLost || hasChanged(existing, file) {
                 try trackStore.refresh(
@@ -152,7 +189,9 @@ struct SyncEngine {
             return false
         }
 
+        stage(.readingTags)
         let metadata = await extractMetadata(provider: provider, fileID: file.path)
+        stage(.askingAI)
         let guess = await contentAnalyzer.analyze(
             filePath: file.path, title: metadata.title, artist: metadata.artist, album: metadata.album
         )
@@ -180,6 +219,7 @@ struct SyncEngine {
             isLost: false,
             updatedAt: Date()
         )
+        stage(.saving)
         try trackStore.upsert(track, artistName: artistName, albumName: albumName)
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
         return true

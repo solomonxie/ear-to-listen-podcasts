@@ -8,6 +8,16 @@ struct RealPlayerView: View {
     @State private var showingUpNext = false
     @State private var showingAddToPlaylist = false
     @State private var artist: Artist?
+    /// Whether the transcript is still following playback. A manual scroll turns it off —
+    /// auto-scroll yanking the page back while someone is reading is the single most
+    /// hostile thing this screen can do.
+    @State private var isFollowingTranscript = true
+    /// Whether the big transport has scrolled out of sight. The docked bar is a stand-in
+    /// for it, so showing both at once is just clutter.
+    @State private var isTransportOffscreen = false
+
+    private static let scrollSpace = "player.scroll"
+    @ObservedObject private var transcript = LiveTranscript.shared
     @State private var album: Album?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -27,35 +37,23 @@ struct RealPlayerView: View {
                     // and transport simply scroll away, which is also what makes the
                     // transcript's self-scrolling read like lyrics.
                     ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(spacing: 20) {
-                                artwork(for: track)
-                                titles(for: track)
-                                Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
-                                    .padding(.horizontal)
-                                transport
-                                if let lastError = engine.lastError {
-                                    Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
+                        page(for: track, proxy: proxy)
+                            // Any deliberate drag hands control to the reader.
+                            // `simultaneous` so it observes the scroll rather than
+                            // competing with it.
+                            .simultaneousGesture(
+                                DragGesture(minimumDistance: 12).onChanged { _ in
+                                    if tab == .transcript { isFollowingTranscript = false }
                                 }
-                                Picker("View", selection: $tab) {
-                                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                                }
-                                .pickerStyle(.segmented)
-                                .padding(.horizontal)
-
-                                switch tab {
-                                case .details:
-                                    EpisodeDetailsPane(playingTrack: track)
-                                case .transcript:
-                                    TranscriptPane(currentTime: engine.currentTime, scrollProxy: proxy) { engine.seek(to: $0) }
-                                }
-                            }
-                            .padding(.vertical)
-                        }
+                            )
+                            .overlay(alignment: .bottom) { followAgainPill(proxy) }
                     }
                     // Pinned: the page is now arbitrarily long, and Up Next shouldn't be
                     // a scroll away at the bottom of a 40-minute transcript.
-                    .safeAreaInset(edge: .bottom) { bottomBar }
+                    .safeAreaInset(edge: .bottom) {
+                        if isTransportOffscreen { bottomBar.transition(.move(edge: .bottom)) }
+                    }
+                    .animation(.easeInOut(duration: 0.2), value: isTransportOffscreen)
                     .task(id: track.id) {
                         artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
                         album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
@@ -68,6 +66,25 @@ struct RealPlayerView: View {
             .navigationTitle("Now Playing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Not in the docked bar: that bar now appears only once the transport has
+                // scrolled away, and these two must be reachable wherever you are.
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button {
+                            showingUpNext = true
+                        } label: {
+                            Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))",
+                                  systemImage: "list.bullet")
+                        }
+                        Button {
+                            showingAddToPlaylist = true
+                        } label: {
+                            Label("Add to Playlist", systemImage: "text.badge.plus")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Close") { dismiss() }
                 }
@@ -83,17 +100,63 @@ struct RealPlayerView: View {
         }
     }
 
+    /// Split out of `body` purely so the type-checker can cope — it timed out once the
+    /// transcript pane grew a binding and the page grew an overlay.
+    private func page(for track: Track, proxy: ScrollViewProxy) -> some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                artwork(for: track)
+                titles(for: track)
+                Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
+                    .padding(.horizontal)
+                transport
+                    .background { transportVisibilityProbe }
+                if let lastError = engine.lastError {
+                    Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
+                }
+                Picker("View", selection: $tab) {
+                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                pane(for: track, proxy: proxy)
+            }
+            .padding(.vertical)
+        }
+        .coordinateSpace(name: Self.scrollSpace)
+    }
+
+    @ViewBuilder
+    private func pane(for track: Track, proxy: ScrollViewProxy) -> some View {
+        switch tab {
+        case .details:
+            EpisodeDetailsPane(playingTrack: track)
+        case .transcript:
+            TranscriptPane(
+                currentTime: engine.currentTime,
+                scrollProxy: proxy,
+                isFollowing: $isFollowingTranscript
+            ) { engine.seek(to: $0) }
+        }
+    }
+
     private func artwork(for track: Track) -> some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(LibraryArt.color(for: track.id).gradient)
+        ArtworkTile(track: track, cornerRadius: 16, symbolSize: 64)
             .frame(height: 220)
-            .overlay { Image(systemName: LibraryArt.symbol(for: track.id)).font(.system(size: 64)).foregroundStyle(.white) }
             .padding(.horizontal)
     }
 
     private func titles(for track: Track) -> some View {
         VStack(spacing: 4) {
             Text(track.title).font(.title3.bold()).multilineTextAlignment(.center)
+            // Under the title everywhere it appears: a shared embedded title tag makes
+            // two episodes read identically, and the path is what separates them.
+            Text(TrackRow.pathHint(for: track))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.head)
             // Tapping either jumps to that speaker's/album's own page — same
             // destinations as tapping through from Home, just reachable from
             // whatever's currently playing too. One line rather than stacked,
@@ -132,23 +195,80 @@ struct RealPlayerView: View {
         }
     }
 
-    private var bottomBar: some View {
-        HStack {
-            Button {
-                showingUpNext = true
-            } label: {
-                Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
-            }
-            Spacer()
-            Button {
-                showingAddToPlaylist = true
-            } label: {
-                Label("Add to Playlist", systemImage: "text.badge.plus")
-                    .labelStyle(.iconOnly)
+    /// Watches where the big transport has got to, so the docked bar can stand in for it
+    /// only once it's actually gone.
+    ///
+    /// The two thresholds are not the same number on purpose. Showing the bar shortens the
+    /// scroll view, which nudges the transport back down — with a single threshold that
+    /// feeds straight back into the test and the bar flickers on and off. The dead zone
+    /// between them is wider than the bar is tall, so it can't chase itself.
+    private var transportVisibilityProbe: some View {
+        GeometryReader { proxy in
+            let bottomEdge = proxy.frame(in: .named(Self.scrollSpace)).maxY
+            Color.clear.onChange(of: bottomEdge, initial: true) { _, edge in
+                if isTransportOffscreen {
+                    if edge > 96 { isTransportOffscreen = false }
+                } else if edge < 0 {
+                    isTransportOffscreen = true
+                }
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
+    }
+
+    /// Offers the transcript back rather than snatching it: auto-scroll only resumes when
+    /// it's asked to, so a long read is never interrupted by the page moving itself.
+    @ViewBuilder
+    private func followAgainPill(_ proxy: ScrollViewProxy) -> some View {
+        if tab == .transcript, !isFollowingTranscript,
+           let start = transcript.currentLine(at: engine.currentTime)?.start {
+            Button {
+                isFollowingTranscript = true
+                withAnimation { proxy.scrollTo(start, anchor: .center) }
+            } label: {
+                Label("Back to now playing", systemImage: "arrow.down.to.line")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(.quaternary))
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// Docked, so play/pause and position are reachable from anywhere on a page that is
+    /// now arbitrarily long. Reading forty minutes of transcript must never mean scrolling
+    /// back to the top to stop playback.
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            ProgressView(value: engine.duration > 0 ? min(engine.currentTime / engine.duration, 1) : 0)
+                .progressViewStyle(.linear)
+                .tint(.accentColor)
+                .scaleEffect(x: 1, y: 0.6, anchor: .center)
+
+            HStack(spacing: 14) {
+                Button { engine.togglePlayPause() } label: {
+                    Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                Text("\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button { engine.skipToNext() } label: {
+                    Image(systemName: "forward.fill")
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+            }
+            .padding(.horizontal)
+        }
         .background(.ultraThinMaterial)
     }
 }
@@ -229,7 +349,14 @@ private struct UpNextView: View {
                         if track.id == engine.currentTrack?.id {
                             Image(systemName: "speaker.wave.2.fill").foregroundStyle(.tint)
                         }
-                        Text(track.title).lineLimit(1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(track.title).lineLimit(1)
+                            Text(TrackRow.fileName(for: track))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                        }
                     }
                 }
                 .buttonStyle(.plain)

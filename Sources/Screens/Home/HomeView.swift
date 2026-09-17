@@ -9,13 +9,14 @@ struct HomeView: View {
     @State private var query = ""
     @State private var showingCreatePlaylist = false
     @State private var newPlaylistName = ""
-    @State private var isShowingPlayer = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 if !query.isEmpty {
                     searchResults
+                } else if homeData.isEmpty {
+                    emptyLibrary
                 } else {
                     homeShelves
                     Divider().padding(.horizontal)
@@ -31,14 +32,11 @@ struct HomeView: View {
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
         .onAppear { settings.load() }
         .task { await homeData.refresh() }
-        .onChange(of: isShowingPlayer) { _, isShowing in
+        .onChange(of: PlaybackEngine.shared.isPresentingPlayer) { _, isShowing in
             if !isShowing { Task { await homeData.refresh() } }
         }
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
             Task { await homeData.refresh() }
-        }
-        .sheet(isPresented: $isShowingPlayer) {
-            RealPlayerView()
         }
         .alert("New Playlist", isPresented: $showingCreatePlaylist) {
             TextField("Name", text: $newPlaylistName)
@@ -52,8 +50,24 @@ struct HomeView: View {
     }
 
     private func play(_ track: Track, queue: [Track]) {
-        PlaybackEngine.shared.play(track: track, queue: queue)
-        isShowingPlayer = true
+        PlaybackEngine.shared.open(track: track, queue: queue)
+    }
+
+    /// A fresh install starts empty on purpose: sample content sitting in the same
+    /// shelves as synced content is indistinguishable from it, so it's offered rather
+    /// than assumed.
+    private var emptyLibrary: some View {
+        ContentUnavailableView {
+            Label("Nothing in your library yet", systemImage: "square.stack.3d.up.slash")
+        } description: {
+            Text("Connect an S3 bucket or add a local folder below, and your episodes appear here as they sync.")
+        } actions: {
+            Button("Load sample library") {
+                try? DemoDataSeeder.load()
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(minHeight: 320)
     }
 
     @ViewBuilder
@@ -136,7 +150,13 @@ struct HomeView: View {
     private var matchedAlbums: [Album] { homeData.albums.filter { $0.name.localizedCaseInsensitiveContains(query) } }
     private var matchedPlaylists: [Playlist] { homeData.playlists.filter { $0.name.localizedCaseInsensitiveContains(query) } }
     private var matchedTopics: [Topic] { homeData.topics.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedTracks: [Track] { homeData.tracks.filter { $0.title.localizedCaseInsensitiveContains(query) } }
+    /// Path as well as title: with a folder of files sharing one embedded title tag, the
+    /// filename is often the only thing the listener can actually search for.
+    private var matchedTracks: [Track] {
+        homeData.tracks.filter {
+            $0.title.localizedCaseInsensitiveContains(query) || $0.filePath.localizedCaseInsensitiveContains(query)
+        }
+    }
     private var hasResults: Bool {
         !(matchedShows.isEmpty && matchedSpeakers.isEmpty && matchedAlbums.isEmpty && matchedPlaylists.isEmpty && matchedTracks.isEmpty && matchedTopics.isEmpty)
     }
@@ -309,11 +329,16 @@ private struct TrackCard: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(LibraryArt.color(for: track.id).gradient)
+                ArtworkTile(track: track, symbolSize: 34)
                     .frame(width: 160, height: 90)
-                    .overlay { Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white) }
                 Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                // Same reason as `TrackRow`'s: the title alone can be shared by a whole
+                // folder of files.
+                Text(TrackRow.fileName(for: track))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
                 if let positionMs = track.positionMs, let durationMs = track.durationMs, durationMs > 0 {
                     ProgressView(value: Double(positionMs), total: Double(durationMs))
                 }

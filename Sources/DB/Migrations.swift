@@ -188,7 +188,7 @@ enum Migrations {
             }
         }
 
-        // Just a filename under `SpeakerPhotoStore`'s directory, not a full path — portable
+        // Just a filename under `ImageFileStore.speakerPhotos`'s directory, not a full path — portable
         // across devices/reinstalls, and how it travels in a `LibrarySnapshot` backup.
         migrator.registerMigration("v10_speaker_photo") { db in
             try db.alter(table: "artists") { t in
@@ -213,6 +213,110 @@ enum Migrations {
                 t.column("originalText", .text).notNull()
                 t.column("editedText", .text).notNull()
                 t.column("createdAt", .datetime).notNull()
+            }
+        }
+
+        // Episode metadata the listener edited by hand, which has to outrank the embedded
+        // tags: a batch export routinely stamps every file with the same title tag, leaving
+        // rows indistinguishable. `artworkFileName` is a filename under
+        // `ImageFileStore.artwork` (same shape as `artists.photoFileName`), and
+        // `metadataEditedAt` marks a row as hand-edited so nothing re-derives over it.
+        migrator.registerMigration("v12_episode_metadata_edits") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "notes", .text)
+                t.add(column: "artworkFileName", .text)
+                t.add(column: "metadataEditedAt", .datetime)
+            }
+        }
+
+        // Albums get the same hand-editable fields as episodes (see v12) — a collection's
+        // name comes from the same embedded tags, and is wrong in the same ways.
+        migrator.registerMigration("v13_album_metadata_edits") { db in
+            try db.alter(table: "albums") { t in
+                t.add(column: "notes", .text)
+                t.add(column: "artworkFileName", .text)
+                t.add(column: "metadataEditedAt", .datetime)
+            }
+        }
+
+        // What a running job is doing, not just that it's running — see `SyncJobStage`.
+        migrator.registerMigration("v14_sync_job_stage") { db in
+            try db.alter(table: "syncJobs") { t in
+                t.add(column: "stage", .text)
+            }
+        }
+
+        // Anything that isn't audio was never an episode. Older builds only filtered on
+        // the whole-bucket sync path, so a file tapped in the remote browser — the app's
+        // own backup among them — was imported as a track and then kept in sync forever.
+        // `FileKind` is the single rule now; this clears what got in before it. Only
+        // positively-recognised non-audio goes — an extension-less path might still be
+        // audio, and the bundled demo clips are precisely that. Playlist entries and
+        // transcripts for the deleted rows go with them.
+        migrator.registerMigration("v15_drop_non_audio_tracks") { db in
+            let staleIDs: [String] = try Row.fetchAll(db, sql: "SELECT id, filePath FROM tracks")
+                .compactMap { row in
+                    let filePath: String = row["filePath"]
+                    guard FileKind(path: filePath).isKnownNonAudio else { return nil }
+                    let id: String = row["id"]
+                    return id
+                }
+            guard !staleIDs.isEmpty else { return }
+
+            // `ON DELETE CASCADE` doesn't fire in here: the migrator runs with foreign keys
+            // switched off and only verifies them at the end, so orphaned children would
+            // fail the commit rather than be swept up. They go explicitly, children first.
+            let placeholders = staleIDs.map { _ in "?" }.joined(separator: ",")
+            let arguments = StatementArguments(staleIDs)
+            for table in ["playlistTracks", "transcripts", "transcriptEdits"] {
+                try db.execute(sql: "DELETE FROM \(table) WHERE trackID IN (\(placeholders))", arguments: arguments)
+            }
+            try db.execute(sql: "DELETE FROM tracks WHERE id IN (\(placeholders))", arguments: arguments)
+        }
+
+        // Importing a non-audio file as an episode also minted whatever speaker the
+        // metadata guesser made of its filename — "BYOP Backup", out of
+        // `byop-backup.json`. v15 removed those tracks, but the library rows they created
+        // outlived them, so the bogus speaker stayed on the shelf with no episodes under
+        // it. Only rows with nothing left pointing at them and nothing hand-written on
+        // them go: a speaker someone wrote a bio or set a photo for is kept even while
+        // their episodes are still syncing.
+        migrator.registerMigration("v16_drop_orphaned_speakers") { db in
+            let orphans = try String.fetchAll(db, sql: """
+                SELECT id FROM artists
+                WHERE isDemo = 0
+                  AND (bio IS NULL OR bio = '')
+                  AND (photoFileName IS NULL OR photoFileName = '')
+                  AND id NOT IN (SELECT artistID FROM tracks WHERE artistID IS NOT NULL)
+                  AND id NOT IN (SELECT artistID FROM albums WHERE artistID IS NOT NULL
+                                 AND id IN (SELECT albumID FROM tracks WHERE albumID IS NOT NULL))
+            """)
+            guard !orphans.isEmpty else { return }
+
+            let placeholders = orphans.map { _ in "?" }.joined(separator: ",")
+            let arguments = StatementArguments(orphans)
+            // Foreign keys are off inside a migration, so `onDelete: .setNull` won't fire.
+            // Re-point each affected album at what its own episodes say rather than
+            // leaving a dangling id behind.
+            try db.execute(sql: """
+                UPDATE albums SET artistID = (
+                    SELECT t.artistID FROM tracks t
+                    WHERE t.albumID = albums.id AND t.artistID IS NOT NULL LIMIT 1
+                )
+                WHERE artistID IN (\(placeholders))
+                """, arguments: arguments)
+            try db.execute(sql: "DELETE FROM showArtists WHERE artistID IN (\(placeholders))", arguments: arguments)
+            try db.execute(sql: "DELETE FROM artists WHERE id IN (\(placeholders))", arguments: arguments)
+        }
+
+        // What language a speaker speaks. Recognizers have to be told — they don't detect
+        // it — and the phone's language is no guide at all: an English phone playing a
+        // Mandarin show was being handed the en-US model, which doesn't fail, it just
+        // returns confident nonsense forever. Kept on the speaker because that's where it
+        // actually holds true across every one of their episodes.
+        migrator.registerMigration("v17_speaker_language") { db in
+            try db.alter(table: "artists") { t in
+                t.add(column: "language", .text)
             }
         }
 

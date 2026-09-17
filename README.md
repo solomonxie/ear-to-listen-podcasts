@@ -9,11 +9,11 @@ Spotify/Apple Podcasts lock-in.
 ## Status
 
 No tab bar — one scrollable page (`HomeView`): search up top, then Home/Library
-shelves, then Remote, then Settings. Most content runs on in-memory mock data
-(`Sources/Screens/Mock/`) plus a few bundled demo audio clips
-(`Resources/DemoAudio/`) so playback and live transcript highlighting work out
-of the box. The Remote and Settings sections are wired to the real SQLite +
-Keychain layer (`Sources/DB/`, `Sources/Providers/`): adding/removing S3 and
+shelves, then Remote, then Settings. A fresh install starts empty — nothing
+appears in the library that the user didn't put there — with an optional sample
+library (`DemoDataSeeder`, bundled clips under `Resources/DemoAudio/`) loadable
+from the empty state or Settings for looking around first. Everything is wired
+to the real SQLite + Keychain layer (`Sources/DB/`, `Sources/Providers/`): adding/removing S3 and
 local sources, per-source sync frequency + manual "Sync Now", and a foreground
 `SyncScheduler` that auto-syncs due sources while the app is active. See
 `docs/design/` for the full design doc and phased implementation plan.
@@ -38,18 +38,36 @@ ContentView.swift
 │ MiniPlayerBar (docked, safeAreaInset bottom) │──→ Sources/Screens/Player/MiniPlayerBar.swift
 │   tap → sheet → RealPlayerView               │──→ Sources/Screens/Player/RealPlayerView.swift
 │     ├ Details  (tags, file, dates)           │──→ Sources/Screens/Player/EpisodeDetailsPane.swift
-│     └ Transcript (lyric-style, editable)     │──→ Sources/Screens/Player/TranscriptPane.swift
+│     ├ Transcript (lyric-style, editable)     │──→ Sources/Screens/Player/TranscriptPane.swift
+│     └ Edit (title/speaker/art/notes, AI)     │──→ Sources/Screens/Player/EpisodeEditView.swift
 └─────────────────────────────────────────────┘
 ```
+
+Every episode is listed as title + file path, since a whole folder of files routinely
+shares one embedded title tag and the path is then all that separates them. Anything a
+tag got wrong is editable (`EpisodeEditView`, from the player or a long-press on any
+row) — artwork included — and `EpisodeMetadataSuggester` will draft those fields from
+the episode's transcript, once that transcript is complete (a half-done one only
+describes the part that got done). A whole album can be sorted out in one pass
+(`AlbumMetadataSuggester`, from the album page) — it reads only the transcripts already
+on the phone, downloads nothing, and every proposed change is reviewed before it lands. Edits stand: sync only reads tags for files the
+library doesn't know yet, and they travel in a `LibrarySnapshot` backup.
 
 The transcript pane is driven by `LiveTranscript`
 (`Sources/Library/Transcription/`), which fills in only the stretches of an episode
 that have no text yet — on-device (Apple `Speech`) or OpenAI Whisper — saving each
 window as it lands and folding the listener's corrections back in as vocabulary hints.
+Each window is decoded straight out of the source with `AVAssetReader` and handed over
+as a 16 kHz mono WAV, reading byte ranges in place: no full download first, and no
+container the recognizer might refuse.
 
-Home's shelves/search read `MockLibraryStore`/`PlaybackMockState`
-(`Sources/Screens/Mock/README.md`); Remote and Settings read the real
-DB/Provider layers (`Sources/DB/README.md`, `Sources/Providers/README.md`).
+Home's shelves/search, Remote and Settings all read the real DB/Provider layers
+(`Sources/DB/README.md`, `Sources/Providers/README.md`) — sample content flows
+through the same tables, so it appears exactly as a synced source would.
+
+Connecting an S3 bucket also turns on automatic backup of the app's own data —
+playlists, hand edits and their images, transcripts and corrections — into that
+same bucket (`Sources/Backup/README.md`). Episode audio is never uploaded.
 
 ## Quickstart
 

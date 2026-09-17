@@ -13,25 +13,20 @@ struct MiniPlayerBar: View {
                 showingNowPlaying = true
             } label: {
                 HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(LibraryArt.color(for: track.id).gradient)
+                    ArtworkTile(track: track, cornerRadius: 6, symbolSize: 14)
                         .frame(width: 36, height: 36)
-                        .overlay {
-                            Image(systemName: LibraryArt.symbol(for: track.id))
-                                .foregroundStyle(.white)
-                                .font(.caption)
-                        }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(track.title)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        if let artistName {
-                            Text(artistName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                        // Filename rather than the whole path — the bar is too narrow for
+                        // one — but still shown, since the title may be shared.
+                        Text([artistName, TrackRow.fileName(for: track)].compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
                     }
 
                     Spacer()

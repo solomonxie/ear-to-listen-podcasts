@@ -5,9 +5,11 @@ import UniformTypeIdentifiers
 /// live in `RemoteSectionView`; this covers on-device storage and app-wide settings.
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @ObservedObject private var autoBackup = AutoBackup.shared
     @EnvironmentObject private var language: AppLanguageStore
     @State private var showingResetConfirmation = false
     @State private var showingRemoveDemoConfirmation = false
+    @State private var hasDemoData = DemoDataSeeder.isLoaded
     @State private var showingFolderPicker = false
     @State private var isScanning = false
     @State private var importMessage: String?
@@ -16,6 +18,26 @@ struct SettingsSectionView: View {
     @State private var showingImportPicker = false
     @State private var showingAddAiKey = false
     @State private var showingDownloads = false
+
+    /// On by default once a bucket is connected, so say what it's doing and when it last
+    /// did it — an automatic upload nobody can see is just an unexplained network bill.
+    private var autoBackupHint: String {
+        guard autoBackup.isEnabled else {
+            return "Off — your playlists, edits and transcripts stay on this device until you back up by hand."
+        }
+        if let error = autoBackup.lastError {
+            return "Last automatic backup failed: \(error)"
+        }
+        guard let lastBackupAt = autoBackup.lastBackupAt else {
+            return "Uploads your app data to the connected bucket when it changes, at most every 15 minutes. Your episode files are never uploaded."
+        }
+        return "Uploaded when it changes, at most every 15 minutes. Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))."
+    }
+
+    private func loadDemoData() {
+        try? DemoDataSeeder.load()
+        hasDemoData = DemoDataSeeder.isLoaded
+    }
 
     private var localProviders: [ProviderRecord] {
         viewModel.providers.filter { $0.type == LocalFilesProvider.providerType }
@@ -39,7 +61,7 @@ struct SettingsSectionView: View {
                             ProgressView()
                         }
                     } else {
-                        Label("Add a Folder", systemImage: "folder.badge.plus")
+                        Label("Scan local folder for podcasts", systemImage: "folder.badge.plus")
                     }
                 }
                 .disabled(isScanning)
@@ -206,13 +228,18 @@ struct SettingsSectionView: View {
                     Text("Backup/Restore need an active remote (S3) source — see the Remote tab.")
                         .sectionHint()
                 }
+
+                Toggle("Keep the bucket up to date", isOn: $autoBackup.isEnabled)
+                    .disabled(!viewModel.hasActiveRemoteProvider)
+                Text(autoBackupHint)
+                    .sectionHint()
                 if viewModel.isBackupBusy {
                     ProgressView()
                 } else if let backupStatusMessage = viewModel.backupStatusMessage {
                     Text(backupStatusMessage)
                         .sectionHint()
                 }
-                Text("Export/Backup save your playlists, source list, and any speaker bio/photo edits — as a .zip (not your episode files, not credentials). Restoring re-links playlist tracks that are already synced on this device; anything not synced yet is skipped until the next sync.")
+                Text("Export/Backup save your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — as a .zip (not your episode files, not credentials). Restoring re-links playlist tracks that are already synced on this device; anything not synced yet is skipped until the next sync.")
                     .sectionHint()
             }
             .padding(.horizontal)
@@ -220,34 +247,45 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
                     Button {
-                        showingResetConfirmation = true
+                        if hasDemoData { showingResetConfirmation = true } else { loadDemoData() }
                     } label: {
-                        Label("Reset Demo Data", systemImage: "arrow.counterclockwise")
+                        Label(
+                            hasDemoData ? "Reset Sample Library" : "Load Sample Library",
+                            systemImage: hasDemoData ? "arrow.counterclockwise" : "square.and.arrow.down"
+                        )
                     }
-                    // Sits beside Reset rather than in its own group: same sample data,
+                    // Sits beside it rather than in its own group: same sample data,
                     // opposite intent — put it back, or be rid of it.
-                    Button("(Remove demo data)", role: .destructive) {
-                        showingRemoveDemoConfirmation = true
+                    if hasDemoData {
+                        Button("Remove sample library", role: .destructive) {
+                            showingRemoveDemoConfirmation = true
+                        }
+                        .sectionRowSecondary()
                     }
-                    .sectionRowSecondary()
                 }
-                Text("Reset restores the sample shows, speakers, and playlists in case you deleted something while exploring. Remove clears them for good, leaving only what you've synced. Neither touches your real remote/local sources.")
+                Text("A few sample shows, speakers, and playlists with three short clips, for looking around before you connect anything. Never loaded on its own — nothing appears in your library that you didn't put there. Removing it leaves only what you've synced.")
                     .sectionHint()
             }
             .padding(.horizontal)
         }
         .sectionRow()
-        .alert("Reset Demo Data?", isPresented: $showingResetConfirmation) {
-            Button("Reset", role: .destructive) { try? DemoDataSeeder.reseed() }
+        .alert("Reset Sample Library?", isPresented: $showingResetConfirmation) {
+            Button("Reset", role: .destructive) { loadDemoData() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This puts back the sample shows, speakers, and playlists.")
         }
-        .alert("Remove Demo Data?", isPresented: $showingRemoveDemoConfirmation) {
-            Button("Remove", role: .destructive) { try? DemoDataSeeder.removeAll() }
+        .alert("Remove Sample Library?", isPresented: $showingRemoveDemoConfirmation) {
+            Button("Remove", role: .destructive) {
+                try? DemoDataSeeder.removeAll()
+                hasDemoData = DemoDataSeeder.isLoaded
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can put the samples back with Reset Demo Data.")
+            Text("Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can load the samples again later.")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
+            hasDemoData = DemoDataSeeder.isLoaded
         }
         .alert("Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },

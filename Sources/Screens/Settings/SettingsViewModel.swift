@@ -92,6 +92,11 @@ final class SettingsViewModel: ObservableObject {
                 createdAt: Date()
             )
             try providerStore.upsert(record)
+            // A bucket is where this user's data lives, so the app's own data starts
+            // going there too — transcripts and hand edits are expensive to lose and
+            // aren't rebuilt by a resync.
+            AutoBackup.shared.enableForNewRemote()
+            AutoBackup.shared.markChanged()
             load()
             return record
         } catch {

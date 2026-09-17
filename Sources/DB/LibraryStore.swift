@@ -34,11 +34,12 @@ struct LibraryStore {
         try dbQueue.read { db in try Artist.fetchOne(db, key: id) }
     }
 
-    func updateArtist(id: String, name: String, bio: String?) throws {
+    func updateArtist(id: String, name: String, bio: String?, language: String? = nil) throws {
         try dbQueue.write { db in
             guard var artist = try Artist.fetchOne(db, key: id) else { return }
             artist.name = name
             artist.bio = bio
+            artist.language = language
             try artist.update(db)
         }
     }
@@ -84,6 +85,20 @@ struct LibraryStore {
                 arguments: [artist.id, albumID]
             )
             return artist
+        }
+    }
+
+    /// The hand-edited fields (name/notes/artwork), stamped as edited so nothing
+    /// re-derives over them. Speaker isn't here — it lives on the tracks too, so it goes
+    /// through `reassignAlbumArtist`.
+    func updateAlbum(id: String, name: String, notes: String?, artworkFileName: String?) throws {
+        try dbQueue.write { db in
+            guard var album = try Album.fetchOne(db, key: id) else { return }
+            album.name = name
+            album.notes = notes
+            album.artworkFileName = artworkFileName
+            album.metadataEditedAt = Date()
+            try album.update(db)
         }
     }
 
