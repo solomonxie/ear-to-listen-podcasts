@@ -5,6 +5,25 @@ enum SyncJobStatus: String, Codable {
     case pending, running, done, failed
 }
 
+/// What a running job is actually doing. "Waiting" and a spinner say a file is being
+/// worked but not what's taking the time — a slow tag read and a slow AI call look
+/// identical without this.
+enum SyncJobStage: String, Codable {
+    case queued
+    case readingTags
+    case askingAI
+    case saving
+
+    var displayName: String {
+        switch self {
+        case .queued: return "Waiting"
+        case .readingTags: return "Reading tags"
+        case .askingAI: return "Asking AI"
+        case .saving: return "Saving to library"
+        }
+    }
+}
+
 /// One file queued to be imported (or refreshed) from a provider — the unit of work
 /// behind the sync queue's pause/clear/concurrency controls.
 struct SyncJob: Codable, FetchableRecord, PersistableRecord, Identifiable {
@@ -21,6 +40,7 @@ struct SyncJob: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var contentHash: String?
     var remoteModifiedAt: Date?
     var status: SyncJobStatus
+    var stage: SyncJobStage?
     var errorMessage: String?
     var createdAt: Date
     var updatedAt: Date

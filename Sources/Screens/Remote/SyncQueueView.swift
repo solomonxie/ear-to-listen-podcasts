@@ -8,6 +8,28 @@ struct SyncQueueView: View {
 
     var body: some View {
         List {
+            if manager.isPaused || manager.isFull || manager.notice != nil {
+                Section {
+                    if manager.isPaused {
+                        Label(
+                            "Paused. Nothing is being added to the queue and nothing is being processed.",
+                            systemImage: "pause.circle.fill"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    } else if manager.isFull {
+                        Label(
+                            "Queue full (\(manager.capacity)). Files past this point wait for the next sync.",
+                            systemImage: "exclamationmark.circle.fill"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    }
+                    if let notice = manager.notice {
+                        Text(notice).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+            }
             Section {
                 if manager.jobs.isEmpty {
                     Text("Nothing queued. Sync a folder from a remote source to add files here.")
@@ -29,12 +51,15 @@ struct SyncQueueView: View {
                 }
             } header: {
                 HStack {
-                    Text("Queue (\(manager.totalCount))")
+                    // Waiting-vs-ceiling rather than the total: the cap is on unfinished
+                    // work, and a pile of finished rows shouldn't read as nearly full.
+                    Text("Queue (\(manager.activeCount)/\(manager.capacity))")
                     Spacer()
                     Button {
                         manager.setPaused(!manager.isPaused)
                     } label: {
-                        Image(systemName: manager.isPaused ? "play.fill" : "pause.fill")
+                        Label(manager.isPaused ? "Resume" : "Pause", systemImage: manager.isPaused ? "play.fill" : "pause.fill")
+                            .labelStyle(.iconOnly)
                     }
                     Menu {
                         Stepper("Speed: \(manager.concurrency) at a time", value: $manager.concurrency, in: 1...8)
@@ -81,7 +106,10 @@ private struct SyncJobRow: View {
         case .pending:
             Text("Waiting").font(.caption).foregroundStyle(.secondary)
         case .running:
-            ProgressView().controlSize(.small)
+            HStack(spacing: 6) {
+                Text((job.stage ?? .queued).displayName).font(.caption).foregroundStyle(.secondary)
+                ProgressView().controlSize(.small)
+            }
         case .done:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
         case .failed:

@@ -2,30 +2,31 @@ import SwiftUI
 
 struct AlbumDetailView: View {
     let album: Album
+    @State private var current: Album?
     @State private var tracks: [Track] = []
     @State private var artistName: String?
-    @State private var showingEditSpeaker = false
-    @State private var editedSpeakerName = ""
+    @State private var downloadedCount = 0
+    @State private var transcribedCount = 0
+    @State private var showingEdit = false
+    @State private var showingAnalysis = false
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+
+    private var shown: Album { current ?? album }
 
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(LibraryArt.color(for: album.id).gradient)
+                    ArtworkTile(album: shown)
                         .frame(height: 160)
-                        .overlay { Image(systemName: "square.stack.fill").font(.system(size: 48)).foregroundStyle(.white) }
+                        .frame(maxWidth: .infinity)
                     HStack {
                         // Tappable rather than plain text — embedded/guessed speaker
                         // metadata is sometimes wrong (a shared uploader/collection name
                         // instead of the actual speaker), so it needs to be correctable.
-                        Button {
-                            editedSpeakerName = artistName ?? ""
-                            showingEditSpeaker = true
-                        } label: {
+                        Button { showingEdit = true } label: {
                             Text(artistName ?? "Set speaker")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(artistName == nil ? .secondary : .primary)
@@ -37,7 +38,7 @@ struct AlbumDetailView: View {
                     }
                     if let first = tracks.first {
                         Button {
-                            PlaybackEngine.shared.play(track: first, queue: tracks)
+                            PlaybackEngine.shared.open(track: first, queue: tracks)
                         } label: {
                             Label("Play latest", systemImage: "play.fill")
                                 .frame(maxWidth: .infinity)
@@ -48,10 +49,31 @@ struct AlbumDetailView: View {
                 .listRowSeparator(.hidden)
             }
 
+            if let notes = shown.notes, !notes.isEmpty {
+                Section("Notes") {
+                    Text(notes).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Details") {
+                LabeledContent("Episodes", value: "\(tracks.count)")
+                if let totalDuration { LabeledContent("Total length", value: totalDuration) }
+                if let years { LabeledContent("Years", value: years) }
+                if let folder { LabeledContent("Folder", value: folder) }
+                LabeledContent("Downloaded", value: "\(downloadedCount) of \(tracks.count)")
+                // What the batch pass can actually read, stated before you open it.
+                LabeledContent("Fully transcribed", value: "\(transcribedCount) of \(tracks.count)")
+                if let size { LabeledContent("Size on storage", value: size) }
+                if let edited = shown.metadataEditedAt {
+                    LabeledContent("Details edited", value: edited.formatted(date: .abbreviated, time: .shortened))
+                }
+            }
+            .font(.footnote)
+
             Section("Episodes") {
                 ForEach(tracks) { track in
                     Button {
-                        PlaybackEngine.shared.play(track: track, queue: tracks)
+                        PlaybackEngine.shared.open(track: track, queue: tracks)
                     } label: {
                         TrackRow(track: track)
                     }
@@ -60,25 +82,62 @@ struct AlbumDetailView: View {
             }
         }
         .listStyle(.plain)
-        .navigationTitle(album.name)
+        .navigationTitle(shown.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
-        .alert("Speaker", isPresented: $showingEditSpeaker) {
-            TextField("Speaker name", text: $editedSpeakerName)
-            Button("Save") {
-                let name = editedSpeakerName.trimmingCharacters(in: .whitespaces)
-                guard !name.isEmpty else { return }
-                _ = try? libraryStore.reassignAlbumArtist(albumID: album.id, artistName: name)
-                artistName = name
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Edit Album…", systemImage: "pencil") { showingEdit = true }
+                    Button("Analyze with AI…", systemImage: "sparkles") { showingAnalysis = true }
+                        .disabled(transcribedCount == 0)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Fixes every episode in this album — use this if the speaker shown was guessed wrong from the file's metadata.")
+        }
+        .sheet(isPresented: $showingEdit) { AlbumEditView(album: shown, artistName: artistName) }
+        .sheet(isPresented: $showingAnalysis) {
+            AlbumAnalysisView(album: shown, artistName: artistName, tracks: tracks)
+        }
+        .task { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
+            Task { await load() }
         }
     }
 
+    private var totalDuration: String? {
+        let ms = tracks.compactMap(\.durationMs).reduce(0, +)
+        return ms > 0 ? TrackRow.formattedDuration(ms) : nil
+    }
+
+    private var years: String? {
+        let values = Set(tracks.compactMap(\.year)).sorted()
+        guard let first = values.first, let last = values.last else { return nil }
+        return first == last ? "\(first)" : "\(first)–\(last)"
+    }
+
+    private var size: String? {
+        let bytes = tracks.compactMap(\.sizeBytes).reduce(Int64(0), +)
+        return bytes > 0 ? bytes.formatted(.byteCount(style: .file)) : nil
+    }
+
+    /// The deepest folder every episode shares — for a well-sorted bucket that's the
+    /// album's own directory, and it's what tells two same-named collections apart.
+    private var folder: String? {
+        let folders = tracks.map { ($0.filePath as NSString).deletingLastPathComponent }
+        guard let first = folders.first, !first.isEmpty, folders.allSatisfy({ $0 == first }) else { return nil }
+        return first
+    }
+
     private func load() async {
+        current = (try? libraryStore.album(id: album.id)) ?? nil
         tracks = (try? trackStore.tracks(forAlbum: album.id)) ?? []
-        artistName = album.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
+        artistName = (shown.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name
+        transcribedCount = AlbumMetadataSuggester().partition(tracks: tracks).ready.count
+        var downloaded = 0
+        for track in tracks where await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil {
+            downloaded += 1
+        }
+        downloadedCount = downloaded
     }
 }

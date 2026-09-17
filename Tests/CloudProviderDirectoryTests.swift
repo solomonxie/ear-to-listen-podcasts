@@ -50,7 +50,8 @@ final class CloudProviderDirectoryTests: XCTestCase {
 
         let listing = try await provider.listDirectory(atFolder: "show-a")
 
-        XCTAssertEqual(listing.folders, ["season1"])
+        // A whole path, so it can be handed straight back to `listDirectory`.
+        XCTAssertEqual(listing.folders, ["show-a/season1"])
         XCTAssertEqual(listing.files.map(\.path), ["show-a/ep1.mp3"])
     }
 

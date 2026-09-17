@@ -38,7 +38,7 @@ struct ShowDetailView: View {
                     }
                     if let first = tracks.first {
                         Button {
-                            PlaybackEngine.shared.play(track: first, queue: tracks)
+                            PlaybackEngine.shared.open(track: first, queue: tracks)
                         } label: {
                             Label("Play latest", systemImage: "play.fill")
                                 .frame(maxWidth: .infinity)
@@ -52,7 +52,7 @@ struct ShowDetailView: View {
             Section("Episodes") {
                 ForEach(tracks) { track in
                     Button {
-                        PlaybackEngine.shared.play(track: track, queue: tracks)
+                        PlaybackEngine.shared.open(track: track, queue: tracks)
                     } label: {
                         TrackRow(track: track)
                     }

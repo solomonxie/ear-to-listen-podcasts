@@ -38,6 +38,14 @@ Rules this encodes:
 
 ## Screens
 
+### Every episode row
+
+Title, then the file path under it, everywhere an episode is listed — rows, shelf cards,
+Up Next, the mini player (filename only; the bar is too narrow for a path), Now Playing.
+Not a fallback for missing titles: whole folders routinely share one embedded title tag,
+and then the path is the only thing telling two episodes apart. Truncated at the head so
+the filename — the telling end — survives. Long-press any row for `Edit Details`.
+
 ### Home
 
 Horizontal shelves of cards. Card titles are one line — two-line titles give cards in
@@ -59,8 +67,8 @@ subfolder. No separate detail screen, no per-level difference.
 │ 📁  bible-audio                     ›   │ → push, same screen, deeper prefix
 │ 〰  ep-004.mp3              24.1 MB  ⓘ  │ → plays; ⓘ opens file info
 ├─────────────────────────────────────────┤
-│ 361 episodes synced · 12.14 GB  ⟳ Sync… │ ← footer scoped to THIS folder
-└─────────────────────────────────────────┘
+│ 361 episodes synced · 12.14 GB  ⟳ Sync… │ ← footer scoped to THIS folder;
+└─────────────────────────────────────────┘   "Sync…" taps through to the queue
 ```
 
 The `⋯` menu is identical at every depth:
@@ -74,8 +82,11 @@ Sync Queue                      ☰
 Delete Connection               🗑  ← destructive, last
 ```
 
-Both the listing and the footer are built from already-synced local rows
-(`TrackStore.directoryListing` / `.stats`). Browsing never calls the provider.
+The listing is **live**: each level is one delimited `listObjectsV2` per folder
+(`CloudProvider.listDirectory`), so a file uploaded a minute ago is there before
+any sync runs. Offline or on error it falls back to already-synced local rows and
+says "Showing last synced" in the footer. The footer's numbers stay local — they
+report what this device has synced, which is a different question.
 
 ### Sync queue
 
@@ -83,9 +94,9 @@ Global across connections, reached from the Remote section's status line or any
 connection's `⋯`.
 
 ```
-Queue (1,284)                  ⏸  ⋯   ⏸ = pause/play icon (not a "Paused" switch)
+Queue (87/100)                 ⏸  ⋯   ⏸ = pause/play icon (not a "Paused" switch)
 ┌──────────────────────────────────┐   ⋯ = Speed: N at a time · Clear Synced ·
-│ ep-004.mp3  archives  ⟳ running  │       Clear Queue
+│ ep-004.mp3  archives Reading tags│       Clear Queue
 │ ep-005.mp3  archives    Waiting  │   ▲ unfinished, in queued order
 │ ep-002.mp3  archives  ↻ Retry    │   │ failed stays up: it needs a decision
 │   403 SignatureDoesNotMatch      │   ▼ error inline on the row
@@ -95,6 +106,21 @@ Queue (1,284)                  ⏸  ⋯   ⏸ = pause/play icon (not a "Paused" 
 │         Load 1,184 more…         │   ← 100 per page
 └──────────────────────────────────┘
 ```
+
+A running row says what it's doing — Reading tags · Asking AI · Saving to library
+— since a slow tag read off a remote file and a slow AI call look identical behind
+one spinner.
+
+**Paused means paused.** Not just "stop working the list": nothing new is accepted
+either, a whole-bucket pass refuses to start, and the background schedule sits out
+too. One control, one meaning.
+
+**A ceiling of 100 unfinished jobs.** A bucket with thousands of files would
+otherwise queue every one of them the moment it's added — hours of work nobody
+asked for, in a list nobody can read. Adding stops at the ceiling with a banner
+saying so; nothing is lost, the next sync carries on from where it stopped. The
+header counts unfinished against that ceiling, not the total, so a pile of
+finished rows doesn't read as nearly full.
 
 Header count and the "N pending" summary come from `COUNT` queries, never off the
 visible page.
@@ -125,10 +151,12 @@ episode shows a short card instead of a column of blanks.
 
 ```
 EPISODE          Speaker · Album · Show  (each pushes that page) · Year ·
-                 Duration · Track no. · Topics as chips
+                 Duration · Track no. · Topics as chips · Edit Details
+NOTES            free text, only if there is any
 FILE             Connection · Folder · File · Format · Size ·
                  Downloaded (size, or "Not downloaded")
-DATES            Changed on storage · Last synced · Last played · Stopped at
+DATES            Changed on storage · Last synced · Last played ·
+                 Details edited · Stopped at
 ABOUT THE SHOW   the show's summary, only if there is one
 ```
 
@@ -174,23 +202,65 @@ Two entry points, because they answer different questions:
 ### Speaker / Album detail
 
 Speaker: avatar (photo or placeholder), bio, shows, albums, episodes, `Edit`.
-Album: art, tappable speaker line (opens a correction alert), episode list, Play latest.
 
-Both exist largely to make wrong synced metadata fixable — see flow 5.
+Album: artwork, tappable speaker line, notes, a Details block (episodes · total length ·
+years · shared folder · downloaded N of M · **fully transcribed N of M** · size · details
+edited), episode list, Play latest. The transcribed count is there because it's exactly
+what the batch pass below can read, said before you open it.
+
+`⋯` menu: `Edit Album…` (name, speaker, notes, artwork — speaker writes through to every
+episode) and `Analyze with AI…`.
+
+**Analyze with AI** — one pass over the whole album, reading only transcripts already
+stored on the phone: nothing is downloaded and nothing is transcribed to run it, and
+episodes without a finished transcript are listed as "Left alone" rather than guessed at.
+Results arrive as a review list — new title over the struck-through old one, path
+underneath — each switched on but individually refusable, plus the album's own
+name/speaker/notes. Nothing is written until `Apply`.
+
+Both pages exist largely to make wrong synced metadata fixable — see flow 5.
+
+### Episode edit
+
+Reached from `Edit Details` (Now Playing toolbar, the Details card, or a long-press on any
+row). Artwork picker on top, then title, speaker, album, show, year, track no., notes, and
+the file path shown read-only — the one field that isn't editable, because it's what the
+file actually is.
+
+`Suggest with AI` fills the fields in from the episode's own transcript; a field it can't
+improve is left alone rather than blanked. Disabled until that transcript is *complete*,
+with the reason in its place ("Only 40% of this episode is transcribed…") — a partial
+transcript names the whole episode after its first ten minutes, and a confident wrong
+title is worse than the generic tag it replaced. Over-long transcripts are sampled evenly
+across the episode, never cut off at the front.
+Nothing is written until `Save`, and a saved edit outranks the embedded tags from then on
+— sync only reads tags for files the library doesn't know yet.
 
 ### Settings
 
 Sections: Local Folders · Storage (Downloaded Episodes) · AI Keys · Sync & Backup ·
-Reset Demo Data. Each carries a short hint under its heading, not a paragraph at the
-bottom.
+Sample Library. The sample library is never loaded on its own — a fresh install is an
+empty library with one offer to load it, because sample content sitting in the same
+shelves as synced content can't be told apart from it. Each carries a short hint under its heading, not a paragraph at the
+bottom. Row labels say what the row does, not what it is: "Scan local folder for
+podcasts", not "Add a Folder".
 
 
 ## Flows
 
-**1 · Add a connection → first import.** Credentials usually arrive as a lump of text, so
-the top of Add S3 is a paste box that fills the fields as you type (`:` or `=`, any
-spelling of the key names) — retyping a 40-character secret on a phone keyboard is where
-this goes wrong. Then: Save → Save tests the bucket (scoped to the
+**0 · Folder, not prefix.** A connection points at a folder inside the bucket, and
+only ever a folder: a bare `pod` would quietly also match `podcasts-old/`. The
+field is "Folder path", empty means the whole bucket, and the trailing `/` is added
+rather than asked for (`S3FolderPath.normalized`, applied on save, on paste, and on
+read — so connections stored before this start behaving like folders too).
+
+**1 · Add a connection → first import.** Credentials usually arrive as a lump of text, and
+retyping a 40-character secret on a phone keyboard is where this goes wrong — so the
+"S3 Bucket" section header carries a small inline button, `S3 Bucket (paste info to add)`.
+Tapping it swaps the four fields for a paste box in place (no permanent block at the top
+of the sheet); one paste parses it (`:` or `=`, any spelling of the key names) and snaps
+straight back to the now-filled fields, so what got picked up is visible and editable.
+`(back to fields)` exits without pasting. Then: Save → Save tests the bucket (scoped to the
 prefix) and only persists on success → the whole bucket is listed recursively and every
 audio file is queued → progress is visible in the sync queue immediately. This is the
 one time the app scans without being asked.

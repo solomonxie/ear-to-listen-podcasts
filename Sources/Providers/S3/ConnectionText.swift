@@ -1,6 +1,7 @@
 import Foundation
 
-/// The four fields of an S3 connection, read out of a pasted block of text.
+/// The four fields of an S3 connection — bucket, folder path, key, secret — read out of a
+/// pasted block of text.
 ///
 /// Credentials arrive as a lump — a note, a chat message, a chunk of an AWS CLI
 /// credentials file — and retyping a 40-character secret on a phone keyboard is where
@@ -29,7 +30,10 @@ struct S3ConnectionDraft: Equatable {
 
             switch normalizedKey(String(line[..<separator])) {
             case "bucket", "bucketname", "s3bucket": draft.bucket = value
-            case "prefix", "keyprefix", "folder", "path": draft.keyPrefix = value
+            // Normalized on the way in, so a pasted `podcasts` fills the field as
+            // `podcasts/` — the only form that addresses a folder rather than a name
+            // fragment.
+            case "prefix", "keyprefix", "folder", "path", "folderpath": draft.keyPrefix = S3FolderPath.normalized(value)
             case "accesskeyid", "awsaccesskeyid", "accesskey": draft.accessKeyId = value
             case "secretaccesskey", "awssecretaccesskey", "secretkey": draft.secretAccessKey = value
             default: break

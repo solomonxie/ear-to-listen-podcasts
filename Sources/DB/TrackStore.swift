@@ -148,9 +148,10 @@ struct TrackStore {
         }
     }
 
-    /// Every already-synced track directly under `pathPrefix` (nil/empty = the connection's
-    /// root), plus the names of the immediate subfolders below it — enough to draw one level
-    /// of the remote browser from local metadata alone, without listing the provider.
+    /// Every already-synced track directly under `pathPrefix` (nil/empty = the bucket root),
+    /// plus the immediate subfolders below it as whole paths — the same shape
+    /// `CloudProvider.listDirectory` returns, so the remote browser can fall back to this
+    /// without changing how it navigates.
     func directoryListing(providerID: String, pathPrefix: String?) throws -> (folders: [String], tracks: [Track]) {
         let prefix = pathPrefix.flatMap { $0.isEmpty ? nil : ($0.hasSuffix("/") ? $0 : $0 + "/") } ?? ""
         let all = try dbQueue.read { db in
@@ -167,7 +168,7 @@ struct TrackStore {
             let relative = String(track.filePath.dropFirst(prefix.count))
             guard !relative.isEmpty else { continue }
             if let slashIndex = relative.firstIndex(of: "/") {
-                folders.insert(String(relative[relative.startIndex..<slashIndex]))
+                folders.insert(prefix + relative[relative.startIndex..<slashIndex])
             } else {
                 tracks.append(track)
             }

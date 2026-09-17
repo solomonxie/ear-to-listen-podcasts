@@ -14,14 +14,18 @@ final class SyncQueueManager: ObservableObject {
     @Published private(set) var activeCount = 0
     @Published private(set) var activeProviderIDs: Set<String> = []
     @Published private(set) var providerLabels: [String: String] = [:]
+    /// Mirrors `SyncQueuePolicy.isPaused` for SwiftUI's benefit — the policy itself is
+    /// what background sync passes read, since they can't touch this main-actor object.
     @Published var isPaused: Bool {
-        didSet { UserDefaults.standard.set(isPaused, forKey: Self.pausedKey) }
+        didSet { SyncQueuePolicy.isPaused = isPaused }
     }
+    /// Why the queue stopped taking work — full, or paused mid-enqueue. Shown on the queue
+    /// screen, since a connection that silently stops half-listed reads like a bug.
+    @Published private(set) var notice: String?
     @Published var concurrency: Int {
         didSet { UserDefaults.standard.set(concurrency, forKey: Self.concurrencyKey) }
     }
 
-    private static let pausedKey = "syncQueue.isPaused"
     private static let concurrencyKey = "syncQueue.concurrency"
     private static let pageSize = 100
 
@@ -32,6 +36,9 @@ final class SyncQueueManager: ObservableObject {
 
     var hasMore: Bool { totalCount > jobs.count }
 
+    var isFull: Bool { activeCount >= SyncQueuePolicy.capacity }
+    var capacity: Int { SyncQueuePolicy.capacity }
+
     private let jobStore = SyncJobStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -39,7 +46,7 @@ final class SyncQueueManager: ObservableObject {
     private var isDraining = false
 
     private init() {
-        isPaused = UserDefaults.standard.bool(forKey: Self.pausedKey)
+        isPaused = SyncQueuePolicy.isPaused
         let storedConcurrency = UserDefaults.standard.integer(forKey: Self.concurrencyKey)
         concurrency = storedConcurrency > 0 ? storedConcurrency : 2
         // Reclaim anything a previous launch was mid-way through, then pick the queue back
@@ -60,6 +67,9 @@ final class SyncQueueManager: ObservableObject {
         totalCount = counts.total
         activeCount = counts.active
         activeProviderIDs = (try? jobStore.activeProviderIDs()) ?? []
+        // A "queue full" notice is only true while it is: once the drain loop has made
+        // room, it's just a stale warning.
+        if !isFull, !isPaused { notice = nil }
         if let records = try? providerStore.all() {
             providerLabels = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.label) })
         }
@@ -74,29 +84,48 @@ final class SyncQueueManager: ObservableObject {
     /// file — run right after adding a source, so it fills in via the queue (visible
     /// per-file progress, retryable) instead of one opaque background sync.
     func enqueueConnection(providerID: String) async {
+        guard !isPaused else {
+            notice = "Queue paused — nothing was added. Resume to list this connection."
+            return
+        }
         guard
             let record = try? providerStore.all().first(where: { $0.id == providerID }),
             let provider = try? ProviderManager.shared.provider(for: record),
             let files = try? await provider.listFiles(inFolder: nil)
         else { return }
 
-        for file in files where audioExtensions.contains((file.path as NSString).pathExtension.lowercased()) {
+        var queued = 0
+        for file in files where FileKind(path: file.path).isPlayable {
+            guard !isPaused else { break }
             guard (try? trackStore.find(providerID: providerID, filePath: file.path)) == nil else { continue }
-            _ = try? jobStore.enqueue(
-                providerID: providerID, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
-                contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt
-            )
+            do {
+                _ = try jobStore.enqueue(
+                    providerID: providerID, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
+                    contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt
+                )
+                queued += 1
+            } catch {
+                // The ceiling, almost always. Stop listing rather than retrying every
+                // remaining file against a full queue — the rest come in on the next sync.
+                notice = error.localizedDescription
+                break
+            }
         }
+        if queued > 0, notice != nil { notice = (notice ?? "") + " \(queued) queued so far." }
         refresh()
         startDraining()
     }
 
     func setPaused(_ paused: Bool) {
         isPaused = paused
-        if !paused { startDraining() }
+        if !paused {
+            notice = nil
+            startDraining()
+        }
     }
 
     func clearQueue() {
+        notice = nil
         try? jobStore.clearQueue()
         visibleLimit = Self.pageSize
         refresh()
@@ -152,7 +181,7 @@ final class SyncQueueManager: ObservableObject {
                 id: job.filePath, name: job.displayName, path: job.filePath, sizeBytes: job.sizeBytes,
                 mimeType: nil, modifiedAt: job.remoteModifiedAt, contentHash: job.contentHash
             )
-            try await syncEngine.importFileIfNeeded(file, providerRecord: record, provider: provider)
+            try await syncEngine.importFileIfNeeded(file, providerRecord: record, provider: provider, jobID: job.id)
             try? jobStore.markDone(id: job.id)
         } catch {
             try? jobStore.markFailed(id: job.id, error: error.localizedDescription)

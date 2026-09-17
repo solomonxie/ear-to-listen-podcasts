@@ -1,17 +1,22 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var showingNowPlaying = false
+    @ObservedObject private var engine = PlaybackEngine.shared
 
     var body: some View {
         NavigationStack {
             HomeView()
         }
         .safeAreaInset(edge: .bottom) {
-            MiniPlayerBar(showingNowPlaying: $showingNowPlaying)
+            MiniPlayerBar(showingNowPlaying: $engine.isPresentingPlayer)
         }
-        .sheet(isPresented: $showingNowPlaying) {
+        // One place presents the player, so tapping an episode behaves the same wherever
+        // you tapped it.
+        .sheet(isPresented: $engine.isPresentingPlayer) {
             RealPlayerView()
+                // Without a handle there's nothing to grab, and with a transcript under
+                // the finger a downward drag scrolls the text rather than dismissing.
+                .presentationDragIndicator(.visible)
         }
         .preferredColorScheme(.dark)
     }

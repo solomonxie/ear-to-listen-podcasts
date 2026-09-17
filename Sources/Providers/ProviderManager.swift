@@ -49,11 +49,11 @@ final class ProviderManager: @unchecked Sendable {
         return try? credentials.getJSON([String: String].self, forKey: Self.settingsKey(providerID: record.id))
     }
 
-    /// "s3://bucket/prefix" for display — lets two connections to the same bucket
-    /// (different prefixes) be told apart in a list.
+    /// "s3://bucket/folder/" for display — lets two connections to the same bucket
+    /// (different folders) be told apart in a list.
     func s3DisplayPath(for record: ProviderRecord) -> String? {
         guard let settings = s3Settings(for: record), let bucket = settings["bucket"], !bucket.isEmpty else { return nil }
-        let prefix = settings["keyPrefix"].flatMap { $0.isEmpty ? nil : $0 }
-        return prefix.map { "s3://\(bucket)/\($0)" } ?? "s3://\(bucket)"
+        let folder = S3FolderPath.normalized(settings["keyPrefix"])
+        return folder.map { "s3://\(bucket)/\($0)" } ?? "s3://\(bucket)"
     }
 }

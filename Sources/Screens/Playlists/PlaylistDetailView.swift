@@ -14,7 +14,7 @@ struct PlaylistDetailView: View {
             } else {
                 List(tracks) { track in
                     Button {
-                        PlaybackEngine.shared.play(track: track, queue: tracks)
+                        PlaybackEngine.shared.open(track: track, queue: tracks)
                     } label: {
                         TrackRow(track: track)
                     }

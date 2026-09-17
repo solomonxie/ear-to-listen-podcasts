@@ -16,7 +16,13 @@ struct OpenAIWhisperTranscriber: SpeechTranscribing {
         return (try? store.secret(forKeyID: key.id)).map { !$0.isEmpty } ?? false
     }
 
-    func transcribe(audioURL: URL, startOffset: Double, context: TranscriptionContext) async throws -> [TranscriptSegment] {
+    /// No `onPartial`: the endpoint answers once, with the whole window.
+    func transcribe(
+        audioURL: URL,
+        startOffset: Double,
+        context: TranscriptionContext,
+        onPartial: @escaping @Sendable (TranscriptDraft) -> Void
+    ) async throws -> [TranscriptSegment] {
         let store = AiKeyStore(dbQueue: DatabaseManager.shared.dbQueue)
         guard
             let openAIKey = try? store.all().first(where: { $0.vendor == .openAI }),
@@ -30,6 +36,11 @@ struct OpenAIWhisperTranscriber: SpeechTranscribing {
         guard fileData.count <= Self.maxFileSizeBytes else { throw TranscriptionError.fileTooLarge }
 
         var fields = ["model": Self.model, "response_format": "verbose_json"]
+        // Whisper guesses the language per request otherwise, and gets it wrong often
+        // enough on short or noisy windows that one episode comes back in two languages.
+        if let language = context.localeIdentifier?.split(separator: "-").first.map(String.init) {
+            fields["language"] = language
+        }
         // Whisper takes prior text as a style/vocabulary hint — this is where the user's
         // own corrections come back in as context.
         if let prompt = context.prompt { fields["prompt"] = prompt }
@@ -44,11 +55,11 @@ struct OpenAIWhisperTranscriber: SpeechTranscribing {
         )
         try? store.bumpRequestCount(id: openAIKey.id)
 
-        guard
-            let (data, response) = try? await URLSession.shared.data(for: request),
-            (response as? HTTPURLResponse)?.statusCode == 200
-        else {
-            throw TranscriptionError.requestFailed
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let status = (response as? HTTPURLResponse)?.statusCode, status == 200 else {
+            // OpenAI puts the actual reason in the body ("invalid_api_key", quota, an
+            // unsupported file); swallowing it left every failure reading the same.
+            throw TranscriptionError.serverRejected(Self.errorMessage(in: data, response: response))
         }
 
         struct TranscriptionResponse: Decodable {
@@ -71,6 +82,18 @@ struct OpenAIWhisperTranscriber: SpeechTranscribing {
         }
     }
 
+    private static func errorMessage(in data: Data, response: URLResponse) -> String {
+        struct ErrorResponse: Decodable {
+            struct Payload: Decodable { var message: String? }
+            var error: Payload?
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if let message = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.error?.message {
+            return "\(message) (HTTP \(status))"
+        }
+        return "HTTP \(status)"
+    }
+
     private static func multipartBody(fileData: Data, fileName: String, fields: [String: String], boundary: String) -> Data {
         var body = Data()
         for (key, value) in fields {
@@ -80,7 +103,7 @@ struct OpenAIWhisperTranscriber: SpeechTranscribing {
         }
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
         body.append(fileData)
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         return body

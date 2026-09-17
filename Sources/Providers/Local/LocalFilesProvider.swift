@@ -81,6 +81,16 @@ struct LocalFilesProvider: CloudProvider {
         baseURL.appendingPathComponent(fileID)
     }
 
+    var isWritable: Bool { true }
+
+    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+        let url = baseURL.appendingPathComponent(path)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try data.write(to: url, options: .atomic)
+    }
+
     func testConnection() async -> ConnectionTestResult {
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: baseURL.path, isDirectory: &isDirectory)

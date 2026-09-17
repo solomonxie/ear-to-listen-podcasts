@@ -20,6 +20,7 @@ actor AudioCache {
 
     /// Returns the cached copy if present, bumping its modification date so LRU eviction skips it.
     func cachedURL(providerID: String, filePath: String) -> URL? {
+        adoptLegacyEntryIfPresent(providerID: providerID, filePath: filePath)
         let url = fileURL(providerID: providerID, filePath: filePath)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
@@ -43,19 +44,42 @@ actor AudioCache {
     /// `DownloadsView` — the track itself stays synced, just its local copy goes.
     func invalidate(providerID: String, filePath: String) {
         try? FileManager.default.removeItem(at: fileURL(providerID: providerID, filePath: filePath))
+        try? FileManager.default.removeItem(at: legacyFileURL(providerID: providerID, filePath: filePath))
     }
 
     /// Size of the cached copy if one exists — `nil` means not downloaded. Doesn't bump the
     /// LRU access date the way `cachedURL` does, since just listing what's downloaded
     /// shouldn't protect an entry from eviction the way actually playing it does.
     func cachedSize(providerID: String, filePath: String) -> Int64? {
+        adoptLegacyEntryIfPresent(providerID: providerID, filePath: filePath)
         let url = fileURL(providerID: providerID, filePath: filePath)
         guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]) else { return nil }
         return values.fileSize.map(Int64.init)
     }
 
+    /// Keeps the source file's extension on the cached copy. AVFoundation decides what a
+    /// file *is* largely from that extension, and a bare hash reads as "not audio" to
+    /// `AVAssetReader` — which is what the transcriber decodes with, so an extension-less
+    /// cache entry could be played and still refuse to transcribe.
     private func fileURL(providerID: String, filePath: String) -> URL {
+        let name = cacheKey(providerID: providerID, filePath: filePath)
+        let ext = (filePath as NSString).pathExtension.lowercased()
+        return directory.appendingPathComponent(ext.isEmpty ? name : "\(name).\(ext)")
+    }
+
+    /// Where entries written before that landed. Renamed on first touch rather than
+    /// re-downloaded, so an existing cache survives the change.
+    private func legacyFileURL(providerID: String, filePath: String) -> URL {
         directory.appendingPathComponent(cacheKey(providerID: providerID, filePath: filePath))
+    }
+
+    private func adoptLegacyEntryIfPresent(providerID: String, filePath: String) {
+        let legacy = legacyFileURL(providerID: providerID, filePath: filePath)
+        let current = fileURL(providerID: providerID, filePath: filePath)
+        guard legacy != current,
+              FileManager.default.fileExists(atPath: legacy.path),
+              !FileManager.default.fileExists(atPath: current.path) else { return }
+        try? FileManager.default.moveItem(at: legacy, to: current)
     }
 
     private func cacheKey(providerID: String, filePath: String) -> String {

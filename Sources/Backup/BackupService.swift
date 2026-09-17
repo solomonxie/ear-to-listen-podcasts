@@ -30,6 +30,7 @@ struct BackupService {
     private var importSourceStore: ImportSourceStore { ImportSourceStore(dbQueue: dbQueue) }
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
+    private var transcriptStore: TranscriptStore { TranscriptStore(dbQueue: dbQueue) }
 
     init(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) {
         self.dbQueue = dbQueue
@@ -61,10 +62,63 @@ struct BackupService {
         // Only speakers with a manual edit travel — everything else is just synced
         // metadata `SyncEngine` rebuilds on its own.
         let artists = try libraryStore.artists().compactMap { artist -> LibrarySnapshot.ArtistEntry? in
-            guard artist.bio != nil || artist.photoFileName != nil else { return nil }
-            return LibrarySnapshot.ArtistEntry(name: artist.name, bio: artist.bio, photoFileName: artist.photoFileName)
+            guard artist.bio != nil || artist.photoFileName != nil || artist.language != nil else { return nil }
+            return LibrarySnapshot.ArtistEntry(
+                name: artist.name, bio: artist.bio, language: artist.language,
+                photoFileName: artist.photoFileName
+            )
         }
-        return LibrarySnapshot(exportedAt: Date(), playlists: playlists, providers: providers, importSources: importSources, artists: artists)
+        // Same rule for episodes: only the ones someone edited by hand travel, since a
+        // re-sync re-derives everything else from the files themselves.
+        let episodes = try trackStore.all(includingLost: true).compactMap { track -> LibrarySnapshot.EpisodeEntry? in
+            guard let editedAt = track.metadataEditedAt else { return nil }
+            return LibrarySnapshot.EpisodeEntry(
+                providerID: track.providerID,
+                filePath: track.filePath,
+                title: track.title,
+                artistName: (track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name,
+                albumName: (track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil)?.name,
+                showName: (track.showID.flatMap { try? libraryStore.show(id: $0) } ?? nil)?.name,
+                year: track.year,
+                trackNumber: track.trackNumber,
+                notes: track.notes,
+                artworkFileName: track.artworkFileName,
+                editedAt: editedAt
+            )
+        }
+        return LibrarySnapshot(
+            exportedAt: Date(), playlists: playlists, providers: providers,
+            importSources: importSources, artists: artists, episodes: episodes,
+            transcripts: try transcripts()
+        )
+    }
+
+    /// Unlike speaker/episode entries there's no "only if edited" rule here — a machine
+    /// transcript is expensive to rebuild (battery or API spend) even when nobody has
+    /// touched it, so all of it travels.
+    private func transcripts() throws -> [LibrarySnapshot.TranscriptEntry] {
+        let tracksByID = Dictionary(
+            try trackStore.all(includingLost: true).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+        )
+        return try transcriptStore.allRecords().compactMap { record in
+            guard let track = tracksByID[record.trackID] else { return nil }
+            let segments = (try? transcriptStore.find(trackID: record.trackID)) ?? []
+            guard !segments.isEmpty else { return nil }
+            let edits = (try? transcriptStore.edits(trackID: record.trackID)) ?? []
+            return LibrarySnapshot.TranscriptEntry(
+                providerID: track.providerID,
+                filePath: track.filePath,
+                segments: segments,
+                edits: edits.map {
+                    LibrarySnapshot.TranscriptEntry.EditEntry(
+                        id: $0.id, segmentStart: $0.segmentStart, originalText: $0.originalText,
+                        editedText: $0.editedText, createdAt: $0.createdAt
+                    )
+                },
+                engine: record.engine,
+                updatedAt: record.updatedAt
+            )
+        }
     }
 
     func encode(_ snapshot: LibrarySnapshot) throws -> Data {
@@ -84,32 +138,41 @@ struct BackupService {
         return snapshot
     }
 
-    /// Bundles a snapshot with its referenced speaker photos into one zip archive — the
-    /// actual format shipped by Export/Backup. `snapshot.json` at the root, photos under
-    /// `photos/`.
+    /// Bundles a snapshot with the images it references into one zip archive — the actual
+    /// format shipped by Export/Backup. `snapshot.json` at the root, speaker photos under
+    /// `photos/`, episode artwork under `artwork/`.
     func archive(_ snapshot: LibrarySnapshot) throws -> Data {
         var entries = [ZipArchive.Entry(name: "snapshot.json", data: try encode(snapshot))]
         for artist in snapshot.artists {
             guard let fileName = artist.photoFileName,
-                  let url = SpeakerPhotoStore.url(for: fileName),
+                  let url = ImageFileStore.speakerPhotos.url(for: fileName),
                   let data = try? Data(contentsOf: url)
             else { continue }
             entries.append(ZipArchive.Entry(name: "photos/\(fileName)", data: data))
         }
+        for episode in snapshot.episodes {
+            guard let fileName = episode.artworkFileName,
+                  let url = ImageFileStore.artwork.url(for: fileName),
+                  let data = try? Data(contentsOf: url)
+            else { continue }
+            entries.append(ZipArchive.Entry(name: "artwork/\(fileName)", data: data))
+        }
         return ZipArchive.write(entries)
     }
 
-    /// Unpacks a zip written by `archive(_:)` — writes any bundled photos to
-    /// `SpeakerPhotoStore` before returning, so `apply(_:)` can point restored speakers at
-    /// them right away.
+    /// Unpacks a zip written by `archive(_:)` — writes any bundled images to their store
+    /// before returning, so `apply(_:)` can point restored speakers/episodes at them right
+    /// away.
     func unarchive(_ data: Data) throws -> LibrarySnapshot {
         let entries = ZipArchive.read(data)
         guard let snapshotEntry = entries.first(where: { $0.name == "snapshot.json" }) else {
             throw BackupError.noBackupFound
         }
-        for entry in entries where entry.name.hasPrefix("photos/") {
-            let fileName = String(entry.name.dropFirst("photos/".count))
-            try? entry.data.write(to: SpeakerPhotoStore.directory.appendingPathComponent(fileName))
+        for (prefix, store) in [("photos/", ImageFileStore.speakerPhotos), ("artwork/", ImageFileStore.artwork)] {
+            for entry in entries where entry.name.hasPrefix(prefix) {
+                let fileName = String(entry.name.dropFirst(prefix.count))
+                try? entry.data.write(to: store.directory.appendingPathComponent(fileName))
+            }
         }
         return try decode(snapshotEntry.data)
     }
@@ -157,8 +220,47 @@ struct BackupService {
         // later sync's own `upsertArtist(name:)` will find and reuse this same row.
         for entry in snapshot.artists {
             let artist = try libraryStore.upsertArtist(name: entry.name)
-            try libraryStore.updateArtist(id: artist.id, name: entry.name, bio: entry.bio)
+            try libraryStore.updateArtist(id: artist.id, name: entry.name, bio: entry.bio, language: entry.language)
             try libraryStore.updateArtistPhoto(id: artist.id, photoFileName: entry.photoFileName)
+        }
+
+        // Episode edits need the file itself already synced — unlike a speaker, there's no
+        // sensible row to pre-seed from a path alone. Restoring onto a fresh device, sync
+        // first, then restore again.
+        for entry in snapshot.episodes {
+            guard var track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else { continue }
+            let artist = try entry.artistName.map { try libraryStore.upsertArtist(name: $0) }
+            let album = try entry.albumName.map { try libraryStore.upsertAlbum(name: $0, artistID: artist?.id) }
+            let show = try entry.showName.map { try libraryStore.upsertShow(name: $0) }
+            track.title = entry.title
+            track.artistID = artist?.id
+            track.albumID = album?.id
+            track.showID = show?.id
+            track.year = entry.year
+            track.trackNumber = entry.trackNumber
+            track.notes = entry.notes
+            track.artworkFileName = entry.artworkFileName
+            track.metadataEditedAt = entry.editedAt
+            try trackStore.upsert(track, artistName: artist?.name, albumName: album?.name)
+        }
+
+        // Like episode edits, a transcript needs its file already synced — there's no row
+        // to hang it off otherwise. Merging rather than overwriting means a correction
+        // made on this device outlives a restore of an older backup.
+        for entry in snapshot.transcripts {
+            guard let track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else { continue }
+            let existing = (try? transcriptStore.find(trackID: track.id)) ?? []
+            try transcriptStore.save(
+                trackID: track.id,
+                segments: TranscriptStore.merging(existing: existing, incoming: entry.segments),
+                engine: entry.engine
+            )
+            try transcriptStore.restoreEdits(entry.edits.map {
+                TranscriptEdit(
+                    id: $0.id, trackID: track.id, segmentStart: $0.segmentStart,
+                    originalText: $0.originalText, editedText: $0.editedText, createdAt: $0.createdAt
+                )
+            })
         }
 
         return BackupImportResult(playlistsImported: snapshot.playlists.count, tracksMatched: matched, tracksUnmatched: unmatched)

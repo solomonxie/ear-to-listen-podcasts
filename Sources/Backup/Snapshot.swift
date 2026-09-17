@@ -1,13 +1,16 @@
 import Foundation
 
 /// Portable, secrets-free snapshot of a user's app data for manual export/import
-/// and remote backup/restore. Covers playlists, the provider/import-source list, and
-/// any speaker edits (bio/photo — a `LibrarySnapshot` file is a zip bundling this JSON
-/// with the referenced photos, see `BackupService.archive`); excludes everything else
-/// library-side (rebuilt by `SyncEngine`) and credentials (stay in Keychain — re-enter
-/// them after restoring on a new device).
+/// and remote backup/restore. Covers playlists, the provider/import-source list,
+/// transcripts and their corrections, and any speaker or episode edits (bio/photo,
+/// retitled episodes/artwork — a `LibrarySnapshot` file is a zip bundling this JSON with
+/// the referenced images, see `BackupService.archive`); excludes everything else
+/// library-side (rebuilt by `SyncEngine`), the episode audio itself (already sitting in
+/// the bucket), and credentials (stay in Keychain — re-enter them after restoring on a
+/// new device).
 struct LibrarySnapshot: Codable {
-    static let currentVersion = 1
+    /// v2 added `transcripts`. Older files still decode — the field defaults to empty.
+    static let currentVersion = 2
 
     /// Identifies a track by (providerID, filePath) rather than its local DB id,
     /// since that id is a fresh UUID per device/install — stable across a resync,
@@ -49,8 +52,51 @@ struct LibrarySnapshot: Codable {
     struct ArtistEntry: Codable {
         var name: String
         var bio: String?
+        /// BCP-47, e.g. `zh-CN`. Hand-set and not re-derivable, so it travels.
+        var language: String?
         /// References an entry under `photos/` in the same zip archive, not a device path.
         var photoFileName: String?
+    }
+
+    /// One hand-edited episode, keyed by (providerID, filePath) like `TrackRef` — the
+    /// local id is a fresh UUID per install. Speaker/album/show travel by name so they
+    /// re-link against whatever those rows are called on the restoring device. Only
+    /// episodes someone actually edited are included; the rest is synced metadata
+    /// `SyncEngine` rebuilds by itself.
+    struct EpisodeEntry: Codable {
+        var providerID: String
+        var filePath: String
+        var title: String
+        var artistName: String?
+        var albumName: String?
+        var showName: String?
+        var year: Int?
+        var trackNumber: Int?
+        var notes: String?
+        /// References an entry under `artwork/` in the same zip archive, not a device path.
+        var artworkFileName: String?
+        var editedAt: Date
+    }
+
+    /// A transcript and the corrections made to it, keyed by (providerID, filePath) like
+    /// `TrackRef`. Worth carrying even though it's machine-derived: re-transcribing an
+    /// episode costs either an hour of battery or real money, and the corrections are
+    /// hand-typed and can't be regenerated at all.
+    struct TranscriptEntry: Codable {
+        struct EditEntry: Codable {
+            var id: String
+            var segmentStart: Double
+            var originalText: String
+            var editedText: String
+            var createdAt: Date
+        }
+
+        var providerID: String
+        var filePath: String
+        var segments: [TranscriptSegment]
+        var edits: [EditEntry] = []
+        var engine: String?
+        var updatedAt: Date?
     }
 
     var version: Int = currentVersion
@@ -59,4 +105,40 @@ struct LibrarySnapshot: Codable {
     var providers: [ProviderEntry]
     var importSources: [ImportSourceEntry]
     var artists: [ArtistEntry] = []
+    var episodes: [EpisodeEntry] = []
+    var transcripts: [TranscriptEntry] = []
+
+    init(
+        exportedAt: Date,
+        playlists: [PlaylistEntry],
+        providers: [ProviderEntry],
+        importSources: [ImportSourceEntry],
+        artists: [ArtistEntry] = [],
+        episodes: [EpisodeEntry] = [],
+        transcripts: [TranscriptEntry] = []
+    ) {
+        self.exportedAt = exportedAt
+        self.playlists = playlists
+        self.providers = providers
+        self.importSources = importSources
+        self.artists = artists
+        self.episodes = episodes
+        self.transcripts = transcripts
+    }
+
+    /// Written by hand because a synthesized `init(from:)` ignores a property's default
+    /// value and demands the key — which made every field added after v1 (`artists`,
+    /// `episodes`, now `transcripts`) a hard requirement, so an older archive failed to
+    /// decode at all instead of restoring what it does have.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? Self.currentVersion
+        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
+        playlists = try container.decodeIfPresent([PlaylistEntry].self, forKey: .playlists) ?? []
+        providers = try container.decodeIfPresent([ProviderEntry].self, forKey: .providers) ?? []
+        importSources = try container.decodeIfPresent([ImportSourceEntry].self, forKey: .importSources) ?? []
+        artists = try container.decodeIfPresent([ArtistEntry].self, forKey: .artists) ?? []
+        episodes = try container.decodeIfPresent([EpisodeEntry].self, forKey: .episodes) ?? []
+        transcripts = try container.decodeIfPresent([TranscriptEntry].self, forKey: .transcripts) ?? []
+    }
 }

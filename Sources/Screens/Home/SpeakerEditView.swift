@@ -10,8 +10,11 @@ struct SpeakerEditView: View {
 
     @State private var name: String
     @State private var bio: String
+    @State private var language: String?
     @State private var photoFileName: String?
     @State private var photoItem: PhotosPickerItem?
+    @State private var isSearchingPhoto = false
+    @State private var photoSearchMessage: String?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -19,6 +22,7 @@ struct SpeakerEditView: View {
         self.speaker = speaker
         _name = State(initialValue: speaker.name)
         _bio = State(initialValue: speaker.bio ?? "")
+        _language = State(initialValue: speaker.language)
         _photoFileName = State(initialValue: speaker.photoFileName)
     }
 
@@ -37,9 +41,29 @@ struct SpeakerEditView: View {
                             PhotosPicker(selection: $photoItem, matching: .images) {
                                 SpeakerPhotoPreview(photoFileName: previewFileName)
                             }
+                            // Both ways of getting a picture sit together: pick one from
+                            // your library, or take one from this speaker's own episodes.
+                            Button {
+                                Task { await choosePhotoAutomatically() }
+                            } label: {
+                                if isSearchingPhoto {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Label("Use episode artwork", systemImage: "wand.and.stars")
+                                }
+                            }
+                            .font(.footnote)
+                            .disabled(isSearchingPhoto)
+
                             if photoFileName != nil {
                                 Button("Remove Photo", role: .destructive) { removePhoto() }
                                     .font(.footnote)
+                            }
+                            if let photoSearchMessage {
+                                Text(photoSearchMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
                             }
                         }
                         Spacer()
@@ -51,6 +75,20 @@ struct SpeakerEditView: View {
                     TextField("Name", text: $name)
                     TextField("Bio", text: $bio, axis: .vertical)
                         .lineLimit(3...6)
+                }
+
+                Section {
+                    Picker("Language", selection: $language) {
+                        Text("Not set").tag(String?.none)
+                        ForEach(AppleSpeechTranscriber.supportedLocales, id: \.identifier) { locale in
+                            Text(TranscriptPane.languageName(locale))
+                                .tag(String?.some(locale.identifier(.bcp47)))
+                        }
+                    }
+                } header: {
+                    Text("Spoken language")
+                } footer: {
+                    Text("Used to transcribe this speaker's episodes. Recognizers have to be told which language to expect — they can't work it out, and the wrong one returns confident nonsense rather than failing.")
                 }
             }
             .navigationTitle("Edit Speaker")
@@ -70,10 +108,23 @@ struct SpeakerEditView: View {
         }
     }
 
+    private func choosePhotoAutomatically() async {
+        isSearchingPhoto = true
+        photoSearchMessage = nil
+        defer { isSearchingPhoto = false }
+        guard let data = await SpeakerPhotoFinder.find(for: speaker.id),
+              let image = UIImage(data: data),
+              let newFileName = try? ImageFileStore.speakerPhotos.save(image, maxDimension: 400) else {
+            photoSearchMessage = "No artwork found on this speaker's episodes."
+            return
+        }
+        discardIfUncommitted(photoFileName)
+        photoFileName = newFileName
+    }
+
     private func handlePick(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return }
-        let resized = image.resized(maxDimension: 400)
-        guard let jpeg = resized.jpegData(compressionQuality: 0.85), let newFileName = try? SpeakerPhotoStore.save(jpeg) else { return }
+        guard let item, let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
+              let newFileName = try? ImageFileStore.speakerPhotos.save(image, maxDimension: 400) else { return }
         // Drop a photo picked earlier in this same session but never committed via Save.
         discardIfUncommitted(photoFileName)
         photoFileName = newFileName
@@ -91,13 +142,15 @@ struct SpeakerEditView: View {
 
     private func discardIfUncommitted(_ fileName: String?) {
         guard fileName != speaker.photoFileName else { return }
-        SpeakerPhotoStore.remove(fileName)
+        ImageFileStore.speakerPhotos.remove(fileName)
     }
 
     private func save() {
-        try? libraryStore.updateArtist(id: speaker.id, name: name, bio: bio.isEmpty ? nil : bio)
+        try? libraryStore.updateArtist(
+            id: speaker.id, name: name, bio: bio.isEmpty ? nil : bio, language: language
+        )
         if photoFileName != speaker.photoFileName {
-            SpeakerPhotoStore.remove(speaker.photoFileName)
+            ImageFileStore.speakerPhotos.remove(speaker.photoFileName)
             try? libraryStore.updateArtistPhoto(id: speaker.id, photoFileName: photoFileName)
         }
         // Home holds its own copy of these rows, so it needs telling — otherwise the new
@@ -121,14 +174,5 @@ private struct SpeakerPhotoPreview: View {
                     .background(Color.accentColor, in: Circle())
                     .foregroundStyle(.white)
             }
-    }
-}
-
-private extension UIImage {
-    func resized(maxDimension: CGFloat) -> UIImage {
-        let scale = min(1, maxDimension / max(size.width, size.height))
-        guard scale < 1 else { return self }
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        return UIGraphicsImageRenderer(size: newSize).image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 }

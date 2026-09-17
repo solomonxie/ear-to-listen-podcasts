@@ -4,7 +4,7 @@ import SwiftUI
 /// is never smaller than the rows underneath it. Four roles, nothing else:
 ///
 ///     sectionTitle    .title3.bold   "Settings"        — top of a whole section
-///     sectionRow      .subheadline   "Add a Folder"    — any row or tappable label
+///     sectionRow      .subheadline   "Sync Now"        — any row or tappable label
 ///     sectionHint     .footnote      explanatory text under a heading/group
 ///     sectionHeading  .caption       "LOCAL FOLDERS"   — a group inside a section
 ///

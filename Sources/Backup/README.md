@@ -3,14 +3,26 @@
 `LibrarySnapshot` (Codable) + `BackupService`, which builds one from the DB
 (`Sources/DB`), encodes it as JSON, and applies it back. No credentials or
 synced track/library rows travel in it — those are Keychain-only or rebuilt
-by `Sources/Library/Sync.swift`. Speaker bio/photo edits are the one bit of
-library data that *does* travel (`ArtistEntry`, keyed by name), since those
-are manual edits sync can't rebuild on its own.
+by `Sources/Library/Sync.swift`. What *does* travel is whatever a resync
+can't rebuild: speaker bio/photo edits (`ArtistEntry`, keyed by name),
+episode edits (`EpisodeEntry`), and transcripts with their corrections
+(`TranscriptEntry`) — machine-made, but costing an hour of battery or real
+money to make again, and the corrections are hand-typed.
+
+Snapshot decoding is hand-written on purpose: a synthesized `init(from:)`
+ignores a property's default and demands the key, so every field added after
+v1 would make older archives undecodable rather than partially restorable.
 
 What actually ships is a zip (`BackupService.archive`/`unarchive`, via the
 hand-rolled `ZipArchive` — store-only, no compression): `snapshot.json` at
 the root plus any referenced speaker photos under `photos/`, so a photo
 edit survives a reinstall/new-device restore the same as a bio edit does.
+
+`AutoBackup` keeps the remote copy current on its own: switched on when an S3
+connection is added (an explicit "off" is respected), foreground-only like
+`SyncScheduler`, and it uploads only when something changed and at most every
+15 minutes. `markChanged()` is called from `.libraryDidChange` plus the
+transcript paths that don't post it.
 
 Two front ends, one archive format, wired in `Sources/Screens/Settings`:
 - Export/Import: `.fileExporter`/`.fileImporter` — user picks the `.zip` file.

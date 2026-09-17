@@ -27,8 +27,12 @@ enum TranscriptionEngineKind: String, Codable, CaseIterable, Sendable {
     /// badly on long files; Whisper's cap is the 25MB upload limit, not time.
     var windowSeconds: Double {
         switch self {
-        case .onDevice: return 60
-        case .openAIWhisper: return 600
+        // Short on purpose: a window is only saved once it finishes, so this is also how
+        // much work a jump to elsewhere in the episode throws away.
+        case .onDevice: return 30
+        // Sized against Whisper's 25MB upload rather than its clock: a window now travels as
+        // 16 kHz mono WAV (~32 kB/s), so five minutes is ~9.6MB with room to spare.
+        case .openAIWhisper: return 300
         }
     }
 }
@@ -37,6 +41,10 @@ enum TranscriptionEngineKind: String, Codable, CaseIterable, Sendable {
 /// the names and terms they already fixed once stop coming back wrong.
 struct TranscriptionContext: Sendable {
     var phrases: [String] = []
+    /// What language the *audio* is in — which has nothing to do with what language the
+    /// phone is in. A listener with an English phone and a Mandarin podcast was getting
+    /// the en-US model, which recognises Mandarin as nonsense and never stops trying.
+    var localeIdentifier: String?
 
     var isEmpty: Bool { phrases.isEmpty }
 
@@ -76,8 +84,10 @@ enum TranscriptionError: LocalizedError {
     case missingAPIKey
     case fileTooLarge
     case requestFailed
+    case serverRejected(String)
     case invalidResponse
-    case onDeviceUnavailable
+    case onDeviceUnavailable(locale: String)
+    case onDeviceModelMissing(locale: String)
     case notAuthorized
     case sliceFailed
 
@@ -89,23 +99,42 @@ enum TranscriptionError: LocalizedError {
             return "This stretch of audio is over OpenAI's 25MB limit."
         case .requestFailed:
             return "Transcription request failed."
+        case .serverRejected(let detail):
+            return "OpenAI refused the transcription: \(detail)"
         case .invalidResponse:
             return "Transcription returned an unexpected response."
-        case .onDeviceUnavailable:
-            return "On-device speech recognition isn't available for this language on this device."
+        case .onDeviceUnavailable(let locale):
+            return "On-device speech recognition (\(locale)) isn't available right now. It can take a moment after launch — try again."
+        case .onDeviceModelMissing(let locale):
+            return "This iPhone couldn't recognise \(locale) offline. Add that language under Settings ▸ General ▸ Keyboard ▸ Dictation Languages — iOS downloads the model over Wi-Fi, which can take a few minutes — then try again, or switch the transcript to OpenAI Whisper."
         case .notAuthorized:
             return "Allow Speech Recognition in iOS Settings to transcribe on-device."
         case .sliceFailed:
-            return "Couldn't read that part of the audio file."
+            return "Couldn't decode that part of the audio — the file may be a format iOS can't read."
         }
     }
 }
 
 /// Transcribes one already-local window of audio. `startOffset` is where that window sits
 /// in the full episode, so returned segments carry episode-relative timestamps.
+///
+/// `onPartial` hands back the lines made out so far, as often as the engine has something
+/// new. That's what makes text appear while a window is still being worked on rather than
+/// a whole window at a time; an engine that can't stream simply never calls it.
 protocol SpeechTranscribing: Sendable {
     var kind: TranscriptionEngineKind { get }
-    func transcribe(audioURL: URL, startOffset: Double, context: TranscriptionContext) async throws -> [TranscriptSegment]
+    func transcribe(
+        audioURL: URL,
+        startOffset: Double,
+        context: TranscriptionContext,
+        onPartial: @escaping @Sendable (TranscriptDraft) -> Void
+    ) async throws -> [TranscriptSegment]
+}
+
+extension SpeechTranscribing {
+    func transcribe(audioURL: URL, startOffset: Double, context: TranscriptionContext) async throws -> [TranscriptSegment] {
+        try await transcribe(audioURL: audioURL, startOffset: startOffset, context: context, onPartial: { _ in })
+    }
 }
 
 extension TranscriptionEngineKind {

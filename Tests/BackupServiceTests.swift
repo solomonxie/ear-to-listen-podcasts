@@ -43,6 +43,102 @@ final class BackupServiceTests: XCTestCase {
         XCTAssertEqual(decoded.playlists.first?.tracks.first?.filePath, "ep1.mp3")
     }
 
+    func testTranscriptsAndCorrectionsSurviveSnapshotAndRestore() throws {
+        let dbQueue = try makeDatabase()
+        let transcriptStore = TranscriptStore(dbQueue: dbQueue)
+        let track = try makeTrack(providerID: "p1", filePath: "shows/ep9.mp3", dbQueue: dbQueue)
+        try transcriptStore.save(trackID: track.id, segments: [
+            TranscriptSegment(start: 0, end: 4, text: "Welcome back", engine: "onDevice"),
+            TranscriptSegment(start: 4, end: 9, text: "to Deep Hooberman", engine: "onDevice"),
+        ], engine: "onDevice")
+        try transcriptStore.applyEdit(trackID: track.id, segmentStart: 4, newText: "to Deep Huberman")
+
+        let service = BackupService(dbQueue: dbQueue)
+        let snapshot = try service.decode(try service.encode(try service.makeSnapshot()))
+        XCTAssertEqual(snapshot.transcripts.count, 1)
+
+        // A fresh device: same provider and path, nothing transcribed yet.
+        let restoredQueue = try makeDatabase()
+        let restoredTrack = try makeTrack(providerID: "p1", filePath: "shows/ep9.mp3", dbQueue: restoredQueue)
+        try BackupService(dbQueue: restoredQueue).apply(snapshot)
+
+        let restoredStore = TranscriptStore(dbQueue: restoredQueue)
+        XCTAssertEqual(
+            try restoredStore.find(trackID: restoredTrack.id)?.map(\.text),
+            ["Welcome back", "to Deep Huberman"]
+        )
+        XCTAssertEqual(try restoredStore.edits(trackID: restoredTrack.id).map(\.editedText), ["to Deep Huberman"])
+    }
+
+    /// Restoring the same backup twice mustn't pile up duplicate corrections.
+    func testRestoringTwiceDoesNotDuplicateCorrections() throws {
+        let dbQueue = try makeDatabase()
+        let transcriptStore = TranscriptStore(dbQueue: dbQueue)
+        let track = try makeTrack(providerID: "p1", filePath: "shows/ep9.mp3", dbQueue: dbQueue)
+        try transcriptStore.save(trackID: track.id, segments: [TranscriptSegment(start: 0, end: 4, text: "before")])
+        try transcriptStore.applyEdit(trackID: track.id, segmentStart: 0, newText: "after")
+
+        let service = BackupService(dbQueue: dbQueue)
+        let snapshot = try service.decode(try service.encode(try service.makeSnapshot()))
+        try service.apply(snapshot)
+        try service.apply(snapshot)
+
+        XCTAssertEqual(try transcriptStore.edits(trackID: track.id).count, 1)
+    }
+
+    /// A v1 archive predates transcripts; it still has to load.
+    func testAnOlderSnapshotWithoutTranscriptsStillDecodes() throws {
+        let json = """
+        {"version":1,"exportedAt":"2025-01-01T00:00:00Z","playlists":[],"providers":[],"importSources":[]}
+        """
+        let snapshot = try BackupService(dbQueue: try makeDatabase()).decode(Data(json.utf8))
+
+        XCTAssertTrue(snapshot.transcripts.isEmpty)
+    }
+
+    func testEpisodeEditsSurviveSnapshotAndRestore() throws {
+        let dbQueue = try makeDatabase()
+        let trackStore = TrackStore(dbQueue: dbQueue)
+        let libraryStore = LibraryStore(dbQueue: dbQueue)
+        var track = try makeTrack(providerID: "p1", filePath: "podcasts/2019/part1.mp3", dbQueue: dbQueue)
+        let artist = try libraryStore.upsertArtist(name: "Jane Doe")
+        track.title = "The one about ferries"
+        track.artistID = artist.id
+        track.notes = "Recorded on the boat."
+        track.artworkFileName = "art.jpg"
+        track.metadataEditedAt = Date()
+        try trackStore.upsert(track, artistName: artist.name, albumName: nil)
+
+        let service = BackupService(dbQueue: dbQueue)
+        let snapshot = try service.decode(try service.encode(try service.makeSnapshot()))
+        XCTAssertEqual(snapshot.episodes.map(\.title), ["The one about ferries"])
+
+        // Leave the row as a fresh sync would have written it, then restore over the top.
+        var resynced = try XCTUnwrap(trackStore.find(id: track.id))
+        resynced.title = "track01"
+        resynced.artistID = nil
+        resynced.notes = nil
+        resynced.artworkFileName = nil
+        resynced.metadataEditedAt = nil
+        try trackStore.upsert(resynced, artistName: nil, albumName: nil)
+
+        try service.apply(snapshot)
+
+        let restored = try XCTUnwrap(trackStore.find(id: track.id))
+        XCTAssertEqual(restored.title, "The one about ferries")
+        XCTAssertEqual(restored.notes, "Recorded on the boat.")
+        XCTAssertEqual(restored.artworkFileName, "art.jpg")
+        XCTAssertEqual(restored.artistID, artist.id)
+        XCTAssertNotNil(restored.metadataEditedAt)
+    }
+
+    func testSnapshotSkipsEpisodesNobodyEdited() throws {
+        let dbQueue = try makeDatabase()
+        _ = try makeTrack(providerID: "p1", filePath: "untouched.mp3", dbQueue: dbQueue)
+
+        XCTAssertTrue(try BackupService(dbQueue: dbQueue).makeSnapshot().episodes.isEmpty)
+    }
+
     func testDecodeRejectsFutureVersion() throws {
         let service = BackupService(dbQueue: try makeDatabase())
         var snapshot = LibrarySnapshot(exportedAt: Date(), playlists: [], providers: [], importSources: [])
@@ -105,8 +201,8 @@ final class BackupServiceTests: XCTestCase {
         let dbQueue = try makeDatabase()
         let libraryStore = LibraryStore(dbQueue: dbQueue)
         let artist = try libraryStore.upsertArtist(name: "Jane Doe")
-        let photoFileName = try SpeakerPhotoStore.save(Data("fake-jpeg-bytes".utf8))
-        addTeardownBlock { SpeakerPhotoStore.remove(photoFileName) }
+        let photoFileName = try ImageFileStore.speakerPhotos.save(Data("fake-jpeg-bytes".utf8))
+        addTeardownBlock { ImageFileStore.speakerPhotos.remove(photoFileName) }
         try libraryStore.updateArtist(id: artist.id, name: artist.name, bio: "A great host")
         try libraryStore.updateArtistPhoto(id: artist.id, photoFileName: photoFileName)
 
@@ -120,7 +216,7 @@ final class BackupServiceTests: XCTestCase {
         try service.apply(restoredSnapshot)
         let restoredArtist = try libraryStore.artists().first { $0.name == "Jane Doe" }
         XCTAssertEqual(restoredArtist?.photoFileName, photoFileName)
-        XCTAssertEqual(try Data(contentsOf: SpeakerPhotoStore.url(for: photoFileName)!), Data("fake-jpeg-bytes".utf8))
+        XCTAssertEqual(try Data(contentsOf: ImageFileStore.speakerPhotos.url(for: photoFileName)!), Data("fake-jpeg-bytes".utf8))
     }
 
     func testApplySkipsProvidersAlreadyPresentLocally() throws {

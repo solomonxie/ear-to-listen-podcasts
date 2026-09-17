@@ -18,25 +18,25 @@ extension Notification.Name {
 
 /// Populates the real DB (not a parallel mock store) with a small sample library — a
 /// few speakers, shows, topics, albums, playlists, and the three bundled demo clips as
-/// actual synced-look `Track`s — so every Home shelf has something to show on first
-/// launch instead of being empty. Everything it writes is tagged `isDemo = true` (the
-/// provider row is `DemoProvider.providerType`), so it can be wiped and reseeded
-/// (`reseed()`, wired to the "Reset Demo Data" setting) without touching anything the
-/// user actually synced.
+/// actual synced-look `Track`s — for someone who wants to look around before connecting
+/// anything. Everything it writes is tagged `isDemo = true` (the provider row is
+/// `DemoProvider.providerType`), so it can be wiped and reseeded without touching
+/// anything the user actually synced.
+///
+/// Never seeded automatically. A fresh install is an empty library, because content the
+/// user didn't put there is indistinguishable from content they did once it's sitting in
+/// the same shelves — they'd have to work out which of it is real.
 enum DemoDataSeeder {
-    private static let hasAutoSeededKey = "demoData.hasAutoSeeded"
-
-    /// Called once on the very first launch (fresh install) so the app isn't a blank
-    /// slate before the user has connected a real source. A no-op on every later launch,
-    /// even if the user later clears the demo data via "Reset Demo Data" themselves.
-    static func seedOnFirstLaunchIfNeeded() {
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: hasAutoSeededKey) else { return }
-        defaults.set(true, forKey: hasAutoSeededKey)
-        try? reseed()
+    static var isLoaded: Bool {
+        let count = try? DatabaseManager.shared.dbQueue.read { db in
+            try ProviderRecord.filter(Column("type") == DemoProvider.providerType).fetchCount(db)
+        }
+        return (count ?? 0) > 0
     }
 
-    static func reseed() throws {
+    /// Loads the sample library, replacing any copy of it already there — the same call
+    /// backs both "load it" and "put it back the way it was".
+    static func load() throws {
         try clear()
         try seed()
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
