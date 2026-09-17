@@ -134,16 +134,18 @@ visible page.
 │  Speaker: Huberman · Album: Season 3     │ ← one line; each half pushes that page
 │  ├──────────●───────────────────────┤    │ ← custom scrubber, tap anywhere to seek
 │      ⏮       ⏸       ⏭                   │
-│  [ Details | Transcript ]                │
-│  ▼ Details/Transcript continue here…     │ ← the WHOLE page scrolls as one; the
+│  ▼ details cards, then the transcript    │ ← the WHOLE page scrolls as one; the
 ├──────────────────────────────────────────┤   artwork and transport scroll away
 │  Up Next (12)                       ＋   │ ← pinned; ＋ adds to a playlist
 └──────────────────────────────────────────┘
 ```
 
-Details and Transcript both run far longer than a phone screen, so neither gets its
-own scroller inside a fixed frame — a nested box would only ever show a sliver. Up Next
-is pinned instead, since it shouldn't be a scroll away past a 40-minute transcript.
+One page, no tabs. Details and the transcript are read together — you check who the
+speaker is *because* of a line you just read — and a segmented control between them was
+a tab bar for two halves of one thing, costing a tap and the scroll position each way.
+Neither gets its own scroller inside a fixed frame either: both run far longer than a
+phone screen, and a nested box would only ever show a sliver. Up Next is pinned instead,
+since it shouldn't be a scroll away past a 40-minute transcript.
 
 **Details** — grouped cards, not one flat list, so "who/what" doesn't blur into "which
 file". A row with no value hides itself rather than printing a dash, so a thin-metadata
@@ -164,8 +166,12 @@ ABOUT THE SHOW   the show's summary, only if there is one
 
 ```
 ┌──────────────────────────────────────────┐
-│ ⌁ On-device ▾            3 edits         │ ← one menu: Off / On-device / OpenAI
-│ Transcribing 12:00–13:00… · 46% done     │   Whisper, + "Transcribe again…"
+│ TRANSCRIPT                      3 edits  │
+│ Transcribe this episode            ●──   │ ← off for every episode until switched on
+│ [ On-device | OpenAI Whisper ]           │ ← dimmed, not hidden, while it's off
+│ 🌐 Language: English    Transcribe again…│
+│ Keep going while paused            ──○   │
+│ Transcribing 12:00–13:00… · 46% done     │
 ├──────────────────────────────────────────┤
 │  …so the model runs entirely locally.    │ ← dim
 │  Which matters once you pipe in          │ ← BRIGHT = the line being spoken,
@@ -175,10 +181,16 @@ ABOUT THE SHOW   the show's summary, only if there is one
 ```
 
 Rules this encodes:
-- Off / free-and-offline / paid-and-better is **one** choice, so it's one control, not a
-  toggle plus a picker.
-- Off by default. Transcribing either spends battery or sends audio somewhere — the
-  listener opts in.
+- Every option is in view, in a fixed place. There are five, they're the ones you reach
+  for while listening, and a menu made each one a tap-and-hunt — worse, it hid whether
+  anything was running at all. Only the language stays a menu: it's a list of every
+  language the phone can recognise, which is a picker, not a row of buttons.
+- Options the switch governs are dimmed rather than hidden, so the section doesn't reflow
+  under your thumb as you flip it.
+- **Off for every episode**, and not remembered between them. Transcribing spends battery
+  or money; a preference that sticks means opening any episode quietly starts spending on
+  it. Whatever was transcribed before — and any transcript file sitting beside the audio —
+  still shows with the switch off, so nothing is lost by asking each time.
 - Tap corrects; "play from here" is on the line's context menu. Correcting is the one
   thing only a human can do here, so it gets the primary gesture.
 - Every window is saved the moment it lands, so quitting mid-episode keeps what got done
@@ -349,7 +361,7 @@ copy; the episode stays synced and re-downloads next play.
 | Remote browser | spinner in place of the list; footer held back too | "No episodes synced yet." | listing read fails → orange line above the list |
 | Sync queue | — | "Nothing queued. Sync a folder from a remote source to add files here." | failed job shows its provider error inline + Retry |
 | Now playing | — | "Nothing playing" | "You're offline. Connect to the internet to stream this track." |
-| Transcript | "Transcribing 12:00–13:00… · 46% done" inline, lines appear as they land | off: "Pick a recogniser above…"; on: "Listening ahead — lines appear as they're recognised." | orange line above the list; on-device needs the Speech permission, Whisper needs an OpenAI key |
+| Transcript | "Transcribing 12:00–13:00… · 46% done" inline, lines appear as they land | off: "Off for this episode — switch it on above…"; on: "Listening ahead — lines appear as they're recognised." | orange line above the list; on-device needs the Speech permission, Whisper needs an OpenAI key |
 | Downloads | spinner | "No downloaded episodes yet. Anything you play is saved here automatically." | — |
 | Add S3 / Add AI key | inline "Testing…" on Save | — | inline red line, never an alert |
 

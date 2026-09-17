@@ -4,7 +4,6 @@ import SwiftUI
 struct RealPlayerView: View {
     @ObservedObject var engine = PlaybackEngine.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var tab: Tab = .details
     @State private var showingUpNext = false
     @State private var showingAddToPlaylist = false
     @State private var artist: Artist?
@@ -22,20 +21,15 @@ struct RealPlayerView: View {
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
 
-    private enum Tab: String, CaseIterable {
-        case details = "Details"
-        case transcript = "Transcript"
-    }
-
     var body: some View {
         NavigationStack {
             Group {
                 if let track = engine.currentTrack {
-                    // One scroll for the whole screen, not a scrolling box under fixed
-                    // controls: Details and Transcript both run far longer than a phone,
-                    // and a nested scroller only ever shows a sliver of them. The artwork
-                    // and transport simply scroll away, which is also what makes the
-                    // transcript's self-scrolling read like lyrics.
+                    // One scroll for the whole screen, and one page: details, then the
+                    // transcript under them. A segmented control between the two was a
+                    // tab bar for two things that are read together — you check who the
+                    // speaker is *because* of a line you just read — and it cost a tap
+                    // and a lost scroll position every time.
                     ScrollViewReader { proxy in
                         page(for: track, proxy: proxy)
                             // Any deliberate drag hands control to the reader.
@@ -43,7 +37,7 @@ struct RealPlayerView: View {
                             // competing with it.
                             .simultaneousGesture(
                                 DragGesture(minimumDistance: 12).onChanged { _ in
-                                    if tab == .transcript { isFollowingTranscript = false }
+                                    isFollowingTranscript = false
                                 }
                             )
                             .overlay(alignment: .bottom) { followAgainPill(proxy) }
@@ -114,31 +108,19 @@ struct RealPlayerView: View {
                 if let lastError = engine.lastError {
                     Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
                 }
-                Picker("View", selection: $tab) {
-                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
+                EpisodeDetailsPane(playingTrack: track)
 
-                pane(for: track, proxy: proxy)
+                Divider().padding(.horizontal)
+
+                TranscriptPane(
+                    currentTime: engine.currentTime,
+                    scrollProxy: proxy,
+                    isFollowing: $isFollowingTranscript
+                ) { engine.seek(to: $0) }
             }
             .padding(.vertical)
         }
         .coordinateSpace(name: Self.scrollSpace)
-    }
-
-    @ViewBuilder
-    private func pane(for track: Track, proxy: ScrollViewProxy) -> some View {
-        switch tab {
-        case .details:
-            EpisodeDetailsPane(playingTrack: track)
-        case .transcript:
-            TranscriptPane(
-                currentTime: engine.currentTime,
-                scrollProxy: proxy,
-                isFollowing: $isFollowingTranscript
-            ) { engine.seek(to: $0) }
-        }
     }
 
     private func artwork(for track: Track) -> some View {
@@ -219,7 +201,7 @@ struct RealPlayerView: View {
     /// it's asked to, so a long read is never interrupted by the page moving itself.
     @ViewBuilder
     private func followAgainPill(_ proxy: ScrollViewProxy) -> some View {
-        if tab == .transcript, !isFollowingTranscript,
+        if !isFollowingTranscript, !transcript.lines.isEmpty,
            let start = transcript.currentLine(at: engine.currentTime)?.start {
             Button {
                 isFollowingTranscript = true

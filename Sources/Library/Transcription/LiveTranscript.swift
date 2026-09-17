@@ -51,11 +51,12 @@ final class LiveTranscript: ObservableObject {
         }
     }
 
-    /// Off by default: transcribing sends audio somewhere (or spends battery), so it's the
-    /// listener's call, not something that starts happening on its own.
-    @Published var isLiveEnabled: Bool {
+    /// Off for every episode until it's switched on for that episode — deliberately not
+    /// remembered. Transcribing spends battery or money, and a preference that sticks
+    /// means opening any episode quietly starts spending on it; whatever was transcribed
+    /// before is still shown, so nothing is lost by making this ask each time.
+    @Published var isLiveEnabled = false {
         didSet {
-            UserDefaults.standard.set(isLiveEnabled, forKey: Self.liveDefaultsKey)
             guard isLiveEnabled != oldValue else { return }
             isLiveEnabled ? restart() : stop()
         }
@@ -76,7 +77,6 @@ final class LiveTranscript: ObservableObject {
 
     private static let engineDefaultsKey = "transcript.engine"
     private static let localeDefaultsKey = "transcript.locale"
-    private static let liveDefaultsKey = "transcript.live"
     private static let whilePausedDefaultsKey = "transcript.whilePaused"
 
     private let transcriptStore = TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -94,7 +94,6 @@ final class LiveTranscript: ObservableObject {
     private init() {
         let stored = UserDefaults.standard.string(forKey: Self.engineDefaultsKey) ?? ""
         engineKind = TranscriptionEngineKind(rawValue: stored) ?? .onDevice
-        isLiveEnabled = UserDefaults.standard.bool(forKey: Self.liveDefaultsKey)
         runsWhilePaused = UserDefaults.standard.bool(forKey: Self.whilePausedDefaultsKey)
         localeIdentifier = UserDefaults.standard.string(forKey: Self.localeDefaultsKey)
     }
@@ -145,6 +144,9 @@ final class LiveTranscript: ObservableObject {
     func attach(track newTrack: Track?) {
         guard track?.id != newTrack?.id else { return }
         stop()
+        // A new episode is a new decision. Left on, the switch would mean every episode
+        // opened from here starts transcribing itself.
+        isLiveEnabled = false
         track = newTrack
         segments = []
         edits = []
