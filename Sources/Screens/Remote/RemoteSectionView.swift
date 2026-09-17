@@ -69,15 +69,18 @@ struct RemoteSectionView: View {
                 }
                 .padding(.horizontal)
 
-                // The sync queue is global across every connection, not per-bucket, so its
-                // status lives here once rather than behind each bucket's own menu.
+                // A pill like the ones above it, directly under them: this is somewhere
+                // you go, not a footnote about the section — as hint-grey text nobody
+                // could tell it was tappable. The count is the whole status ("idle" is
+                // what "(0)" already says), and it's shown once rather than per bucket,
+                // because the queue is global across every connection.
                 Button { showingSyncQueue = true } label: {
-                    HStack {
-                        Text(syncQueueSummary)
-                        Image(systemName: "chevron.right")
-                    }
-                    .sectionHint()
+                    Label("Queue (\(syncQueue.activeCount, format: .number.grouping(.never)))",
+                          systemImage: syncQueue.isPaused ? "pause.circle" : "tray.full")
+                        .font(.caption)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .padding(.horizontal)
             }
         }
@@ -199,13 +202,6 @@ struct RemoteSectionView: View {
         }
     }
 
-    private var syncQueueSummary: String {
-        // Counted in SQL, not off `jobs` — that's only the visible page.
-        let pending = syncQueue.activeCount
-        guard pending > 0 else { return "Sync queue: idle" }
-        let state = syncQueue.isPaused ? "paused" : "\(syncQueue.concurrency) at a time"
-        return "Sync queue: \(pending) pending · \(state)"
-    }
 }
 
 private struct RemoteSourceRow: View {

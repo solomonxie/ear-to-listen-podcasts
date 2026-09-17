@@ -125,7 +125,7 @@ struct RemoteBrowserView: View {
                     Button {
                         showingQueue = true
                     } label: {
-                        Label("Sync Queue", systemImage: "list.bullet.rectangle")
+                        Label("Queue", systemImage: "list.bullet.rectangle")
                     }
                     Divider()
                     Button(role: .destructive) {

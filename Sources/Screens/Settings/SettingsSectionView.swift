@@ -31,7 +31,9 @@ struct SettingsSectionView: View {
         if let error = autoBackup.cloudDriveError {
             return "Last backup to iCloud failed: \(error)"
         }
-        let location = "Files → iCloud Drive → BYO Podcasts"
+        // Slashes, not arrows: it's where the file sits, and an arrow reads as a
+        // sequence of taps — which is what the directions line below it actually is.
+        let location = "Files / iCloud Drive / BYO Podcasts"
         guard autoBackup.isCloudDriveEnabled else {
             return "\(location). Switch on to keep a copy that outlives deleting the app — a reinstall puts it back on its own."
         }
@@ -54,21 +56,56 @@ struct SettingsSectionView: View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Settings").sectionTitle().padding(.horizontal)
 
-            // A menu `Picker` outside a `Form` drops its own label and indents what's
-            // left, so the row read as a stray "System" sitting off the margin. The
-            // heading names it, and the choice is written into the button.
             VStack(alignment: .leading, spacing: 8) {
-                Text("LANGUAGE").sectionHeading()
-                Menu {
-                    Picker("Language", selection: $language.language) {
-                        ForEach(AppLanguage.allCases) { option in
-                            Text(option.displayName).tag(option)
-                        }
-                    }
-                } label: {
-                    Text("\(language.language.displayName) ▾")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Text("SYNC & BACKUP").sectionHeading()
+
+                // A destination is one switch and nothing else: on means every change
+                // goes there, off means none do. iCloud comes first — it's the only one
+                // with nothing to set up.
+                Toggle(isOn: $autoBackup.isCloudDriveEnabled) {
+                    Label("iCloud Drive", systemImage: "icloud")
                 }
+                .disabled(!autoBackup.cloudDriveStatus.isReady)
+                Text(cloudDriveHint)
+                    .sectionHint()
+                // Directions only for the one state the listener can act on, spelled out
+                // in full — the setting is four levels down, under their own name.
+                if autoBackup.cloudDriveStatus == .driveOff {
+                    Text("Settings → your name → iCloud → iCloud Drive → turn on")
+                        .sectionHint()
+                        .foregroundStyle(Color.accentColor)
+                }
+
+                Button {
+                    exportDocument = viewModel.makeExportDocument()
+                    showingExportPicker = exportDocument != nil
+                } label: {
+                    Label("Export Library Data", systemImage: "square.and.arrow.up")
+                }
+                .fileExporter(
+                    isPresented: $showingExportPicker,
+                    document: exportDocument,
+                    contentType: .zip,
+                    defaultFilename: "byop-backup"
+                ) { _ in exportDocument = nil }
+
+                Button {
+                    showingImportPicker = true
+                } label: {
+                    Label("Import Library Data", systemImage: "square.and.arrow.down")
+                }
+                .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.zip]) { result in
+                    if case .success(let url) = result {
+                        viewModel.importSnapshot(from: url)
+                    }
+                }
+
+                if let backupStatusMessage = viewModel.backupStatusMessage {
+                    Text(backupStatusMessage)
+                        .sectionHint()
+                }
+                Text("Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync.")
+                    .sectionHint()
             }
             .padding(.horizontal)
 
@@ -132,59 +169,6 @@ struct SettingsSectionView: View {
             .sheet(isPresented: $showingAddAiKey) {
                 AddAiKeyView(viewModel: viewModel)
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("SYNC & BACKUP").sectionHeading()
-
-                // A destination is one switch and nothing else: on means every change
-                // goes there, off means none do. iCloud comes first — it's the only one
-                // with nothing to set up.
-                Toggle(isOn: $autoBackup.isCloudDriveEnabled) {
-                    Label("iCloud Drive", systemImage: "icloud")
-                }
-                .disabled(!autoBackup.cloudDriveStatus.isReady)
-                Text(cloudDriveHint)
-                    .sectionHint()
-                // Directions only for the one state the listener can act on, spelled out
-                // in full — the setting is four levels down, under their own name.
-                if autoBackup.cloudDriveStatus == .driveOff {
-                    Text("Settings → your name → iCloud → iCloud Drive → turn on")
-                        .sectionHint()
-                        .foregroundStyle(Color.accentColor)
-                }
-
-                Button {
-                    exportDocument = viewModel.makeExportDocument()
-                    showingExportPicker = exportDocument != nil
-                } label: {
-                    Label("Export Library Data", systemImage: "square.and.arrow.up")
-                }
-                .fileExporter(
-                    isPresented: $showingExportPicker,
-                    document: exportDocument,
-                    contentType: .zip,
-                    defaultFilename: "byop-backup"
-                ) { _ in exportDocument = nil }
-
-                Button {
-                    showingImportPicker = true
-                } label: {
-                    Label("Import Library Data", systemImage: "square.and.arrow.down")
-                }
-                .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.zip]) { result in
-                    if case .success(let url) = result {
-                        viewModel.importSnapshot(from: url)
-                    }
-                }
-
-                if let backupStatusMessage = viewModel.backupStatusMessage {
-                    Text(backupStatusMessage)
-                        .sectionHint()
-                }
-                Text("Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync.")
-                    .sectionHint()
-            }
-            .padding(.horizontal)
 
             // Both ways of putting episodes in the library that aren't a remote source —
             // your own files, or the samples — as two links, not two sections.
@@ -253,6 +237,26 @@ struct SettingsSectionView: View {
                 }
                 Text("A few sample shows and clips to look around with — never loaded on its own.")
                     .sectionHint()
+            }
+            .padding(.horizontal)
+
+            // Last, because it's set once and never thought about again — unlike
+            // everything above it, which is about this library week to week.
+            VStack(alignment: .leading, spacing: 8) {
+                Text("LANGUAGE").sectionHeading()
+                // A menu `Picker` outside a `Form` drops its own label and indents what's
+                // left, so the row read as a stray "System" sitting off the margin. The
+                // heading names it, and the choice is written into the button.
+                Menu {
+                    Picker("Language", selection: $language.language) {
+                        ForEach(AppLanguage.allCases) { option in
+                            Text(option.displayName).tag(option)
+                        }
+                    }
+                } label: {
+                    Text("\(language.language.displayName) ▾")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(.horizontal)
         }

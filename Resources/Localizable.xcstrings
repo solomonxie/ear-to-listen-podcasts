@@ -1553,6 +1553,22 @@
         }
       }
     },
+    "Queue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queue"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "队列"
+          }
+        }
+      }
+    },
     "Recent Searches": {
       "localizations": {
         "en": {
@@ -2173,22 +2189,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "立即同步"
-          }
-        }
-      }
-    },
-    "Sync Queue": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sync Queue"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步队列"
           }
         }
       }

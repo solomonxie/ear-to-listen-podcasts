@@ -73,7 +73,7 @@ struct SyncQueueView: View {
                 .textCase(nil)
             }
         }
-        .navigationTitle("Sync Queue")
+        .navigationTitle("Queue")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { manager.refresh() }
     }
