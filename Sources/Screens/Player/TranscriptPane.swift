@@ -12,9 +12,13 @@ struct TranscriptPane: View {
     /// The whole player page scrolls as one, so the lyric list doesn't own a scroller —
     /// it drives the page's, which is what lets the artwork scroll away as lines advance.
     let scrollProxy: ScrollViewProxy
-    /// Turned off by the page the moment the reader scrolls by hand. Auto-scroll pulling
-    /// the text back mid-sentence is worse than no auto-scroll at all.
+    /// Off until asked for, and turned off again by the page the moment the reader
+    /// scrolls by hand. Auto-scroll pulling the text back mid-sentence — or away from the
+    /// transport you were reaching for — is worse than no auto-scroll at all.
     @Binding var isFollowing: Bool
+    /// Asks the page to scroll to the line being spoken and follow from there. The page
+    /// owns the scroller, so it owns the jump.
+    let onFollow: () -> Void
     let onSeek: (TimeInterval) -> Void
 
     @ObservedObject private var languages = OnDeviceLanguages.shared
@@ -70,9 +74,19 @@ struct TranscriptPane: View {
                 }
             }
 
-            Toggle("Transcribe this episode", isOn: liveSelection)
+            // A button, not a switch: it starts a pass over this episode, which then runs
+            // until it's done or stopped. A switch implies a setting that sticks, and
+            // this one is deliberately forgotten when the next episode opens.
+            Button {
+                transcript.isLiveEnabled.toggle()
+            } label: {
+                Label(
+                    transcript.isLiveEnabled ? "Stop live transcript" : "Live transcript this episode",
+                    systemImage: transcript.isLiveEnabled ? "stop.circle" : "waveform"
+                )
                 .font(.subheadline)
-                .disabled(transcript.track == nil)
+            }
+            .disabled(transcript.track == nil)
 
             Picker("Recogniser", selection: engineSelection) {
                 ForEach(TranscriptionEngineKind.allCases, id: \.self) { kind in
@@ -88,7 +102,8 @@ struct TranscriptPane: View {
                 // because this pane redraws several times a second while a window is
                 // being recognised, and SwiftUI shuts a `Menu` it rebuilds underneath.
                 TranscriptLanguageMenu(
-                    localeIdentifier: transcript.localeIdentifier,
+                    localeIdentifier: transcript.track?.language,
+                    inheritedLabel: inheritedLanguageLabel,
                     readyLanguages: languages.ready,
                     hasCheckedLanguages: languages.hasChecked
                 )
@@ -101,26 +116,43 @@ struct TranscriptPane: View {
 
             // Following playback is the default, so the episode you walked away from
             // stops costing battery. Running ahead is the deliberate choice.
-            Toggle("Keep going while paused", isOn: pausedSelection)
+            Toggle("Keep transcribing while paused", isOn: pausedSelection)
                 .font(.footnote)
                 .disabled(!transcript.isLiveEnabled)
+
+            // A button rather than a switch, because it's a place to go, not a mode:
+            // it scrolls to the line being spoken and keeps up from there, and any
+            // scroll of your own — or Back to top — hands the page back to you.
+            Button {
+                onFollow()
+            } label: {
+                Label(isFollowing ? "Following the transcript" : "Follow the transcript",
+                      systemImage: isFollowing ? "location.fill" : "location")
+                    .font(.footnote)
+            }
+            .disabled(isFollowing || transcript.lines.isEmpty)
         }
         .padding(.horizontal)
-    }
-
-    private var liveSelection: Binding<Bool> {
-        Binding(get: { transcript.isLiveEnabled }, set: { transcript.isLiveEnabled = $0 })
     }
 
     private var engineSelection: Binding<TranscriptionEngineKind> {
         Binding(get: { transcript.engineKind }, set: { transcript.engineKind = $0 })
     }
 
+    /// What this episode falls back to without a language of its own — its album's, then
+    /// its speaker's. Named so the menu can say whose answer it's inheriting.
+    private var inheritedLanguageLabel: String {
+        guard let inherited = transcript.inheritedLanguage, inherited.source != .episode else {
+            return "automatic"
+        }
+        return "\(TranscriptPane.languageName(Locale(identifier: inherited.identifier))) · \(inherited.source.displayName)"
+    }
+
     private var pausedSelection: Binding<Bool> {
         Binding(get: { transcript.runsWhilePaused }, set: { transcript.runsWhilePaused = $0 })
     }
 
-    private var status: String? {
+    private var status: LocalizedStringKey? {
         if transcript.isWaitingForPlayback {
             return "Paused with the episode · \(percent) transcribed"
         }
@@ -144,17 +176,17 @@ struct TranscriptPane: View {
     /// A window of music or silence transcribes to nothing, so "working" and "nothing to
     /// show yet" are both true at once — say which stretch is being worked on rather than
     /// leave a blank pane that reads as broken.
-    private var emptyStateDetail: String {
+    private var emptyStateDetail: LocalizedStringKey {
         if let window = transcript.activeWindow {
             return "Working through \(Scrubber.formatted(window.start))–\(Scrubber.formatted(window.end)) — lines appear as they're recognised. Nothing yet means no speech has been made out so far."
         }
         if transcript.isWaitingForPlayback {
-            return "Waiting for playback — transcribing follows the episode. Turn on \u{201C}Keep going while paused\u{201D} above to let it run ahead on its own."
+            return "Waiting for playback — transcribing follows the episode. Turn on \u{201C}Keep transcribing while paused\u{201D} above to let it run ahead on its own."
         }
         if transcript.isLiveEnabled {
             return "Listening from where you are — lines appear as they're recognised."
         }
-        return "Off for this episode — switch \u{201C}Transcribe this episode\u{201D} on above to start. Anything transcribed before, or a transcript file sitting beside the episode, still shows here either way."
+        return "Off for this episode — tap \u{201C}Live transcript this episode\u{201D} above to start one. Anything transcribed before, or a transcript file sitting beside the episode, still shows here either way."
     }
 
     @ViewBuilder private var lines: some View {
@@ -201,7 +233,11 @@ struct TranscriptPane: View {
 /// at exactly the moment you'd want it. Writes go straight to the shared `LiveTranscript`
 /// rather than through a binding, since a binding would defeat the equality check.
 private struct TranscriptLanguageMenu: View, Equatable {
+    /// This episode's own answer, not the app's — the pane is the place someone has just
+    /// heard the audio, so what they pick here belongs to the episode and outranks the
+    /// album's and the speaker's.
     let localeIdentifier: String?
+    let inheritedLabel: String
     /// BCP-47 languages this phone can recognise offline, so the picker can say so before
     /// you pick one rather than after it fails.
     let readyLanguages: Set<String>
@@ -209,6 +245,7 @@ private struct TranscriptLanguageMenu: View, Equatable {
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.localeIdentifier == rhs.localeIdentifier
+            && lhs.inheritedLabel == rhs.inheritedLabel
             && lhs.hasCheckedLanguages == rhs.hasCheckedLanguages
             && lhs.readyLanguages == rhs.readyLanguages
     }
@@ -218,7 +255,7 @@ private struct TranscriptLanguageMenu: View, Equatable {
             // The phone's language says nothing about the episode's, and picking the
             // wrong recognizer doesn't fail — it returns confident nonsense forever.
             Picker("Language", selection: languageSelection) {
-                Text("Match this phone").tag(String?.none)
+                Text("Inherit (\(inheritedLabel))").tag(String?.none)
                 ForEach(orderedLocales, id: \.identifier) { locale in
                     Text(label(for: locale)).tag(String?.some(locale.identifier(.bcp47)))
                 }
@@ -230,7 +267,7 @@ private struct TranscriptLanguageMenu: View, Equatable {
     }
 
     private var languageLabel: String {
-        guard let localeIdentifier else { return "Automatic" }
+        guard let localeIdentifier else { return inheritedLabel }
         return TranscriptPane.languageName(Locale(identifier: localeIdentifier))
     }
 
@@ -250,7 +287,7 @@ private struct TranscriptLanguageMenu: View, Equatable {
     }
 
     private var languageSelection: Binding<String?> {
-        Binding(get: { localeIdentifier }, set: { LiveTranscript.shared.localeIdentifier = $0 })
+        Binding(get: { localeIdentifier }, set: { LiveTranscript.shared.setEpisodeLanguage($0) })
     }
 }
 

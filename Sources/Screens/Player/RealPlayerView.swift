@@ -7,15 +7,19 @@ struct RealPlayerView: View {
     @State private var showingUpNext = false
     @State private var showingAddToPlaylist = false
     @State private var artist: Artist?
-    /// Whether the transcript is still following playback. A manual scroll turns it off —
-    /// auto-scroll yanking the page back while someone is reading is the single most
-    /// hostile thing this screen can do.
-    @State private var isFollowingTranscript = true
+    /// Whether the transcript is following playback. Off until asked for: the page opens
+    /// at the transport, and text that scrolls itself the moment you arrive takes the
+    /// controls out from under your thumb. Any scroll of your own turns it off again.
+    @State private var isFollowingTranscript = false
+    /// Where the drag on the fast-scroll rail has got to, 0…1. Nil when nobody's holding
+    /// it, so the rail can show playback's position instead.
+    @State private var railFraction: Double?
     /// Whether the big transport has scrolled out of sight. The docked bar is a stand-in
     /// for it, so showing both at once is just clutter.
     @State private var isTransportOffscreen = false
 
     private static let scrollSpace = "player.scroll"
+    private static let topAnchor = "player.top"
     @ObservedObject private var transcript = LiveTranscript.shared
     @State private var album: Album?
 
@@ -40,7 +44,8 @@ struct RealPlayerView: View {
                                     isFollowingTranscript = false
                                 }
                             )
-                            .overlay(alignment: .bottom) { followAgainPill(proxy) }
+                            .overlay(alignment: .trailing) { scrollRail(proxy) }
+                            .overlay(alignment: .bottomTrailing) { backToTopButton(proxy) }
                     }
                     // Pinned: the page is now arbitrarily long, and Up Next shouldn't be
                     // a scroll away at the bottom of a 40-minute transcript.
@@ -115,7 +120,8 @@ struct RealPlayerView: View {
                 TranscriptPane(
                     currentTime: engine.currentTime,
                     scrollProxy: proxy,
-                    isFollowing: $isFollowingTranscript
+                    isFollowing: $isFollowingTranscript,
+                    onFollow: { follow(proxy) }
                 ) { engine.seek(to: $0) }
             }
             .padding(.vertical)
@@ -127,6 +133,15 @@ struct RealPlayerView: View {
         ArtworkTile(track: track, cornerRadius: 16, symbolSize: 64)
             .frame(height: 220)
             .padding(.horizontal)
+            .id(Self.topAnchor)
+    }
+
+    /// Jumps to the line being spoken and keeps up from there. Asked for, never assumed —
+    /// see `isFollowingTranscript`.
+    private func follow(_ proxy: ScrollViewProxy) {
+        guard let start = transcript.currentLine(at: engine.currentTime)?.start else { return }
+        isFollowingTranscript = true
+        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(start, anchor: .center) }
     }
 
     private func titles(for track: Track) -> some View {
@@ -197,27 +212,80 @@ struct RealPlayerView: View {
         }
     }
 
-    /// Offers the transcript back rather than snatching it: auto-scroll only resumes when
-    /// it's asked to, so a long read is never interrupted by the page moving itself.
+    /// The way back to the artwork and the transport from anywhere in a 40-minute
+    /// transcript — and the way to stop the page moving itself, since following and
+    /// reading the top of the page are contradictory things to want.
     @ViewBuilder
-    private func followAgainPill(_ proxy: ScrollViewProxy) -> some View {
-        if !isFollowingTranscript, !transcript.lines.isEmpty,
-           let start = transcript.currentLine(at: engine.currentTime)?.start {
+    private func backToTopButton(_ proxy: ScrollViewProxy) -> some View {
+        if isTransportOffscreen {
             Button {
-                isFollowingTranscript = true
-                withAnimation { proxy.scrollTo(start, anchor: .center) }
+                isFollowingTranscript = false
+                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
             } label: {
-                Label("Back to now playing", systemImage: "arrow.down.to.line")
+                Label("Back to top", systemImage: "arrow.up")
+                    .labelStyle(.iconOnly)
                     .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(.quaternary))
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(.quaternary))
             }
             .buttonStyle(.plain)
+            .padding(.trailing, 14)
             .padding(.bottom, 12)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(.opacity)
         }
+    }
+
+    /// A fast-scroll rail for the transcript, because a 40-minute episode is hundreds of
+    /// lines and the system's hairline indicator is neither grabbable nor visible. Drag it
+    /// and the page jumps to that point in the transcript; the thumb otherwise shows where
+    /// playback has got to. Only worth its space once there's more text than a few swipes.
+    @ViewBuilder
+    private func scrollRail(_ proxy: ScrollViewProxy) -> some View {
+        let lines = transcript.lines
+        if lines.count >= 15 {
+            GeometryReader { geometry in
+                let height = geometry.size.height
+                let thumbHeight: CGFloat = 56
+                Capsule()
+                    .fill(.quaternary)
+                    .frame(width: 6)
+                    .frame(maxWidth: .infinity)
+                    .overlay(alignment: .top) {
+                        Capsule()
+                            .fill(railFraction == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.accentColor))
+                            .frame(width: 6, height: thumbHeight)
+                            .offset(y: (height - thumbHeight) * railPosition(lines))
+                    }
+                    // The hit area is the whole 36pt-wide strip, not the 6pt line: a rail
+                    // you have to hit exactly is a rail nobody uses.
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                let fraction = min(max(value.location.y / max(height, 1), 0), 1)
+                                railFraction = fraction
+                                isFollowingTranscript = false
+                                let index = Int((Double(lines.count - 1) * fraction).rounded())
+                                proxy.scrollTo(lines[index].start, anchor: .top)
+                            }
+                            .onEnded { _ in railFraction = nil }
+                    )
+            }
+            .frame(width: 36)
+            .padding(.vertical, 80)
+        }
+    }
+
+    /// Where the thumb sits: under your finger while dragging, otherwise wherever the
+    /// line being spoken is in the transcript.
+    private func railPosition(_ lines: [TranscriptSegment]) -> Double {
+        if let railFraction { return railFraction }
+        guard lines.count > 1,
+              let start = transcript.currentLine(at: engine.currentTime)?.start,
+              let index = lines.firstIndex(where: { $0.start == start })
+        else { return 0 }
+        return Double(index) / Double(lines.count - 1)
     }
 
     /// Docked, so play/pause and position are reachable from anywhere on a page that is

@@ -338,6 +338,19 @@ enum Migrations {
             }
         }
 
+        // Language is a property of the recording, not of the person: a Mandarin speaker
+        // gives a talk in English, and one speaker's albums can each be in a different
+        // language. So it's answerable at every level, and the most specific answer wins
+        // (episode, then album, then speaker).
+        migrator.registerMigration("v19_album_and_episode_language") { db in
+            try db.alter(table: "albums") { t in
+                t.add(column: "language", .text)
+            }
+            try db.alter(table: "tracks") { t in
+                t.add(column: "language", .text)
+            }
+        }
+
         return migrator
     }
 }

@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var autoBackup = AutoBackup.shared
+    @ObservedObject private var transcript = LiveTranscript.shared
     @EnvironmentObject private var language: AppLanguageStore
     @State private var showingResetConfirmation = false
     @State private var showingRemoveDemoConfirmation = false
@@ -21,7 +22,7 @@ struct SettingsSectionView: View {
     /// Says which of the four reasons an iCloud folder can be unusable applies, because
     /// they need four different things said — and the explanation *replaces* the location
     /// line rather than piling up next to it.
-    private var cloudDriveHint: String {
+    private var cloudDriveHint: LocalizedStringKey {
         switch autoBackup.cloudDriveStatus {
         case .notEntitled: return "This build of the app isn't signed for iCloud."
         case .driveOff: return "iCloud Drive is off on this device."
@@ -33,12 +34,13 @@ struct SettingsSectionView: View {
         }
         // Slashes, not arrows: it's where the file sits, and an arrow reads as a
         // sequence of taps — which is what the directions line below it actually is.
-        let location = "Files / iCloud Drive / BYO Podcasts"
         guard autoBackup.isCloudDriveEnabled else {
-            return "\(location). Switch on to keep a copy that outlives deleting the app — a reinstall puts it back on its own."
+            return "Files / iCloud Drive / BYO Podcasts. Switch on to keep a copy that outlives deleting the app."
         }
-        guard let lastBackupAt = autoBackup.lastCloudDriveBackupAt else { return location }
-        return "\(location) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
+        guard let lastBackupAt = autoBackup.lastCloudDriveBackupAt else {
+            return "Files / iCloud Drive / BYO Podcasts"
+        }
+        return "Files / iCloud Drive / BYO Podcasts · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private func loadDemoData() {
@@ -57,7 +59,10 @@ struct SettingsSectionView: View {
             Text("Settings").sectionTitle().padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("SYNC & BACKUP").sectionHeading()
+                SectionHeading(
+                    title: "SYNC & BACKUP",
+                    info: "Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync."
+                )
 
                 // A destination is one switch and nothing else: on means every change
                 // goes there, off means none do. iCloud comes first — it's the only one
@@ -86,7 +91,7 @@ struct SettingsSectionView: View {
                     isPresented: $showingExportPicker,
                     document: exportDocument,
                     contentType: .zip,
-                    defaultFilename: "byop-backup"
+                    defaultFilename: "bring-your-own-podcasts-backup"
                 ) { _ in exportDocument = nil }
 
                 Button {
@@ -104,14 +109,15 @@ struct SettingsSectionView: View {
                     Text(backupStatusMessage)
                         .sectionHint()
                 }
-                Text("Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync.")
-                    .sectionHint()
             }
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("AI KEYS").sectionHeading()
+                    SectionHeading(
+                        title: "AI KEYS",
+                        info: "Used to guess better titles and show names during sync, and to transcribe an episode on playback. Sent straight from this device to the chosen vendor — never stored or seen by us, and never included in backups. Add more than one to fall back automatically if one hits a rate limit."
+                    )
                     Spacer()
                     // The fallback order only matters with more than one key, but the
                     // control stays put either way so it doesn't appear out of nowhere.
@@ -122,7 +128,7 @@ struct SettingsSectionView: View {
                     }
                     .disabled(viewModel.aiKeys.count < 2)
                 }
-                Text("Used to guess better titles/show names during sync, and to transcribe an episode on playback. Sent straight from this device to the chosen vendor — never stored or seen by us, and never included in backups. Add more than one to fall back automatically if one hits a rate limit.")
+                Text("Better titles during sync, and transcription on playback.")
                     .sectionHint()
                 ForEach(Array(viewModel.aiKeys.enumerated()), id: \.element.id) { index, key in
                     HStack {
@@ -170,10 +176,48 @@ struct SettingsSectionView: View {
                 AddAiKeyView(viewModel: viewModel)
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeading(
+                    title: "TRANSCRIPTS",
+                    info: "Transcribing spends battery on this device, or money through an AI key, so it's off unless asked for. With this on, every episode you play is transcribed as it goes; you can still stop any one episode from its own page. Transcripts already made, and any transcript file sitting beside the audio, are shown either way."
+                )
+                Toggle("Transcribe every episode as you listen", isOn: $transcript.startsAutomatically)
+                Text(transcript.startsAutomatically ? "On for every episode." : "Only the episodes you ask for.")
+                    .sectionHint()
+            }
+            .padding(.horizontal)
+
+            // Down here because it's set once and never thought about again, unlike the
+            // groups above it — but above Add Episodes, which is where you go to *do*
+            // something rather than to configure one.
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeading(
+                    title: "LANGUAGE",
+                    info: "Applies right away, without a relaunch. \u{201C}Same as device\u{201D} follows your phone's own language setting. Each option is written in its own language, so it stays readable while the app is still showing the other one."
+                )
+                // A menu `Picker` outside a `Form` drops its own label and indents what's
+                // left, so the row read as a stray "System" sitting off the margin. The
+                // heading names it, and the choice is written into the button.
+                Menu {
+                    Picker("Language", selection: $language.language) {
+                        ForEach(AppLanguage.allCases) { option in
+                            Text(option.displayName).tag(option)
+                        }
+                    }
+                } label: {
+                    Text("\(language.language.displayName) ▾")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal)
+
             // Both ways of putting episodes in the library that aren't a remote source —
             // your own files, or the samples — as two links, not two sections.
             VStack(alignment: .leading, spacing: 8) {
-                Text("ADD EPISODES").sectionHeading()
+                SectionHeading(
+                    title: "ADD EPISODES",
+                    info: "Files you pick are read where they sit — nothing is copied into the app, and nothing is uploaded. Pick a whole folder and everything under it is scanned; pick episodes one by one and only those are added. The sample library is a few short clips bundled with the app, for looking around before you connect anything; it never loads on its own."
+                )
 
                 Button {
                     showingFilePicker = true
@@ -192,7 +236,7 @@ struct SettingsSectionView: View {
                 ) { result in
                     Task { await handleFilePick(result) }
                 }
-                Text("Pick episodes, or a whole folder — read where they sit, never copied.")
+                Text("Read where they sit, never copied.")
                     .sectionHint()
 
                 // Only what's already here: the rows exist to switch a source off or throw
@@ -235,30 +279,11 @@ struct SettingsSectionView: View {
                         .sectionRowSecondary()
                     }
                 }
-                Text("A few sample shows and clips to look around with — never loaded on its own.")
+                Text("A few sample shows and clips to look around with.")
                     .sectionHint()
             }
             .padding(.horizontal)
 
-            // Last, because it's set once and never thought about again — unlike
-            // everything above it, which is about this library week to week.
-            VStack(alignment: .leading, spacing: 8) {
-                Text("LANGUAGE").sectionHeading()
-                // A menu `Picker` outside a `Form` drops its own label and indents what's
-                // left, so the row read as a stray "System" sitting off the margin. The
-                // heading names it, and the choice is written into the button.
-                Menu {
-                    Picker("Language", selection: $language.language) {
-                        ForEach(AppLanguage.allCases) { option in
-                            Text(option.displayName).tag(option)
-                        }
-                    }
-                } label: {
-                    Text("\(language.language.displayName) ▾")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(.horizontal)
         }
         .sectionRow()
         .alert("Reset Sample Library?", isPresented: $showingResetConfirmation) {

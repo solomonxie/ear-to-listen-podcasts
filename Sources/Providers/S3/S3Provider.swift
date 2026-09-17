@@ -183,16 +183,22 @@ struct S3Provider: CloudProvider {
         }
     }
 
-    /// Fixed key so "Backup to Remote"/"Restore from Remote" don't need a picker. Tucked
-    /// into a dot-folder so the app's own files stay clear of the user's, and named for
-    /// what it actually is — a zip.
-    private var backupKey: String { (keyPrefix ?? "") + ".byop/library-backup.zip" }
+    /// Fixed key, so backing up and restoring need no picker. Spelled out in full: this
+    /// sits in a bucket the listener browses in every S3 client they own, often years
+    /// later, and ".byop" tells them nothing about which app left it there or whether
+    /// it's safe to delete.
+    private var backupKey: String { (keyPrefix ?? "") + "bring-your-own-podcasts/app-data-backup.zip" }
 
-    /// The original name: a zip called `.json`, chosen only so it would fall outside the
-    /// old extension-based "is this an episode" filter. `FileKind` decides that properly
-    /// now, so the name no longer has to lie — but backups already sitting in buckets do,
-    /// and they still have to restore.
-    private var legacyBackupKey: String { (keyPrefix ?? "") + "byop-backup.json" }
+    /// Names this backup has had before. Read-only, in order, so a copy written by any
+    /// older build still restores — there is exactly one of these per bucket and losing
+    /// track of it means losing the library it holds.
+    ///
+    /// `.byop/library-backup.zip` was an abbreviation nobody could expand; the `.json`
+    /// before it was a zip with a lying extension, chosen only to fall outside the old
+    /// "is this an episode" filter, which `FileKind` now decides properly.
+    private var legacyBackupKeys: [String] {
+        [(keyPrefix ?? "") + ".byop/library-backup.zip", (keyPrefix ?? "") + "byop-backup.json"]
+    }
 
     var isWritable: Bool { true }
 
@@ -212,7 +218,7 @@ struct S3Provider: CloudProvider {
     /// `nil` means no backup has been made yet, not an error. Falls back to the legacy key
     /// so a backup written by an older build still restores.
     func downloadBackup() async throws -> Data? {
-        for key in [backupKey, legacyBackupKey] {
+        for key in [backupKey] + legacyBackupKeys {
             do {
                 let output = try await client.getObject(input: GetObjectInput(bucket: bucket, key: key))
                 if let data = try await output.body?.readData() { return data }

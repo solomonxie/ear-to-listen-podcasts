@@ -55,26 +55,42 @@ final class SyncJobStoreTests: XCTestCase {
         )
     }
 
-    /// Re-queuing a file already in flight isn't an addition, so it mustn't be refused by
-    /// a queue that's already at its ceiling.
-    func testAFileAlreadyInFlightIsReturnedEvenAtTheCeiling() throws {
+    /// Re-queuing a file already queued isn't an addition, so it mustn't be refused by a
+    /// queue that's already at its ceiling.
+    func testRequeuingTheSameFileIsAcceptedEvenAtTheCeiling() throws {
         let store = SyncJobStore(dbQueue: try makeDatabase())
-        let first = try store.enqueue(providerID: "p1", filePath: "a/1.mp3", displayName: "1.mp3", sizeBytes: 1, capacity: 1)
+        try store.enqueue(providerID: "p1", filePath: "a/1.mp3", displayName: "1.mp3", sizeBytes: 1, capacity: 1)
 
-        let again = try store.enqueue(providerID: "p1", filePath: "a/1.mp3", displayName: "1.mp3", sizeBytes: 1, capacity: 1)
+        try store.enqueue(providerID: "p1", filePath: "a/1.mp3", displayName: "1.mp3", sizeBytes: 1, capacity: 1)
 
-        XCTAssertEqual(first.id, again.id)
+        XCTAssertEqual(try store.counts().total, 1)
     }
 
-    func testQueuingTheSameFileTwiceReusesTheJobAlreadyInFlight() throws {
+    /// The later request carries the later size/hash, so it's the one worth working —
+    /// and two jobs for one file would mean working (or uploading) it twice.
+    func testQueuingTheSameFileTwiceKeepsOnlyTheLaterRequest() throws {
         let store = SyncJobStore(dbQueue: try makeDatabase())
 
         let first = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
-        let second = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
+        let second = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 2)
 
-        XCTAssertEqual(first.id, second.id)
+        XCTAssertNotEqual(first.id, second.id)
         XCTAssertEqual(try store.counts().total, 1)
+        XCTAssertEqual(try store.page(limit: 10).map(\.sizeBytes), [2])
         XCTAssertTrue(try store.hasUnfinished(providerID: "p1", filePath: "a/ep.mp3"))
+    }
+
+    /// A running job is doing the work right now; replacing it would leave a worker
+    /// updating a row nothing is watching.
+    func testAFileAlreadyBeingWorkedIsLeftAlone() throws {
+        let store = SyncJobStore(dbQueue: try makeDatabase())
+        let first = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
+        try store.markRunning(id: first.id)
+
+        let again = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 2)
+
+        XCTAssertEqual(first.id, again.id)
+        XCTAssertEqual(try store.counts().total, 1)
     }
 
     func testAFinishedJobDoesNotBlockQueuingThatFileAgain() throws {

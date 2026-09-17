@@ -4,10 +4,14 @@ import GRDB
 struct SyncJobStore {
     let dbQueue: DatabaseQueue
 
-    /// One unfinished job per file. Adding a connection queues its whole listing, and a
-    /// "Sync Now" over the same listing would otherwise queue every path a second time —
-    /// two workers then import the same file at once. Returns the job already in flight
-    /// instead. Finished/failed rows don't block a fresh one, so a re-sync still works.
+    /// One unfinished job per file, and it's the newest request that survives. Adding a
+    /// connection queues its whole listing, and a "Sync Now" over the same listing would
+    /// otherwise queue every path a second time — two workers then work the same file at
+    /// once, and for a write-back job that means uploading it twice. A still-pending
+    /// duplicate is therefore replaced rather than kept: the later request carries the
+    /// later size/hash, which is the one worth acting on. A job already *running* is left
+    /// alone — it's doing the work now, and the newer request adds nothing to it.
+    /// Finished/failed rows don't block a fresh one, so a re-sync still works.
     ///
     /// Throws `SyncQueuePolicy.FullError` once `capacity` files are already waiting. The
     /// count is taken inside the same transaction as the insert, so two callers queueing
@@ -21,7 +25,8 @@ struct SyncJobStore {
     ) throws -> SyncJob {
         try dbQueue.write { db in
             if let existing = try Self.unfinished(providerID: providerID, filePath: filePath).fetchOne(db) {
-                return existing
+                guard existing.status == .pending else { return existing }
+                try existing.delete(db)
             }
             guard try Self.unfinishedCount(db) < capacity else { throw SyncQueuePolicy.FullError() }
             let job = SyncJob(
