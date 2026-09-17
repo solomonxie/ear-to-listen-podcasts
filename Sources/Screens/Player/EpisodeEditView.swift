@@ -20,6 +20,7 @@ struct EpisodeEditView: View {
     @State private var artworkFileName: String?
     @State private var artworkImage: UIImage?
     @State private var artworkItem: PhotosPickerItem?
+    @State private var language: String?
     @State private var isSuggesting = false
     @State private var suggestionError: String?
     @State private var readiness: EpisodeMetadataSuggester.Readiness = .noTranscript
@@ -38,6 +39,20 @@ struct EpisodeEditView: View {
         _trackNumber = State(initialValue: track.trackNumber.map(String.init) ?? "")
         _notes = State(initialValue: track.notes ?? "")
         _artworkFileName = State(initialValue: track.artworkFileName)
+        _language = State(initialValue: track.language)
+    }
+
+    /// What this episode would transcribe in without an answer of its own — its album's
+    /// language, then its speaker's, then nothing at all.
+    private var inheritedLanguageLabel: String {
+        let store = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+        if let albumID = track.albumID, let language = (try? store.album(id: albumID))??.language {
+            return TranscriptPane.languageName(Locale(identifier: language))
+        }
+        if let artistID = track.artistID, let language = (try? store.artist(id: artistID))??.language {
+            return TranscriptPane.languageName(Locale(identifier: language))
+        }
+        return "automatic"
     }
 
     var body: some View {
@@ -71,6 +86,11 @@ struct EpisodeEditView: View {
                     TextField("Show", text: $showName)
                     TextField("Year", text: $year).keyboardType(.numberPad)
                     TextField("Track no.", text: $trackNumber).keyboardType(.numberPad)
+                    // The last word on which recognizer to use: this is the one level
+                    // where someone has actually heard the audio.
+                    SpokenLanguagePicker(
+                        title: "Language", inheritedLabel: inheritedLanguageLabel, language: $language
+                    )
                 }
 
                 Section("Notes") {
@@ -180,6 +200,7 @@ struct EpisodeEditView: View {
     }
 
     private func save() {
+        try? trackStore.setLanguage(id: track.id, language: language)
         let artist = trimmed(artistName).flatMap { try? libraryStore.upsertArtist(name: $0) }
         let album = trimmed(albumName).flatMap { name in try? libraryStore.upsertAlbum(name: name, artistID: artist?.id) }
         let show = trimmed(showName).flatMap { try? libraryStore.upsertShow(name: $0) }

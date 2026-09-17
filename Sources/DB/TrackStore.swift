@@ -48,6 +48,15 @@ struct TrackStore {
         try dbQueue.read { db in try Track.fetchOne(db, key: id) }
     }
 
+    /// The episode's own language, which outranks its album's and its speaker's.
+    func setLanguage(id: String, language: String?) throws {
+        try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return }
+            track.language = language
+            try track.update(db)
+        }
+    }
+
     func find(providerID: String, filePath: String) throws -> Track? {
         try dbQueue.read { db in
             try Track.filter(Column("providerID") == providerID && Column("filePath") == filePath).fetchOne(db)

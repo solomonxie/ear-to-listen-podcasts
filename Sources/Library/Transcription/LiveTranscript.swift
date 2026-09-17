@@ -51,15 +51,20 @@ final class LiveTranscript: ObservableObject {
         }
     }
 
-    /// Off for every episode until it's switched on for that episode — deliberately not
-    /// remembered. Transcribing spends battery or money, and a preference that sticks
-    /// means opening any episode quietly starts spending on it; whatever was transcribed
-    /// before is still shown, so nothing is lost by making this ask each time.
+    /// Whether this episode is being transcribed as it plays. Not remembered per episode:
+    /// transcribing spends battery or money, so each one starts from `startsAutomatically`
+    /// — off unless the listener has said in Settings that they want every episode done.
+    /// Whatever was transcribed before is shown either way, so nothing is lost by asking.
     @Published var isLiveEnabled = false {
         didSet {
             guard isLiveEnabled != oldValue else { return }
             isLiveEnabled ? restart() : stop()
         }
+    }
+
+    /// The answer to "every episode, or only the ones I ask for?", set once in Settings.
+    @Published var startsAutomatically: Bool {
+        didSet { UserDefaults.standard.set(startsAutomatically, forKey: Self.autoStartDefaultsKey) }
     }
 
     /// Whether to keep transcribing an episode nobody is listening to. Off by default:
@@ -76,10 +81,12 @@ final class LiveTranscript: ObservableObject {
     static let sidecarEngine = "sidecar"
 
     private static let engineDefaultsKey = "transcript.engine"
+    private static let autoStartDefaultsKey = "transcript.autoStart"
     private static let localeDefaultsKey = "transcript.locale"
     private static let whilePausedDefaultsKey = "transcript.whilePaused"
 
     private let transcriptStore = TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private var fillTask: Task<Void, Never>?
@@ -95,6 +102,7 @@ final class LiveTranscript: ObservableObject {
         let stored = UserDefaults.standard.string(forKey: Self.engineDefaultsKey) ?? ""
         engineKind = TranscriptionEngineKind(rawValue: stored) ?? .onDevice
         runsWhilePaused = UserDefaults.standard.bool(forKey: Self.whilePausedDefaultsKey)
+        startsAutomatically = UserDefaults.standard.bool(forKey: Self.autoStartDefaultsKey)
         localeIdentifier = UserDefaults.standard.string(forKey: Self.localeDefaultsKey)
     }
 
@@ -144,9 +152,8 @@ final class LiveTranscript: ObservableObject {
     func attach(track newTrack: Track?) {
         guard track?.id != newTrack?.id else { return }
         stop()
-        // A new episode is a new decision. Left on, the switch would mean every episode
-        // opened from here starts transcribing itself.
-        isLiveEnabled = false
+        // A new episode is a new decision, unless Settings says otherwise.
+        isLiveEnabled = startsAutomatically
         track = newTrack
         segments = []
         edits = []
@@ -448,21 +455,59 @@ final class LiveTranscript: ObservableObject {
 
     /// This episode's corrections first, then anything recently fixed elsewhere — the same
     /// misheard name usually shows up across a whole show.
-    /// What the speaker of the current episode is recorded as speaking, if anyone set it.
-    var speakerLanguage: String? {
-        guard let artistID = track?.artistID,
-              let artist = try? libraryStore.artist(id: artistID) else { return nil }
-        return artist.language
+    /// The language to transcribe this episode in, and where the answer came from.
+    ///
+    /// Most specific wins: the episode, then its album, then its speaker. A Mandarin
+    /// speaker gives a talk in English and one speaker's albums are often in different
+    /// languages, so "whose language is this" is the wrong question — it belongs to the
+    /// recording, and every level is allowed an answer.
+    var inheritedLanguage: (identifier: String, source: LanguageSource)? {
+        guard let track else { return nil }
+        return Self.resolveLanguage(
+            track: track,
+            album: track.albumID.flatMap { (try? libraryStore.album(id: $0)) ?? nil },
+            artist: track.artistID.flatMap { (try? libraryStore.artist(id: $0)) ?? nil }
+        )
+    }
+
+    /// Pure, so the rule can be tested without a database or a player: most specific wins.
+    nonisolated static func resolveLanguage(track: Track, album: Album?, artist: Artist?) -> (identifier: String, source: LanguageSource)? {
+        if let language = track.language { return (language, .episode) }
+        if let language = album?.language { return (language, .album) }
+        if let language = artist?.language { return (language, .speaker) }
+        return nil
+    }
+
+    enum LanguageSource: Equatable, Sendable {
+        case episode, album, speaker
+
+        var displayName: String {
+            switch self {
+            case .episode: return "this episode"
+            case .album: return "the album"
+            case .speaker: return "the speaker"
+            }
+        }
+    }
+
+    /// Records the choice against the episode itself, which is the level that outranks
+    /// every other — set from the transcript pane, where someone has just heard the audio.
+    func setEpisodeLanguage(_ identifier: String?) {
+        guard var track else { return }
+        track.language = identifier
+        try? trackStore.setLanguage(id: track.id, language: identifier)
+        self.track = track
+        restart()
     }
 
     private func transcriptionContext() -> TranscriptionContext {
         let recent = (try? transcriptStore.recentEdits()) ?? []
         let ids = Set(edits.map(\.id))
         var context = TranscriptionContext.from(edits: edits + recent.filter { !ids.contains($0.id) })
-        // Explicit choice first, then whatever this episode's speaker is recorded as
-        // speaking, and only then the phone's language — which is a guess about the
-        // listener, not about the audio.
-        context.localeIdentifier = localeIdentifier ?? speakerLanguage
+        // The episode's own answer, then its album's, then its speaker's, then the
+        // app-wide fallback — and only after all of those the phone's language, which is
+        // a guess about the listener rather than about the audio.
+        context.localeIdentifier = inheritedLanguage?.identifier ?? localeIdentifier
         return context
     }
 }

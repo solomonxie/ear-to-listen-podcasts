@@ -91,6 +91,14 @@ struct LibraryStore {
     /// The hand-edited fields (name/notes/artwork), stamped as edited so nothing
     /// re-derives over them. Speaker isn't here — it lives on the tracks too, so it goes
     /// through `reassignAlbumArtist`.
+    func updateAlbumLanguage(id: String, language: String?) throws {
+        try dbQueue.write { db in
+            guard var album = try Album.fetchOne(db, key: id) else { return }
+            album.language = language
+            try album.update(db)
+        }
+    }
+
     func updateAlbum(id: String, name: String, notes: String?, artworkFileName: String?) throws {
         try dbQueue.write { db in
             guard var album = try Album.fetchOne(db, key: id) else { return }

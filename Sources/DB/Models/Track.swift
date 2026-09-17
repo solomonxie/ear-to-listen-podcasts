@@ -22,6 +22,10 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var remoteModifiedAt: Date? = nil
     /// True when the last sync no longer found this file in the bucket listing.
     var isLost: Bool = false
+    /// BCP-47 identifier for the language of this episode, overriding its album and its
+    /// speaker. The last word on what recognizer to use, because it's the only level
+    /// where someone can have heard the audio.
+    var language: String? = nil
     var updatedAt: Date
     /// Free-text episode notes — only ever written by hand or from an AI suggestion the
     /// listener accepted, never from embedded tags.

@@ -1,18 +1,34 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "A few sample shows and clips to look around with — never loaded on its own.": {
+    "%@ transcribed": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A few sample shows and clips to look around with — never loaded on its own."
+            "value": "%@ transcribed"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "几个示例节目和片段，供你先看看 —— 绝不会自行加载。"
+            "value": "已转写 %@"
+          }
+        }
+      }
+    },
+    "A few sample shows and clips to look around with.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A few sample shows and clips to look around with."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "几个示例节目和片段，供你先看看。"
           }
         }
       }
@@ -225,6 +241,86 @@
         }
       }
     },
+    "Analyze": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyze"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分析"
+          }
+        }
+      }
+    },
+    "Analyze Album": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyze Album"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分析专辑"
+          }
+        }
+      }
+    },
+    "Analyze with AI…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyze with AI…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用 AI 分析…"
+          }
+        }
+      }
+    },
+    "App data isn't kept here — it stays on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App data isn't kept here — it stays on this device."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用数据不会保存到这里 —— 只留在本机。"
+          }
+        }
+      }
+    },
+    "Apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用"
+          }
+        }
+      }
+    },
     "Auto sync app data to this bucket": {
       "localizations": {
         "en": {
@@ -237,6 +333,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "自动同步应用数据到此存储桶"
+          }
+        }
+      }
+    },
+    "Back to top": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to top"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回到顶部"
           }
         }
       }
@@ -289,6 +401,22 @@
         }
       }
     },
+    "Better titles during sync, and transcription on playback.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Better titles during sync, and transcription on playback."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步时得到更好的标题，播放时转写。"
+          }
+        }
+      }
+    },
     "Browse by Year": {
       "localizations": {
         "en": {
@@ -337,6 +465,22 @@
         }
       }
     },
+    "Can't show this one": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't show this one"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法显示这个文件"
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "en": {
@@ -365,6 +509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "分类"
+          }
+        }
+      }
+    },
+    "Changing the speaker re-points every episode in this album, not just the album itself.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changing the speaker re-points every episode in this album, not just the album itself."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改讲者会改动这张专辑里的每一集，而不只是专辑本身。"
           }
         }
       }
@@ -433,6 +593,22 @@
         }
       }
     },
+    "Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can load the samples again later.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can load the samples again later."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除示例节目、讲者、专辑和播放列表。你自己同步的单集和来源会保留，之后还能再次加载示例。"
+          }
+        }
+      }
+    },
     "Close": {
       "localizations": {
         "en": {
@@ -493,6 +669,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "继续收听"
+          }
+        }
+      }
+    },
+    "Correct line": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct line"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修正这一行"
+          }
+        }
+      }
+    },
+    "Correct this line": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct this line"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修正这一行"
           }
         }
       }
@@ -625,6 +833,22 @@
         }
       }
     },
+    "Details edited": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details edited"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "详情已编辑"
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "en": {
@@ -701,6 +925,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "编辑"
+          }
+        }
+      }
+    },
+    "Edit Album": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Album"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑专辑"
+          }
+        }
+      }
+    },
+    "Edit Album…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Album…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑专辑…"
+          }
+        }
+      }
+    },
+    "Edit Details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Details"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑详情"
+          }
+        }
+      }
+    },
+    "Edit Episode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Episode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑单集"
           }
         }
       }
@@ -849,6 +1137,54 @@
         }
       }
     },
+    "Files / iCloud Drive / BYO Podcasts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files / iCloud Drive / BYO Podcasts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件 / iCloud 云盘 / BYO Podcasts"
+          }
+        }
+      }
+    },
+    "Files / iCloud Drive / BYO Podcasts · Last: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files / iCloud Drive / BYO Podcasts · Last: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件 / iCloud 云盘 / BYO Podcasts · 上次：%@"
+          }
+        }
+      }
+    },
+    "Files / iCloud Drive / BYO Podcasts. Switch on to keep a copy that outlives deleting the app.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files / iCloud Drive / BYO Podcasts. Switch on to keep a copy that outlives deleting the app."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件 / iCloud 云盘 / BYO Podcasts。开启后即使删除应用，副本依然还在。"
+          }
+        }
+      }
+    },
     "Fill from an existing connection": {
       "localizations": {
         "en": {
@@ -881,6 +1217,198 @@
         }
       }
     },
+    "Folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件夹"
+          }
+        }
+      }
+    },
+    "Follow the transcript": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow the transcript"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随文稿"
+          }
+        }
+      }
+    },
+    "Following the transcript": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Following the transcript"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在跟随文稿"
+          }
+        }
+      }
+    },
+    "Freq: every 12 hours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freq: every 12 hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "频率：每 12 小时"
+          }
+        }
+      }
+    },
+    "Freq: every 15 min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freq: every 15 min"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "频率：每 15 分钟"
+          }
+        }
+      }
+    },
+    "Freq: every 30 min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freq: every 30 min"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "频率：每 30 分钟"
+          }
+        }
+      }
+    },
+    "Freq: every 6 hours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freq: every 6 hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "频率：每 6 小时"
+          }
+        }
+      }
+    },
+    "Freq: every day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freq: every day"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "频率：每天"
+          }
+        }
+      }
+    },
+    "Freq: every hour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freq: every hour"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "频率：每小时"
+          }
+        }
+      }
+    },
+    "Freq: manual": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freq: manual"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "频率：手动"
+          }
+        }
+      }
+    },
+    "From a transcript file beside the episode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From a transcript file beside the episode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来自单集旁边的文稿文件"
+          }
+        }
+      }
+    },
+    "Fully transcribed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fully transcribed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已全部转写"
+          }
+        }
+      }
+    },
     "Good listening": {
       "localizations": {
         "en": {
@@ -909,118 +1437,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "首页"
-          }
-        }
-      }
-    },
-    "How often: every 12 hours": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How often: every 12 hours"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久一次：每 12 小时"
-          }
-        }
-      }
-    },
-    "How often: every 15 min": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How often: every 15 min"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久一次：每 15 分钟"
-          }
-        }
-      }
-    },
-    "How often: every 30 min": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How often: every 30 min"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久一次：每 30 分钟"
-          }
-        }
-      }
-    },
-    "How often: every 6 hours": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How often: every 6 hours"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久一次：每 6 小时"
-          }
-        }
-      }
-    },
-    "How often: every day": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How often: every day"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久一次：每天"
-          }
-        }
-      }
-    },
-    "How often: every hour": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How often: every hour"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久一次：每小时"
-          }
-        }
-      }
-    },
-    "How often: manual": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "How often: manual"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "多久一次：手动"
           }
         }
       }
@@ -1069,6 +1485,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在导入…"
+          }
+        }
+      }
+    },
+    "Inherit (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inherit (%@)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继承（%@）"
+          }
+        }
+      }
+    },
+    "Keep transcribing while paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep transcribing while paused"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂停时继续转写"
           }
         }
       }
@@ -1153,6 +1601,54 @@
         }
       }
     },
+    "Language: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言：%@"
+          }
+        }
+      }
+    },
+    "Last app-data backup failed: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last app-data backup failed: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次应用数据备份失败：%@"
+          }
+        }
+      }
+    },
+    "Last backup to iCloud failed: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last backup to iCloud failed: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次备份到 iCloud 失败：%@"
+          }
+        }
+      }
+    },
     "Library": {
       "localizations": {
         "en": {
@@ -1165,6 +1661,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "资料库"
+          }
+        }
+      }
+    },
+    "Listening from where you are — lines appear as they're recognised.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening from where you are — lines appear as they're recognised."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从你所在的位置开始听写 —— 识别出的句子会陆续出现。"
+          }
+        }
+      }
+    },
+    "Listening to %@–%@… · %@ done": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening to %@–%@… · %@ done"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在听写 %@–%@… · 完成 %@"
+          }
+        }
+      }
+    },
+    "Live transcript this episode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live transcript this episode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为这一集实时转写"
           }
         }
       }
@@ -1201,6 +1745,22 @@
         }
       }
     },
+    "Missing from the last sync — the file wasn't in the bucket listing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing from the last sync — the file wasn't in the bucket listing."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次同步时未找到 —— 这个文件不在存储桶列表里。"
+          }
+        }
+      }
+    },
     "Modified": {
       "localizations": {
         "en": {
@@ -1229,6 +1789,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "更多"
+          }
+        }
+      }
+    },
+    "My corrections": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My corrections"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的修正"
           }
         }
       }
@@ -1277,6 +1853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "还没有专辑"
+          }
+        }
+      }
+    },
+    "No corrections yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No corrections yet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有修正"
           }
         }
       }
@@ -1409,6 +2001,70 @@
         }
       }
     },
+    "No transcript yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No transcript yet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有文稿"
+          }
+        }
+      }
+    },
+    "Not set": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not set"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未设置"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备注"
+          }
+        }
+      }
+    },
+    "Nothing in your library yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing in your library yet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频库还是空的"
+          }
+        }
+      }
+    },
     "Nothing playing": {
       "localizations": {
         "en": {
@@ -1473,6 +2129,86 @@
         }
       }
     },
+    "OK": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
+    "Off for this episode — tap “Live transcript this episode” above to start one. Anything transcribed before, or a transcript file sitting beside the episode, still shows here either way.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off for this episode — tap “Live transcript this episode” above to start one. Anything transcribed before, or a transcript file sitting beside the episode, still shows here either way."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这一集未开启 —— 点上方的「为这一集实时转写」即可开始。之前已转写的内容，或单集旁边的文稿文件，无论如何都会显示。"
+          }
+        }
+      }
+    },
+    "On for every episode.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On for every episode."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对每一集都开启。"
+          }
+        }
+      }
+    },
+    "One zip of your playlists, edits and transcripts. Never your episode audio.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One zip of your playlists, edits and transcripts. Never your episode audio."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一个包含播放列表、编辑和文稿的压缩包。绝不包含单集音频。"
+          }
+        }
+      }
+    },
+    "Only files under this folder in the bucket are used. Leave it empty for the whole bucket.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only files under this folder in the bucket are used. Leave it empty for the whole bucket."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只使用存储桶中该文件夹下的文件。留空表示整个存储桶。"
+          }
+        }
+      }
+    },
     "Only files under this folder in the bucket are used. Region is detected automatically.": {
       "localizations": {
         "en": {
@@ -1485,6 +2221,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅使用该 Bucket 中此文件夹下的文件。Region 会自动检测。"
+          }
+        }
+      }
+    },
+    "Only the episodes you ask for.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the episodes you ask for."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只转写你指定的单集。"
           }
         }
       }
@@ -1505,18 +2257,34 @@
         }
       }
     },
-    "Pick episodes, or a whole folder — read where they sit, never copied.": {
+    "Paused with the episode · %@ transcribed": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pick episodes, or a whole folder — read where they sit, never copied."
+            "value": "Paused with the episode · %@ transcribed"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择单集或整个文件夹 —— 原地读取，绝不复制。"
+            "value": "随单集暂停 · 已转写 %@"
+          }
+        }
+      }
+    },
+    "Play from here": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play from here"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从这里播放"
           }
         }
       }
@@ -1565,6 +2333,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "队列"
+          }
+        }
+      }
+    },
+    "Re-transcribe everything": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-transcribe everything"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部重新转写"
+          }
+        }
+      }
+    },
+    "Read where they sit, never copied.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read where they sit, never copied."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原地读取，绝不复制。"
+          }
+        }
+      }
+    },
+    "Reads only transcripts already stored on this phone — nothing is downloaded and nothing is re-transcribed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads only transcripts already stored on this phone — nothing is downloaded and nothing is re-transcribed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只读取本机已保存的文稿 —— 不下载，也不重新转写。"
+          }
+        }
+      }
+    },
+    "Reads this episode's transcript — the whole of it, which is why it waits for transcription to finish.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reads this episode's transcript — the whole of it, which is why it waits for transcription to finish."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取这一集的完整文稿 —— 所以要等转写完成。"
           }
         }
       }
@@ -1633,6 +2465,22 @@
         }
       }
     },
+    "Remove Artwork": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Artwork"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除封面"
+          }
+        }
+      }
+    },
     "Remove Photo": {
       "localizations": {
         "en": {
@@ -1645,6 +2493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "移除照片"
+          }
+        }
+      }
+    },
+    "Replaced when it changes. Last: %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replaced when it changes. Last: %@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有改动时替换。上次：%@。"
           }
         }
       }
@@ -1905,6 +2769,22 @@
         }
       }
     },
+    "Saved on this device, and used as a hint for the rest of the episode — names and terms a recognizer gets wrong once it usually gets wrong again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved on this device, and used as a hint for the rest of the episode — names and terms a recognizer gets wrong once it usually gets wrong again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存在本机，并作为这一集后续内容的提示 —— 识别器认错一次的名字和术语，通常还会再错。"
+          }
+        }
+      }
+    },
     "Scanning…": {
       "localizations": {
         "en": {
@@ -2033,6 +2913,22 @@
         }
       }
     },
+    "Setting up your iCloud folder — try again shortly.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setting up your iCloud folder — try again shortly."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备你的 iCloud 文件夹 —— 请稍后再试。"
+          }
+        }
+      }
+    },
     "Settings": {
       "localizations": {
         "en": {
@@ -2113,6 +3009,38 @@
         }
       }
     },
+    "Size on storage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size on storage"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "存储占用"
+          }
+        }
+      }
+    },
+    "Skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已跳过"
+          }
+        }
+      }
+    },
     "Speaker": {
       "localizations": {
         "en": {
@@ -2145,6 +3073,38 @@
         }
       }
     },
+    "Spoken language": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spoken language"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所讲语言"
+          }
+        }
+      }
+    },
+    "Stop live transcript": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop live transcript"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止实时转写"
+          }
+        }
+      }
+    },
     "Storage providers": {
       "localizations": {
         "en": {
@@ -2157,6 +3117,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "存储源"
+          }
+        }
+      }
+    },
+    "Suggest with AI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suggest with AI"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用 AI 建议"
           }
         }
       }
@@ -2241,6 +3217,38 @@
         }
       }
     },
+    "TRANSCRIPT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TRANSCRIPT"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文稿"
+          }
+        }
+      }
+    },
+    "TRANSCRIPTS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TRANSCRIPTS"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转写"
+          }
+        }
+      }
+    },
     "Tapping this file plays it directly — if it isn't already synced, it's imported first so future syncs recognize it.": {
       "localizations": {
         "en": {
@@ -2289,6 +3297,22 @@
         }
       }
     },
+    "This build of the app isn't signed for iCloud.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build of the app isn't signed for iCloud."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此版本的应用未针对 iCloud 签名。"
+          }
+        }
+      }
+    },
     "This puts back the sample shows, speakers, and playlists.": {
       "localizations": {
         "en": {
@@ -2301,6 +3325,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "这会恢复示例节目、主讲人和播放列表。"
+          }
+        }
+      }
+    },
+    "Throws away the stored transcript and starts over. Your corrections are kept — they're used as hints for the new pass.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Throws away the stored transcript and starts over. Your corrections are kept — they're used as hints for the new pass."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "丢弃已保存的文稿并重新开始。你的修正会保留 —— 它们会作为新一轮转写的提示。"
           }
         }
       }
@@ -2337,6 +3377,70 @@
         }
       }
     },
+    "Total length": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total length"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总时长"
+          }
+        }
+      }
+    },
+    "Transcribe again…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe again…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新转写…"
+          }
+        }
+      }
+    },
+    "Transcribe every episode as you listen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe every episode as you listen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "边听边转写每一集"
+          }
+        }
+      }
+    },
+    "Transcribe this episode again?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcribe this episode again?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新转写这一集？"
+          }
+        }
+      }
+    },
     "Transcript": {
       "localizations": {
         "en": {
@@ -2349,6 +3453,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "文字记录"
+          }
+        }
+      }
+    },
+    "Try again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试"
           }
         }
       }
@@ -2369,18 +3489,34 @@
         }
       }
     },
-    "Used to guess better titles/show names during sync, and to transcribe an episode on playback. Sent straight from this device to the chosen vendor — never stored or seen by us, and never included in backups. Add more than one to fall back automatically if one hits a rate limit.": {
+    "Use episode artwork": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Used to guess better titles/show names during sync, and to transcribe an episode on playback. Sent straight from this device to the chosen vendor — never stored or seen by us, and never included in backups. Add more than one to fall back automatically if one hits a rate limit."
+            "value": "Use episode artwork"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用于在同步时推断更准确的标题/节目名，以及在播放时转写单集。请求由本机直接发往所选服务商 — 我们既不存储也不会看到，且不会包含在备份中。添加多个密钥可在其中一个触发速率限制时自动切换。"
+            "value": "使用单集封面"
+          }
+        }
+      }
+    },
+    "Used to transcribe this speaker's episodes. Recognizers have to be told which language to expect — they can't work it out, and the wrong one returns confident nonsense rather than failing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used to transcribe this speaker's episodes. Recognizers have to be told which language to expect — they can't work it out, and the wrong one returns confident nonsense rather than failing."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用于转写这位讲者的单集。识别器必须被告知语言 —— 它自己判断不出来，选错不会报错，只会输出看似自信的胡话。"
           }
         }
       }
@@ -2433,6 +3569,102 @@
         }
       }
     },
+    "Waiting for playback — transcribing follows the episode. Turn on “Keep transcribing while paused” above to let it run ahead on its own.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for playback — transcribing follows the episode. Turn on “Keep transcribing while paused” above to let it run ahead on its own."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待播放 —— 转写跟随单集进行。打开上方的「暂停时继续转写」可让它自行向前跑。"
+          }
+        }
+      }
+    },
+    "Whole episode transcribed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whole episode transcribed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "整集已转写"
+          }
+        }
+      }
+    },
+    "Working through %@–%@ — lines appear as they're recognised. Nothing yet means no speech has been made out so far.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working through %@–%@ — lines appear as they're recognised. Nothing yet means no speech has been made out so far."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在处理 %@–%@ —— 识别出的句子会陆续出现。暂时没有内容表示还没听出语音。"
+          }
+        }
+      }
+    },
+    "Years": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Years"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "年份"
+          }
+        }
+      }
+    },
+    "edited": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "edited"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已编辑"
+          }
+        }
+      }
+    },
+    "hearing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hearing…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在听写…"
+          }
+        }
+      }
+    },
     "iCloud Drive": {
       "localizations": {
         "en": {
@@ -2445,6 +3677,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "iCloud 云盘"
+          }
+        }
+      }
+    },
+    "iCloud Drive is off on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive is off on this device."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备上的 iCloud 云盘已关闭。"
           }
         }
       }

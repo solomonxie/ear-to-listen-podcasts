@@ -15,6 +15,7 @@ struct AlbumEditView: View {
     @State private var artworkFileName: String?
     @State private var artworkImage: UIImage?
     @State private var artworkItem: PhotosPickerItem?
+    @State private var language: String?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -25,6 +26,15 @@ struct AlbumEditView: View {
         _artistName = State(initialValue: artistName ?? "")
         _notes = State(initialValue: album.notes ?? "")
         _artworkFileName = State(initialValue: album.artworkFileName)
+        _language = State(initialValue: album.language)
+    }
+
+    /// What this album would transcribe in if its language stayed on "inherit".
+    private var speakerLanguageLabel: String {
+        guard let artistID = album.artistID,
+              let language = (try? libraryStore.artist(id: artistID))??.language
+        else { return "automatic" }
+        return TranscriptPane.languageName(Locale(identifier: language))
     }
 
     var body: some View {
@@ -52,6 +62,12 @@ struct AlbumEditView: View {
                 Section("Album") {
                     TextField("Name", text: $name, axis: .vertical).lineLimit(1...3)
                     TextField("Speaker", text: $artistName)
+                    // One speaker's albums aren't all in one language — a Mandarin speaker
+                    // gives a series of talks in English — so the album gets its own say,
+                    // and it outranks the speaker's for every episode in it.
+                    SpokenLanguagePicker(
+                        title: "Language", inheritedLabel: speakerLanguageLabel, language: $language
+                    )
                 }
 
                 Section {
@@ -108,6 +124,7 @@ struct AlbumEditView: View {
     }
 
     private func save() {
+        try? libraryStore.updateAlbumLanguage(id: album.id, language: language)
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try? libraryStore.updateAlbum(
             id: album.id,

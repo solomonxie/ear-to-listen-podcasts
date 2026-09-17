@@ -69,19 +69,6 @@ struct RemoteSectionView: View {
                 }
                 .padding(.horizontal)
 
-                // A pill like the ones above it, directly under them: this is somewhere
-                // you go, not a footnote about the section — as hint-grey text nobody
-                // could tell it was tappable. The count is the whole status ("idle" is
-                // what "(0)" already says), and it's shown once rather than per bucket,
-                // because the queue is global across every connection.
-                Button { showingSyncQueue = true } label: {
-                    Label("Queue (\(syncQueue.activeCount, format: .number.grouping(.never)))",
-                          systemImage: syncQueue.isPaused ? "pause.circle" : "tray.full")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .padding(.horizontal)
             }
         }
         .sheet(isPresented: $showingAddS3) {
@@ -139,6 +126,16 @@ struct RemoteSectionView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
 
+                // Same row as the two controls that feed it. The count is global — one
+                // queue serves every connection — and so is the screen it opens.
+                Button { showingSyncQueue = true } label: {
+                    Label("Queue (\(syncQueue.activeCount, format: .number.grouping(.never)))",
+                          systemImage: syncQueue.isPaused ? "pause.circle" : "tray.full")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
                 Spacer(minLength: 0)
             }
             // Both labels are single-line and sized to their text, so neither wraps to a
@@ -161,16 +158,17 @@ struct RemoteSectionView: View {
 
     /// An upload nobody can see is just an unexplained network bill, so say what it does
     /// and when it last did it.
-    private var appDataHint: String {
+    private var appDataHint: LocalizedStringKey {
         guard autoBackup.isEnabled else {
-            return "App data isn't kept here — your playlists, edits and transcripts stay on this device."
+            return "App data isn't kept here — it stays on this device."
         }
         if let error = autoBackup.lastError {
             return "Last app-data backup failed: \(error)"
         }
-        let what = "One zip of your playlists, edits and transcripts, replaced when it changes. Never your episode audio."
-        guard let lastBackupAt = autoBackup.lastBackupAt else { return what }
-        return "\(what) Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))."
+        guard let lastBackupAt = autoBackup.lastBackupAt else {
+            return "One zip of your playlists, edits and transcripts. Never your episode audio."
+        }
+        return "Replaced when it changes. Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))."
     }
 
     /// Persisting happens in the setter: an `onChange` on a view inside a menu only fires
