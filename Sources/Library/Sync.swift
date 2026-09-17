@@ -153,6 +153,10 @@ struct SyncEngine {
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
         try providerStore.updateLastSynced(id: record.id, at: Date())
 
+        // A restore that arrived before these files did has been waiting for them: its
+        // playlist order, hand edits and transcripts can only attach to tracks that exist.
+        PendingRestore.reapplyAfterSync(dbQueue: dbQueue)
+
         return SyncResult(
             added: added, lost: lost, totalFiles: files.count, stoppedAtQueueLimit: stoppedAtQueueLimit
         )

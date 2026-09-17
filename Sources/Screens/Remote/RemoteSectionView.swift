@@ -7,6 +7,7 @@ import SwiftUI
 struct RemoteSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var syncQueue = SyncQueueManager.shared
+    @ObservedObject private var autoBackup = AutoBackup.shared
     @State private var showingAddS3 = false
     @State private var showingSyncQueue = false
     @State private var syncingProviderIDs: Set<String> = []
@@ -142,10 +143,31 @@ struct RemoteSectionView: View {
             .lineLimit(1)
             .fixedSize(horizontal: false, vertical: true)
 
+            // A row of its own with an ordinary switch: pressed into the pill row beside
+            // two buttons, an on/off setting read as a third button.
+            if record.isActive {
+                Toggle("Auto sync app data to this bucket", isOn: $autoBackup.isEnabled)
+                    .font(.subheadline)
+                Text(appDataHint).sectionHint()
+            }
             if let message = syncMessages[record.id] {
                 Text(message).sectionHint()
             }
         }
+    }
+
+    /// An upload nobody can see is just an unexplained network bill, so say what it does
+    /// and when it last did it.
+    private var appDataHint: String {
+        guard autoBackup.isEnabled else {
+            return "App data isn't kept here — your playlists, edits and transcripts stay on this device."
+        }
+        if let error = autoBackup.lastError {
+            return "Last app-data backup failed: \(error)"
+        }
+        let what = "One zip of your playlists, edits and transcripts, replaced when it changes. Never your episode audio."
+        guard let lastBackupAt = autoBackup.lastBackupAt else { return what }
+        return "\(what) Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))."
     }
 
     /// Persisting happens in the setter: an `onChange` on a view inside a menu only fires

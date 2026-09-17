@@ -19,6 +19,19 @@ struct BackupImportResult {
     var playlistsImported: Int
     var tracksMatched: Int
     var tracksUnmatched: Int
+    /// Hand edits and transcripts whose episode this device hasn't synced yet. Not lost —
+    /// `PendingRestore` re-applies them once a sync has fetched the files they name.
+    var editsAwaitingSync: Int = 0
+
+    var awaitingSync: Int { tracksUnmatched + editsAwaitingSync }
+}
+
+/// How much of a snapshot to put back. A reinstall applies `everything` once, then
+/// `PendingRestore` re-applies `needsSyncedTracks` after each sync until nothing is left
+/// waiting — so a playlist or speaker deleted since the restore isn't quietly re-created.
+enum BackupApplyScope {
+    case everything
+    case needsSyncedTracks
 }
 
 /// Builds/applies `LibrarySnapshot`s against the local DB, and ships them to/from
@@ -177,25 +190,15 @@ struct BackupService {
         return try decode(snapshotEntry.data)
     }
 
-    /// Merges a snapshot into the local DB. Provider/import-source rows restore
-    /// credential-less (settings stay in Keychain, keyed by id) — reconnect them via
-    /// Settings after. Playlists restore by matching each track against whatever's
-    /// currently synced locally via (providerID, filePath); tracks not yet synced are
-    /// counted, not dropped from the count reported back, so the caller can tell the
-    /// user to sync first.
+    /// Merges a snapshot into the local DB, never overwriting what's already there.
+    /// Playlist tracks, hand edits and transcripts are matched against what's synced
+    /// locally by (providerID, filePath) — the only key that survives a reinstall.
+    /// Whatever doesn't match yet is counted rather than dropped, so the caller can say
+    /// "N items need a sync first" and `PendingRestore` can come back for them.
     @discardableResult
-    func apply(_ snapshot: LibrarySnapshot) throws -> BackupImportResult {
-        let existingProviderIDs = Set(try providerStore.all().map(\.id))
-        for entry in snapshot.providers where !existingProviderIDs.contains(entry.id) {
-            try providerStore.upsert(ProviderRecord(
-                id: entry.id, type: entry.type, label: entry.label, configJSON: "",
-                isActive: entry.isActive, createdAt: entry.createdAt, syncFrequencyMinutes: entry.syncFrequencyMinutes
-            ))
-        }
-
-        let existingImportSourceIDs = Set(try importSourceStore.all().map(\.id))
-        for entry in snapshot.importSources where !existingImportSourceIDs.contains(entry.id) {
-            try importSourceStore.upsert(ImportSourceRecord(id: entry.id, type: entry.type, label: entry.label, createdAt: entry.createdAt))
+    func apply(_ snapshot: LibrarySnapshot, scope: BackupApplyScope = .everything) throws -> BackupImportResult {
+        if scope == .everything {
+            try applyDeviceIndependentEntries(snapshot)
         }
 
         let existingPlaylistIDs = Set(try playlistStore.all().map(\.id))
@@ -203,6 +206,9 @@ struct BackupService {
         var unmatched = 0
         for entry in snapshot.playlists {
             if !existingPlaylistIDs.contains(entry.id) {
+                // Re-applying after a sync never revives a playlist deleted since the
+                // restore — it only finishes filling the ones still there.
+                guard scope == .everything else { continue }
                 try playlistStore.create(Playlist(id: entry.id, name: entry.name, source: entry.source, createdAt: entry.createdAt))
             }
             for ref in entry.tracks {
@@ -214,21 +220,16 @@ struct BackupService {
                 matched += 1
             }
         }
-
-        // Upserts by name (see `ArtistEntry`) so this both re-applies an edit onto a
-        // speaker already synced locally, and pre-seeds one that hasn't synced yet — a
-        // later sync's own `upsertArtist(name:)` will find and reuse this same row.
-        for entry in snapshot.artists {
-            let artist = try libraryStore.upsertArtist(name: entry.name)
-            try libraryStore.updateArtist(id: artist.id, name: entry.name, bio: entry.bio, language: entry.language)
-            try libraryStore.updateArtistPhoto(id: artist.id, photoFileName: entry.photoFileName)
-        }
+        var awaiting = 0
 
         // Episode edits need the file itself already synced — unlike a speaker, there's no
-        // sensible row to pre-seed from a path alone. Restoring onto a fresh device, sync
-        // first, then restore again.
+        // sensible row to pre-seed from a path alone. What doesn't match yet is counted,
+        // not dropped: `PendingRestore` comes back for it after the next sync.
         for entry in snapshot.episodes {
-            guard var track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else { continue }
+            guard var track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else {
+                awaiting += 1
+                continue
+            }
             let artist = try entry.artistName.map { try libraryStore.upsertArtist(name: $0) }
             let album = try entry.albumName.map { try libraryStore.upsertAlbum(name: $0, artistID: artist?.id) }
             let show = try entry.showName.map { try libraryStore.upsertShow(name: $0) }
@@ -248,7 +249,10 @@ struct BackupService {
         // to hang it off otherwise. Merging rather than overwriting means a correction
         // made on this device outlives a restore of an older backup.
         for entry in snapshot.transcripts {
-            guard let track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else { continue }
+            guard let track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else {
+                awaiting += 1
+                continue
+            }
             let existing = (try? transcriptStore.find(trackID: track.id)) ?? []
             try transcriptStore.save(
                 trackID: track.id,
@@ -263,21 +267,68 @@ struct BackupService {
             })
         }
 
-        return BackupImportResult(playlistsImported: snapshot.playlists.count, tracksMatched: matched, tracksUnmatched: unmatched)
+        return BackupImportResult(
+            playlistsImported: snapshot.playlists.count, tracksMatched: matched,
+            tracksUnmatched: unmatched, editsAwaitingSync: awaiting
+        )
     }
 
-    // MARK: Remote (S3) backup/restore
-
-    func backupToRemote() async throws {
-        try await activeS3Provider().uploadBackup(archive(makeSnapshot()))
-    }
-
-    @discardableResult
-    func restoreFromRemote() async throws -> BackupImportResult {
-        guard let data = try await activeS3Provider().downloadBackup() else {
-            throw BackupError.noBackupFound
+    /// The half of a snapshot that stands on its own — sources, playlists and speaker
+    /// edits — none of which needs an episode file to have synced first. Provider and
+    /// import-source rows come back credential-less (settings stay in the Keychain, keyed
+    /// by id), so they need reconnecting in Settings after.
+    private func applyDeviceIndependentEntries(_ snapshot: LibrarySnapshot) throws {
+        let existingProviderIDs = Set(try providerStore.all().map(\.id))
+        for entry in snapshot.providers where !existingProviderIDs.contains(entry.id) {
+            try providerStore.upsert(ProviderRecord(
+                id: entry.id, type: entry.type, label: entry.label, configJSON: "",
+                isActive: entry.isActive, createdAt: entry.createdAt, syncFrequencyMinutes: entry.syncFrequencyMinutes
+            ))
         }
-        return try apply(unarchive(data))
+
+        let existingImportSourceIDs = Set(try importSourceStore.all().map(\.id))
+        for entry in snapshot.importSources where !existingImportSourceIDs.contains(entry.id) {
+            try importSourceStore.upsert(ImportSourceRecord(id: entry.id, type: entry.type, label: entry.label, createdAt: entry.createdAt))
+        }
+
+        // Upserts by name (see `ArtistEntry`) so this both re-applies an edit onto a
+        // speaker already synced locally, and pre-seeds one that hasn't synced yet — a
+        // later sync's own `upsertArtist(name:)` will find and reuse this same row.
+        for entry in snapshot.artists {
+            let artist = try libraryStore.upsertArtist(name: entry.name)
+            try libraryStore.updateArtist(id: artist.id, name: entry.name, bio: entry.bio, language: entry.language)
+            try libraryStore.updateArtistPhoto(id: artist.id, photoFileName: entry.photoFileName)
+        }
+    }
+
+    // MARK: Destinations
+
+    /// The archive as it stands right now — built once per run and handed to every
+    /// destination that's switched on, since walking the whole library twice for the same
+    /// bytes is just twice the work.
+    func currentArchive() throws -> Data {
+        try archive(try makeSnapshot())
+    }
+
+    func upload(_ archive: Data) async throws {
+        try await activeS3Provider().uploadBackup(archive)
+    }
+
+    /// The archive as the bucket holds it. Nothing applies it on its own — restoring is
+    /// `FirstRunRestore`'s call, and it wants the bytes so it can keep them for
+    /// `PendingRestore`.
+    func downloadRemoteArchive() async throws -> Data? {
+        try await activeS3Provider().downloadBackup()
+    }
+
+    /// Applies an archive and, if part of it named episodes this device hasn't synced
+    /// yet, keeps it so `PendingRestore` can finish the job after the next sync instead
+    /// of asking the listener to restore a second time.
+    @discardableResult
+    func applyAndKeepWaiting(_ archive: Data) throws -> BackupImportResult {
+        let result = try apply(unarchive(archive))
+        if result.awaitingSync > 0 { PendingRestore.save(archive) }
+        return result
     }
 
     private func activeS3Provider() throws -> S3Provider {

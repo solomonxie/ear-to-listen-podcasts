@@ -41,13 +41,21 @@ enum AiRouter {
             cursor = (startAt + 1) % keys.count
         }
 
+        let queryStore = AiQueryStore(dbQueue: dbQueue)
+        let prompt = transcribe(messages)
+
         var lastError: Error?
         for (offset, key) in order.enumerated() {
             guard let secret = try? store.secret(forKeyID: key.id), !secret.isEmpty else { continue }
             try? store.bumpRequestCount(id: key.id)
             do {
-                return try await runChatCompletion(vendor: key.vendor, apiKey: secret, messages: messages)
+                let result = try await runChatCompletion(vendor: key.vendor, apiKey: secret, messages: messages)
+                try? queryStore.record(keyID: key.id, vendor: key.vendor, prompt: prompt, result: result)
+                return result.text
             } catch {
+                // Recorded too: a key that's been refused all week is the thing the
+                // history exists to make visible.
+                try? queryStore.record(keyID: key.id, vendor: key.vendor, prompt: prompt, error: error)
                 lastError = error
                 if currentStrategy == .sequential {
                     cursor = (startAt + offset + 1) % keys.count
@@ -57,8 +65,14 @@ enum AiRouter {
         throw lastError ?? NoAiKeyError()
     }
 
+    /// The messages as one readable block — what was sent, in the order it was sent, so
+    /// the history row can be read back without reconstructing the request.
+    private static func transcribe(_ messages: [ChatMessage]) -> String {
+        messages.map { "[\($0.role.rawValue)] \($0.content)" }.joined(separator: "\n\n")
+    }
+
     /// Used both by the router above and by "test then save" when adding a key.
-    static func runChatCompletion(vendor: AiVendor, apiKey: String, messages: [ChatMessage]) async throws -> String {
+    static func runChatCompletion(vendor: AiVendor, apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         switch vendor {
         case .openAI: return try await OpenAIChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
         case .anthropic: return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, messages: messages)

@@ -12,7 +12,7 @@ enum OpenAICompatibleChatClient {
         var model: String
     }
 
-    static func runChatCompletion(config: Config, apiKey: String, messages: [ChatMessage]) async throws -> String {
+    static func runChatCompletion(config: Config, apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         var request = URLRequest(url: config.endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -47,7 +47,13 @@ enum OpenAICompatibleChatClient {
                 struct Message: Decodable { var content: String }
                 var message: Message
             }
+            struct Usage: Decodable {
+                var prompt_tokens: Int?
+                var completion_tokens: Int?
+            }
             var choices: [Choice]
+            var model: String?
+            var usage: Usage?
         }
         guard
             let chat = try? JSONDecoder().decode(ChatResponse.self, from: data),
@@ -55,7 +61,11 @@ enum OpenAICompatibleChatClient {
         else {
             throw AiClientError(code: .unknown, message: "Unexpected response shape from \(config.vendorName).")
         }
-        return text
+        // The model the vendor says it used, not the one asked for — they substitute.
+        return ChatCompletionResult(
+            text: text, model: chat.model ?? config.model,
+            promptTokens: chat.usage?.prompt_tokens, completionTokens: chat.usage?.completion_tokens
+        )
     }
 }
 

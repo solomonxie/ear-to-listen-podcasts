@@ -9,7 +9,7 @@ enum AnthropicChatClient {
     private static let model = "claude-haiku-4-5-20251001"
     private static let apiVersion = "2023-06-01"
 
-    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> String {
+    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         let system = messages
             .filter { $0.role == .system }
             .map(\.content)
@@ -44,7 +44,13 @@ enum AnthropicChatClient {
 
         struct MessagesResponse: Decodable {
             struct Block: Decodable { var text: String? }
+            struct Usage: Decodable {
+                var input_tokens: Int?
+                var output_tokens: Int?
+            }
             var content: [Block]
+            var model: String?
+            var usage: Usage?
         }
         guard
             let decoded = try? JSONDecoder().decode(MessagesResponse.self, from: data),
@@ -52,6 +58,9 @@ enum AnthropicChatClient {
         else {
             throw AiClientError(code: .unknown, message: "Unexpected response shape from Anthropic.")
         }
-        return text
+        return ChatCompletionResult(
+            text: text, model: decoded.model ?? model,
+            promptTokens: decoded.usage?.input_tokens, completionTokens: decoded.usage?.output_tokens
+        )
     }
 }

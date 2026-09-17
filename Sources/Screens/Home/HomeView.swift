@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var query = ""
     @State private var showingCreatePlaylist = false
     @State private var newPlaylistName = ""
+    @State private var showingDownloads = false
 
     var body: some View {
         ScrollView {
@@ -38,6 +39,9 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
             Task { await homeData.refresh() }
         }
+        .sheet(isPresented: $showingDownloads) {
+            NavigationStack { DownloadsView() }
+        }
         .alert("New Playlist", isPresented: $showingCreatePlaylist) {
             TextField("Name", text: $newPlaylistName)
             Button("Create") {
@@ -60,7 +64,7 @@ struct HomeView: View {
         ContentUnavailableView {
             Label("Nothing in your library yet", systemImage: "square.stack.3d.up.slash")
         } description: {
-            Text("Connect an S3 bucket or add a local folder below, and your episodes appear here as they sync.")
+            Text("Connect an S3 bucket, or import episodes from Files below, and they appear here as they sync.")
         } actions: {
             Button("Load sample library") {
                 try? DemoDataSeeder.load()
@@ -116,7 +120,12 @@ struct HomeView: View {
             }
         }
 
-        shelf("Downloaded") {
+        // The shelf shows what's downloaded; "More" is where you manage it — the full
+        // list, with the sizes and the way to free the space up again.
+        shelf("Downloaded", trailing: {
+            Button("More") { showingDownloads = true }
+                .font(.subheadline)
+        }) {
             ForEach(homeData.downloadedTracks) { track in
                 TrackCard(track: track) { play(track, queue: homeData.downloadedTracks) }
             }

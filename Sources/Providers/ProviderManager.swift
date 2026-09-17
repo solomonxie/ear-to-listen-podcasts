@@ -42,11 +42,15 @@ final class ProviderManager: @unchecked Sendable {
         lock.withLock { cache.removeValue(forKey: providerID) }
     }
 
+    func settings(for providerID: String) -> [String: String]? {
+        try? credentials.getJSON([String: String].self, forKey: Self.settingsKey(providerID: providerID))
+    }
+
     /// Raw settings dict (accessKeyId/secretAccessKey/region/bucket/keyPrefix) — lets the
     /// "add connection" screen offer an existing S3 connection as a fillable draft.
     func s3Settings(for record: ProviderRecord) -> [String: String]? {
         guard record.type == S3Provider.providerType else { return nil }
-        return try? credentials.getJSON([String: String].self, forKey: Self.settingsKey(providerID: record.id))
+        return settings(for: record.id)
     }
 
     /// "s3://bucket/folder/" for display — lets two connections to the same bucket

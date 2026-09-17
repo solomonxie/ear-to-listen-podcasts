@@ -29,7 +29,10 @@ ProviderManager.swift:provider(for: record)
               │ dispatches on config.type
               ├─ "s3"    ──► S3/S3Provider.swift:init(config:)
               └─ "local" ──► Local/LocalFilesProvider.swift:init(config:)
-                               resolves its security-scoped folder bookmark
+                               resolves security-scoped bookmarks: one folder,
+                               or the individual episodes picked from Files
+                               (`LocalFileEntry`, keyed by the path each is
+                               filed under — read-only, no folder for sidecars)
               │ caches the instance
               ▼
 caller: .listFiles(inFolder:) / .streamURL(forFileID:) / .testConnection()
