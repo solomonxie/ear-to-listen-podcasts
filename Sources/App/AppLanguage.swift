@@ -14,7 +14,9 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     /// still showing the *other* one — the whole point of the picker.
     var displayName: String {
         switch self {
-        case .system: return "System"
+        // Named for what it does, not what it is: "System" on its own leaves people
+        // guessing which system, and whose language.
+        case .system: return "Same as device"
         case .english: return "English"
         case .chinese: return "简体中文"
         }

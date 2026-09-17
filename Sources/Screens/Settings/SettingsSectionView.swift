@@ -54,14 +54,22 @@ struct SettingsSectionView: View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Settings").sectionTitle().padding(.horizontal)
 
-            // One line, no heading: it's a single choice out of three, and it says what
-            // it is. "System" follows the device, and every label switches as you pick.
-            Picker("Language", selection: $language.language) {
-                ForEach(AppLanguage.allCases) { option in
-                    Text(option.displayName).tag(option)
+            // A menu `Picker` outside a `Form` drops its own label and indents what's
+            // left, so the row read as a stray "System" sitting off the margin. The
+            // heading names it, and the choice is written into the button.
+            VStack(alignment: .leading, spacing: 8) {
+                Text("LANGUAGE").sectionHeading()
+                Menu {
+                    Picker("Language", selection: $language.language) {
+                        ForEach(AppLanguage.allCases) { option in
+                            Text(option.displayName).tag(option)
+                        }
+                    }
+                } label: {
+                    Text("\(language.language.displayName) ▾")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .pickerStyle(.menu)
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 8) {

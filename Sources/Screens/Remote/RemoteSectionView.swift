@@ -129,7 +129,7 @@ struct RemoteSectionView: View {
                         }
                     }
                 } label: {
-                    Label(SyncFrequency(minutes: record.syncFrequencyMinutes).shortName,
+                    Label(SyncFrequency(minutes: record.syncFrequencyMinutes).buttonLabel,
                           systemImage: "clock.arrow.circlepath")
                         .font(.caption)
                 }

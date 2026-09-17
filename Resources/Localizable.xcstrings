@@ -993,6 +993,22 @@
         }
       }
     },
+    "LANGUAGE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LANGUAGE"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言"
+          }
+        }
+      }
+    },
     "LOCAL FOLDERS": {
       "localizations": {
         "en": {
@@ -1713,6 +1729,22 @@
         }
       }
     },
+    "Same as device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same as device"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随设备"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "en": {
@@ -2081,6 +2113,118 @@
         }
       }
     },
+    "Sync: every 12 hours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync: every 12 hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步：每 12 小时"
+          }
+        }
+      }
+    },
+    "Sync: every 15 min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync: every 15 min"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步：每 15 分钟"
+          }
+        }
+      }
+    },
+    "Sync: every 30 min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync: every 30 min"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步：每 30 分钟"
+          }
+        }
+      }
+    },
+    "Sync: every 6 hours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync: every 6 hours"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步：每 6 小时"
+          }
+        }
+      }
+    },
+    "Sync: every day": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync: every day"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步：每天"
+          }
+        }
+      }
+    },
+    "Sync: every hour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync: every hour"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步：每小时"
+          }
+        }
+      }
+    },
+    "Sync: manual": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync: manual"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步：手动"
+          }
+        }
+      }
+    },
     "Syncing…": {
       "localizations": {
         "en": {
@@ -2093,22 +2237,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在同步…"
-          }
-        }
-      }
-    },
-    "System": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "System"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跟随系统"
           }
         }
       }
