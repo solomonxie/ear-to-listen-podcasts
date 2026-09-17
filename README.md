@@ -91,15 +91,16 @@ xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts 
 
 ## Release (TestFlight)
 
-Signing is automatic; set your Apple Developer Team ID for device/archive
-builds (simulator builds don't need one). iCloud backup needs the
+Signing is automatic against the team in `project.yml`
+(`DEVELOPMENT_TEAM`) — change that one line to your own Apple Developer Team
+ID. Simulator builds don't need one. iCloud backup needs the
 `iCloud.com.solomonxie.byopo` container entitlement
 (`Sources/App/BringYourOwnPodcasts.entitlements`), which needs a paid developer
 account — a free-team build still builds and runs, and the iCloud row in
 Settings reports itself unavailable instead of pretending:
 
 ```sh
-DEVELOPMENT_TEAM=YOURTEAMID xcodegen generate
+xcodegen generate
 xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts \
   -configuration Release -archivePath build/BringYourOwnPodcasts.xcarchive \
   -skipPackagePluginValidation archive

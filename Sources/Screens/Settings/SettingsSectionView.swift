@@ -283,9 +283,11 @@ struct SettingsSectionView: View {
                     .sectionHint()
             }
             .padding(.horizontal)
-
         }
         .sectionRow()
+        // The docked mini player sits over the end of the page, and Settings is the end
+        // of the page — without this the last group is half a bar short of readable.
+        .padding(.bottom, 72)
         .alert("Reset Sample Library?", isPresented: $showingResetConfirmation) {
             Button("Reset", role: .destructive) { loadDemoData() }
             Button("Cancel", role: .cancel) {}
