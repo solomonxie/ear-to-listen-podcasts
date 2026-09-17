@@ -20,7 +20,7 @@ ContentView → NavigationStack
     │            Playlists · Favorites · Browse by Year · Downloaded
     ├── ── Remote ─────────── +       ← section, not a tab
     │      connection rows → RemoteBrowserView (push, recursive)
-    │      "Sync queue: N pending"   → SyncQueueView (sheet)
+    │      "Queue (N)" pill          → SyncQueueView (sheet)
     ├── ── Settings ───────────       ← section, not a tab
     └── ▶ MiniPlayerBar (docked)      → RealPlayerView (sheet)
 
@@ -77,7 +77,7 @@ The `⋯` menu is identical at every depth:
 Sync: Manual                    ▸   ← submenu carrying the current value
 Last synced: 9 hours ago
 Sync Now
-Sync Queue                      ☰
+Queue                           ☰
 ──────────
 Delete Connection               🗑  ← destructive, last
 ```
@@ -88,7 +88,7 @@ any sync runs. Offline or on error it falls back to already-synced local rows an
 says "Showing last synced" in the footer. The footer's numbers stay local — they
 report what this device has synced, which is a different question.
 
-### Sync queue
+### Queue
 
 Global across connections, reached from the Remote section's status line or any
 connection's `⋯`.
@@ -250,7 +250,8 @@ Nothing is written until `Save`, and a saved edit outranks the embedded tags fro
 
 ### Settings
 
-Sections: Language (one line, no heading) · AI Keys · Sync & Backup · Add Episodes. Each
+Sections: Sync & Backup · AI Keys · Add Episodes · Language (last: set once, never
+thought about again). Each
 carries a short hint under its heading, not a paragraph at the bottom. Row labels say
 what the row does, not what it is: "Import podcasts from Files", not "Add a Folder".
 
@@ -287,7 +288,7 @@ under their own name:
 
 ```
  iCloud Drive                                         ●──
- Files → iCloud Drive → BYO Podcasts · Last: Sep 16
+ Files / iCloud Drive / BYO Podcasts · Last: Sep 16
 
  iCloud Drive                                         ──○   ← disabled
  iCloud Drive is off on this device.
@@ -359,7 +360,7 @@ copy; the episode stays synced and re-downloads next play.
 | Screen | Loading | Empty | Error / offline |
 |---|---|---|---|
 | Remote browser | spinner in place of the list; footer held back too | "No episodes synced yet." | listing read fails → orange line above the list |
-| Sync queue | — | "Nothing queued. Sync a folder from a remote source to add files here." | failed job shows its provider error inline + Retry |
+| Queue | — | "Nothing queued. Sync a folder from a remote source to add files here." | failed job shows its provider error inline + Retry |
 | Now playing | — | "Nothing playing" | "You're offline. Connect to the internet to stream this track." |
 | Transcript | "Transcribing 12:00–13:00… · 46% done" inline, lines appear as they land | off: "Off for this episode — switch it on above…"; on: "Listening ahead — lines appear as they're recognised." | orange line above the list; on-device needs the Speech permission, Whisper needs an OpenAI key |
 | Downloads | spinner | "No downloaded episodes yet. Anything you play is saved here automatically." | — |

@@ -38,7 +38,7 @@ to queue the whole bucket (recursively) rather than running one opaque
 background sync — so the new source's progress (and any per-file errors)
 shows up in the sync queue right away instead of only once everything's done.
 
-## Sync queue
+## Queue
 
 Per-file jobs (`SyncJob`, in `syncJobs`) persist across launches.
 `SyncQueueManager.drain()` claims jobs via `SyncJobStore.dequeueNextPending()`,
@@ -61,7 +61,7 @@ the same queue UI as a queued per-file import, instead of only the latter
 being visible while it runs.
 
 The queue is global across every source, not per-bucket. `RemoteSectionView`
-shows a one-line status ("Sync queue: N pending · concurrency") below the
+shows a "Queue (N)" pill below the
 connections list; each connection's own "More" menu also links straight to
 `SyncQueueView` for the full list, pause/resume, speed, and clear controls
 (all on the "Queue (N)" row itself, not a separate on/off toggle).
@@ -76,7 +76,7 @@ RemoteSectionView.swift (embedded in HomeView, not a tab)
 │ │ RemoteSourceRow (label + s3:// path) │ │──→ tap → RemoteBrowserView.swift
 │ │   long-press → Delete                │ │──→ SettingsViewModel.delete(_:)
 │ └─────────────────────────────────────┘ │
-│ "Sync queue: N pending · …" (text)      │──→ tap → SyncQueueView.swift
+│ [ Queue (N) ] (pill button)             │──→ tap → SyncQueueView.swift
 └─────────────────────────────────────────┘
         │
         ▼
