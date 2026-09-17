@@ -2,8 +2,10 @@ import SwiftUI
 
 /// Lyric-style transcript: the line being spoken is the only bright one, it scrolls
 /// itself, tapping a line plays from there, and the pencil beside it corrects the text.
-/// Whether a recognizer is running at all — and which one — is one control, since
-/// "off / free & offline / paid & better" is a single choice, not two.
+///
+/// The controls sit flat above the lines rather than inside a menu. There are only five
+/// of them, they're the ones you reach for while listening, and a menu made every one of
+/// them a tap-and-hunt — worse, it hid whether anything was running at all.
 struct TranscriptPane: View {
     @ObservedObject var transcript = LiveTranscript.shared
     let currentTime: TimeInterval
@@ -18,13 +20,14 @@ struct TranscriptPane: View {
     @ObservedObject private var languages = OnDeviceLanguages.shared
     @State private var editing: TranscriptSegment?
     @State private var showingEdits = false
+    @State private var confirmingReload = false
 
     /// Constant on purpose — see `VolatileTail`.
     private static let volatileRowID = "transcript.volatile"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            header
+            controls
             if let status {
                 Text(status).sectionRowSecondary().padding(.horizontal)
             }
@@ -43,34 +46,78 @@ struct TranscriptPane: View {
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
         }
+        .confirmationDialog("Transcribe this episode again?", isPresented: $confirmingReload, titleVisibility: .visible) {
+            Button("Re-transcribe everything", role: .destructive) { transcript.forceReload() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Throws away the stored transcript and starts over. Your corrections are kept — they're used as hints for the new pass.")
+        }
         .task { await languages.refreshIfNeeded() }
     }
 
-    /// The options live in their own view, handed plain values. The pane around them
-    /// redraws several times a second while a window is being recognised, and a `Menu`
-    /// whose content is rebuilt underneath it shuts — which made the engine and language
-    /// pickers impossible to actually reach while transcribing.
-    private var header: some View {
-        HStack(spacing: 10) {
-            TranscriptOptionsMenu(
-                engineKind: transcript.engineKind,
-                isLiveEnabled: transcript.isLiveEnabled,
-                localeIdentifier: transcript.localeIdentifier,
-                runsWhilePaused: transcript.runsWhilePaused,
-                hasTrack: transcript.track != nil,
-                readyLanguages: languages.ready,
-                hasCheckedLanguages: languages.hasChecked
-            )
-            .equatable()
-
-            Spacer()
-
-            if !transcript.edits.isEmpty {
-                Button("\(transcript.edits.count) edit\(transcript.edits.count == 1 ? "" : "s")") { showingEdits = true }
-                    .font(.caption)
+    /// Every option, in view, in a fixed place. The switch reads as the state it is —
+    /// nothing is transcribed until it's on, for this episode only — and the settings it
+    /// governs sit under it, dimmed while it's off rather than hidden, so the screen
+    /// doesn't reflow as you flip it.
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("TRANSCRIPT").sectionHeading()
+                Spacer()
+                if !transcript.edits.isEmpty {
+                    Button("\(transcript.edits.count) edit\(transcript.edits.count == 1 ? "" : "s")") { showingEdits = true }
+                        .font(.caption)
+                }
             }
+
+            Toggle("Transcribe this episode", isOn: liveSelection)
+                .font(.subheadline)
+                .disabled(transcript.track == nil)
+
+            Picker("Recogniser", selection: engineSelection) {
+                ForEach(TranscriptionEngineKind.allCases, id: \.self) { kind in
+                    Text(kind.displayName).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!transcript.isLiveEnabled)
+
+            HStack(spacing: 12) {
+                // Still a menu: it's a list of every language the phone can recognise,
+                // which is a picker, not a row of buttons. Value-only and `Equatable`
+                // because this pane redraws several times a second while a window is
+                // being recognised, and SwiftUI shuts a `Menu` it rebuilds underneath.
+                TranscriptLanguageMenu(
+                    localeIdentifier: transcript.localeIdentifier,
+                    readyLanguages: languages.ready,
+                    hasCheckedLanguages: languages.hasChecked
+                )
+                .equatable()
+                Spacer()
+                Button("Transcribe again…") { confirmingReload = true }
+                    .font(.caption)
+                    .disabled(transcript.track == nil)
+            }
+
+            // Following playback is the default, so the episode you walked away from
+            // stops costing battery. Running ahead is the deliberate choice.
+            Toggle("Keep going while paused", isOn: pausedSelection)
+                .font(.footnote)
+                .disabled(!transcript.isLiveEnabled)
         }
         .padding(.horizontal)
+    }
+
+    private var liveSelection: Binding<Bool> {
+        Binding(get: { transcript.isLiveEnabled }, set: { transcript.isLiveEnabled = $0 })
+    }
+
+    private var engineSelection: Binding<TranscriptionEngineKind> {
+        Binding(get: { transcript.engineKind }, set: { transcript.engineKind = $0 })
+    }
+
+    private var pausedSelection: Binding<Bool> {
+        Binding(get: { transcript.runsWhilePaused }, set: { transcript.runsWhilePaused = $0 })
     }
 
     private var status: String? {
@@ -107,7 +154,7 @@ struct TranscriptPane: View {
         if transcript.isLiveEnabled {
             return "Listening from where you are — lines appear as they're recognised."
         }
-        return "Off — nothing is transcribed until you pick a recogniser above. A transcript file already sitting beside the episode still shows here, and costs nothing."
+        return "Off for this episode — switch \u{201C}Transcribe this episode\u{201D} on above to start. Anything transcribed before, or a transcript file sitting beside the episode, still shows here either way."
     }
 
     @ViewBuilder private var lines: some View {
@@ -148,78 +195,38 @@ struct TranscriptPane: View {
     }
 }
 
-/// Everything you can change about transcribing, in one menu. Deliberately value-only and
-/// `Equatable`: it is redrawn by a pane that churns while a window is being recognised,
-/// and SwiftUI closes an open `Menu` whose content it rebuilds. Writes go straight to the
-/// shared `LiveTranscript` rather than through bindings, since a binding would defeat the
-/// equality check that keeps this view still.
-private struct TranscriptOptionsMenu: View, Equatable {
-    let engineKind: TranscriptionEngineKind
-    let isLiveEnabled: Bool
+/// The language the recognizer should expect. Value-only and `Equatable` on purpose: the
+/// pane redraws several times a second while a window is being recognised, and SwiftUI
+/// shuts an open `Menu` whose content it rebuilds — which made this impossible to reach
+/// at exactly the moment you'd want it. Writes go straight to the shared `LiveTranscript`
+/// rather than through a binding, since a binding would defeat the equality check.
+private struct TranscriptLanguageMenu: View, Equatable {
     let localeIdentifier: String?
-    let runsWhilePaused: Bool
-    let hasTrack: Bool
     /// BCP-47 languages this phone can recognise offline, so the picker can say so before
     /// you pick one rather than after it fails.
     let readyLanguages: Set<String>
     let hasCheckedLanguages: Bool
 
-    @State private var confirmingReload = false
-
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.engineKind == rhs.engineKind
-            && lhs.isLiveEnabled == rhs.isLiveEnabled
-            && lhs.localeIdentifier == rhs.localeIdentifier
-            && lhs.runsWhilePaused == rhs.runsWhilePaused
-            && lhs.hasTrack == rhs.hasTrack
+        lhs.localeIdentifier == rhs.localeIdentifier
             && lhs.hasCheckedLanguages == rhs.hasCheckedLanguages
             && lhs.readyLanguages == rhs.readyLanguages
     }
 
-    private var transcript: LiveTranscript { LiveTranscript.shared }
-
     var body: some View {
         Menu {
-            Picker("Transcribe", selection: engineSelection) {
-                Text("Off").tag(TranscriptionEngineKind?.none)
-                ForEach(TranscriptionEngineKind.allCases, id: \.self) { kind in
-                    Text(kind.displayName).tag(TranscriptionEngineKind?.some(kind))
-                }
-            }
-            Divider()
-            // Following playback is the default, so the episode you walked away from
-            // stops costing battery. Running ahead is the deliberate choice.
-            Toggle("Keep going while paused", isOn: pausedSelection)
-            Divider()
             // The phone's language says nothing about the episode's, and picking the
             // wrong recognizer doesn't fail — it returns confident nonsense forever.
-            Menu {
-                Picker("Language", selection: languageSelection) {
-                    Text("Match this phone").tag(String?.none)
-                    ForEach(orderedLocales, id: \.identifier) { locale in
-                        Text(label(for: locale)).tag(String?.some(locale.identifier(.bcp47)))
-                    }
+            Picker("Language", selection: languageSelection) {
+                Text("Match this phone").tag(String?.none)
+                ForEach(orderedLocales, id: \.identifier) { locale in
+                    Text(label(for: locale)).tag(String?.some(locale.identifier(.bcp47)))
                 }
-            } label: {
-                Label("Language: \(languageLabel)", systemImage: "globe")
             }
-            Divider()
-            Button("Transcribe again…", systemImage: "arrow.clockwise") { confirmingReload = true }
-                .disabled(!hasTrack)
         } label: {
-            Label(menuTitle, systemImage: "waveform")
-                .font(.footnote.weight(.semibold))
+            Label("Language: \(languageLabel)", systemImage: "globe")
+                .font(.caption)
         }
-        .confirmationDialog("Transcribe this episode again?", isPresented: $confirmingReload, titleVisibility: .visible) {
-            Button("Re-transcribe everything", role: .destructive) { transcript.forceReload() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Throws away the stored transcript and starts over. Your corrections are kept — they're used as hints for the new pass.")
-        }
-    }
-
-    private var menuTitle: String {
-        isLiveEnabled ? engineKind.displayName : "Transcribe: Off"
     }
 
     private var languageLabel: String {
@@ -243,25 +250,7 @@ private struct TranscriptOptionsMenu: View, Equatable {
     }
 
     private var languageSelection: Binding<String?> {
-        Binding(get: { localeIdentifier }, set: { transcript.localeIdentifier = $0 })
-    }
-
-    private var pausedSelection: Binding<Bool> {
-        Binding(get: { runsWhilePaused }, set: { transcript.runsWhilePaused = $0 })
-    }
-
-    private var engineSelection: Binding<TranscriptionEngineKind?> {
-        Binding(
-            get: { isLiveEnabled ? engineKind : nil },
-            set: { kind in
-                guard let kind else {
-                    transcript.isLiveEnabled = false
-                    return
-                }
-                transcript.engineKind = kind
-                transcript.isLiveEnabled = true
-            }
-        )
+        Binding(get: { localeIdentifier }, set: { LiveTranscript.shared.localeIdentifier = $0 })
     }
 }
 
