@@ -20,6 +20,9 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $engine.isPresentingPlayer) {
             RealPlayerView()
         }
+        // Attached once, at the root: it works on the window, so every page, sheet and
+        // full-screen cover in the app gets it.
+        .dismissesKeyboardOnBackgroundTap()
         .preferredColorScheme(.dark)
     }
 }
