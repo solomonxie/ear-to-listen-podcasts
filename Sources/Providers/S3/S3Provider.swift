@@ -183,21 +183,28 @@ struct S3Provider: CloudProvider {
         }
     }
 
-    /// Fixed key, so backing up and restoring need no picker. Spelled out in full: this
-    /// sits in a bucket the listener browses in every S3 client they own, often years
-    /// later, and ".byop" tells them nothing about which app left it there or whether
-    /// it's safe to delete.
-    private var backupKey: String { (keyPrefix ?? "") + "bring-your-own-podcasts/app-data-backup.zip" }
+    /// A folder of its own, spelled out in full: this sits in a bucket the listener
+    /// browses in every S3 client they own, often years later, and ".byop" tells them
+    /// nothing about which app left it there or whether it's safe to delete.
+    private var backupFolder: String { (keyPrefix ?? "") + "bring-your-own-podcasts/" }
+
+    /// This month's archive — see `BackupArchiveName`. Derived rather than picked, so
+    /// backing up and restoring still need no picker.
+    private var backupKey: String { backupFolder + BackupArchiveName.current() }
 
     /// Names this backup has had before. Read-only, in order, so a copy written by any
-    /// older build still restores — there is exactly one of these per bucket and losing
-    /// track of it means losing the library it holds.
+    /// older build still restores — losing track of one means losing the library it holds.
     ///
-    /// `.byop/library-backup.zip` was an abbreviation nobody could expand; the `.json`
-    /// before it was a zip with a lying extension, chosen only to fall outside the old
-    /// "is this an episode" filter, which `FileKind` now decides properly.
+    /// `app-data-backup.zip` was the single file every build wrote before monthly
+    /// archives; `.byop/library-backup.zip` was an abbreviation nobody could expand; the
+    /// `.json` before that was a zip with a lying extension, chosen only to fall outside
+    /// the old "is this an episode" filter, which `FileKind` now decides properly.
     private var legacyBackupKeys: [String] {
-        [(keyPrefix ?? "") + ".byop/library-backup.zip", (keyPrefix ?? "") + "byop-backup.json"]
+        [
+            backupFolder + "app-data-backup.zip",
+            (keyPrefix ?? "") + ".byop/library-backup.zip",
+            (keyPrefix ?? "") + "byop-backup.json",
+        ]
     }
 
     var isWritable: Bool { true }
@@ -215,10 +222,13 @@ struct S3Provider: CloudProvider {
         ))
     }
 
-    /// `nil` means no backup has been made yet, not an error. Falls back to the legacy key
-    /// so a backup written by an older build still restores.
+    /// `nil` means no backup has been made yet, not an error. Reads the newest month in
+    /// the folder — not necessarily this month's, since a device coming back from a
+    /// reinstall may not have backed up yet — and falls back to the keys older builds
+    /// wrote so those copies still restore.
     func downloadBackup() async throws -> Data? {
-        for key in [backupKey] + legacyBackupKeys {
+        let newest = (try? await newestBackupKey()) ?? nil
+        for key in (newest.map { [$0] } ?? []) + legacyBackupKeys {
             do {
                 let output = try await client.getObject(input: GetObjectInput(bucket: bucket, key: key))
                 if let data = try await output.body?.readData() { return data }
@@ -227,5 +237,10 @@ struct S3Provider: CloudProvider {
             }
         }
         return nil
+    }
+
+    private func newestBackupKey() async throws -> String? {
+        let output = try await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, prefix: backupFolder))
+        return BackupArchiveName.newest(among: (output.contents ?? []).compactMap(\.key))
     }
 }
