@@ -27,6 +27,9 @@ iPhone, without hardcoding one storage backend.
 - No social features (sharing, following, public playlists).
 - No transcoding pipeline — plays whatever format AVPlayer supports natively.
 - No cross-platform code — iOS only, native Swift; no Android version.
+- No Expo / Expo Go anywhere — not as a preview client, not as build
+  service, not as editor tooling. Removed outright, not backlogged; see
+  "Options considered" for why.
 - No DRM/licensing — user's own files only. Playlist import brings in track
   metadata (title/artist/album/duration) only, never audio — matched tracks
   must already exist in the user's own storage to be playable.
@@ -48,6 +51,16 @@ iPhone, without hardcoding one storage backend.
   chosen native Swift since the app is iPhone-only by requirement and every
   RN dependency it needed was a thin wrapper around one of these frameworks
   anyway.
+- **Dev loop / preview client**: Expo Go (scan a QR, live-reload on device —
+  but it needs an Expo account login, only runs what its prebuilt client
+  already links so anything native means leaving it anyway, and was flaky
+  enough in practice to cost more debugging time than it saved) vs plain
+  Xcode + Simulator/device builds from the XcodeGen project (no account, no
+  second runtime, the same binary that ships to TestFlight) — chosen the
+  Xcode loop. On a one-person project the account, the extra client and the
+  "is this Expo or my code?" ambiguity were pure overhead, so Expo Go and
+  its tooling (down to the `expo` Claude Code plugin this repo used to
+  enable) are removed rather than left as an optional path.
 - **Project/build system**: hand-maintained `.xcodeproj` (fragile merge
   conflicts, opaque diffs) vs generated via **XcodeGen** from a checked-in
   `project.yml` (text, diffable, regenerate with one command) — chosen

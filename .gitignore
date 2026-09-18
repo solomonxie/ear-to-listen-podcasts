@@ -16,8 +16,6 @@ venv/
 # XcodeGen-generated Info.plist (source of truth is project.yml)
 Sources/App/Info.plist
 
-# Claude Code local state
-.claude/scheduled_tasks.lock
 
 # macOS
 .DS_Store
