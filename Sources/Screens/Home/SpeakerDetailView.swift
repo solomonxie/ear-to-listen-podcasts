@@ -94,8 +94,7 @@ struct SpeakerDetailView: View {
     private func fillMissingPhoto() async {
         guard currentSpeaker.photoFileName == nil else { return }
         guard let data = await SpeakerPhotoFinder.find(for: currentSpeaker.id),
-              let image = UIImage(data: data),
-              let fileName = try? ImageFileStore.speakerPhotos.save(image, maxDimension: 400) else { return }
+              let fileName = try? await ImageFileStore.speakerPhotos.save(data, maxDimension: 400) else { return }
         // Re-read first: the sheet may have set one while this was running.
         let latest = (try? libraryStore.artist(id: currentSpeaker.id)) ?? currentSpeaker
         guard latest.photoFileName == nil else {

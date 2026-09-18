@@ -79,6 +79,7 @@ struct AlbumEditView: View {
                     Text("Changing the speaker re-points every episode in this album, not just the album itself.")
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Album")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -102,8 +103,9 @@ struct AlbumEditView: View {
     }
 
     private func handlePick(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
-              let newFileName = try? ImageFileStore.artwork.save(image, maxDimension: 800) else { return }
+        guard let item, let picked = try? await item.loadTransferable(type: PickedImageFile.self) else { return }
+        defer { picked.discard() }
+        guard let newFileName = try? await ImageFileStore.artwork.save(contentsOf: picked.url, maxDimension: 800) else { return }
         discardIfUncommitted(artworkFileName)
         artworkFileName = newFileName
     }

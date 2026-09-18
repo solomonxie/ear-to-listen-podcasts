@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var showingCreatePlaylist = false
     @State private var newPlaylistName = ""
     @State private var showingDownloads = false
+    @State private var editingBookmark: Bookmark?
 
     var body: some View {
         ScrollView {
@@ -38,6 +39,12 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
             Task { await homeData.refresh() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
+            homeData.refreshBookmarks()
+        }
+        .sheet(item: $editingBookmark) { bookmark in
+            BookmarkEditorView(bookmark: bookmark, episodeTitle: homeData.track(id: bookmark.trackID)?.title)
         }
         .sheet(isPresented: $showingDownloads) {
             NavigationStack { DownloadsView() }
@@ -82,10 +89,44 @@ struct HomeView: View {
             }
         }
 
+        // Both shelves are hand-made marks rather than anything derived, so they sit
+        // near the top where what you chose is what you see first.
+        if !homeData.favoriteTracks.isEmpty {
+            shelf("Favorites") {
+                ForEach(homeData.favoriteTracks) { track in
+                    TrackCard(track: track) { play(track, queue: homeData.favoriteTracks) }
+                }
+            }
+        }
+
+        if !homeData.bookmarks.isEmpty {
+            shelf("Bookmarks") {
+                ForEach(homeData.bookmarks) { bookmark in
+                    if let track = homeData.track(id: bookmark.trackID) {
+                        BookmarkCard(bookmark: bookmark, episodeTitle: track.title) {
+                            PlaybackEngine.shared.open(track: track, queue: [track], startingAt: bookmark.position)
+                        }
+                        .contextMenu {
+                            Button("Edit Bookmark…", systemImage: "square.and.pencil") { editingBookmark = bookmark }
+                        }
+                    }
+                }
+            }
+        }
+
         shelf("Albums") {
             ForEach(homeData.albums) { album in
                 NavigationLink { AlbumDetailView(album: album) } label: {
                     AlbumCard(album: album)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+
+        shelf("Speakers") {
+            ForEach(homeData.artists) { artist in
+                NavigationLink { SpeakerDetailView(speaker: artist) } label: {
+                    SpeakerCard(artist: artist)
                 }
                 .buttonStyle(.plain)
             }
@@ -102,19 +143,10 @@ struct HomeView: View {
             }
         }
 
-        shelf("Favorites") {
+        shelf("Saved Shows") {
             ForEach(homeData.favoriteShows()) { show in
                 NavigationLink { ShowDetailView(show: show) } label: {
                     ShowCard(show: show)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-
-        shelf("Speakers") {
-            ForEach(homeData.artists) { artist in
-                NavigationLink { SpeakerDetailView(speaker: artist) } label: {
-                    SpeakerCard(artist: artist)
                 }
                 .buttonStyle(.plain)
             }

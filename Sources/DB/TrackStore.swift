@@ -16,9 +16,11 @@ struct TrackStore {
                 .filter(Column("providerID") == track.providerID && Column("filePath") == track.filePath)
                 .fetchOne(db), existing.id != track.id {
                 row.id = existing.id
-                // Playback progress belongs to the listener, not to the import.
+                // Playback progress and hand-made marks belong to the listener, not to
+                // the import.
                 row.positionMs = existing.positionMs
                 row.lastPlayedAt = existing.lastPlayedAt
+                row.isFavorite = existing.isFavorite
             }
             try row.save(db)
             try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [row.id])
@@ -54,6 +56,22 @@ struct TrackStore {
             guard var track = try Track.fetchOne(db, key: id) else { return }
             track.language = language
             try track.update(db)
+        }
+    }
+
+    func setFavorite(id: String, isFavorite: Bool) throws {
+        try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return }
+            track.isFavorite = isFavorite
+            try track.update(db)
+        }
+    }
+
+    func favorites() throws -> [Track] {
+        try dbQueue.read { db in
+            try Track.filter(Column("isFavorite") == true && Column("isLost") == false)
+                .order(Column("title"))
+                .fetchAll(db)
         }
     }
 

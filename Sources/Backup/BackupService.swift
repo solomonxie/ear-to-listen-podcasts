@@ -44,6 +44,7 @@ struct BackupService {
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
     private var transcriptStore: TranscriptStore { TranscriptStore(dbQueue: dbQueue) }
+    private var bookmarkStore: BookmarkStore { BookmarkStore(dbQueue: dbQueue) }
 
     init(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) {
         self.dbQueue = dbQueue
@@ -81,10 +82,12 @@ struct BackupService {
                 photoFileName: artist.photoFileName
             )
         }
-        // Same rule for episodes: only the ones someone edited by hand travel, since a
-        // re-sync re-derives everything else from the files themselves.
+        // Same rule for episodes: only what someone did by hand travels, since a re-sync
+        // re-derives everything else from the files themselves. Edited details, a heart,
+        // and marked moments all count as by hand.
         let episodes = try trackStore.all(includingLost: true).compactMap { track -> LibrarySnapshot.EpisodeEntry? in
-            guard let editedAt = track.metadataEditedAt else { return nil }
+            let bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
+            guard track.metadataEditedAt != nil || track.isFavorite || !bookmarks.isEmpty else { return nil }
             return LibrarySnapshot.EpisodeEntry(
                 providerID: track.providerID,
                 filePath: track.filePath,
@@ -96,7 +99,14 @@ struct BackupService {
                 trackNumber: track.trackNumber,
                 notes: track.notes,
                 artworkFileName: track.artworkFileName,
-                editedAt: editedAt
+                isFavorite: track.isFavorite,
+                bookmarks: bookmarks.map {
+                    LibrarySnapshot.EpisodeEntry.BookmarkEntry(
+                        positionMs: $0.positionMs, note: $0.note, tags: $0.tags,
+                        transcriptText: $0.transcriptText, createdAt: $0.createdAt
+                    )
+                },
+                editedAt: track.metadataEditedAt
             )
         }
         return LibrarySnapshot(
@@ -241,8 +251,10 @@ struct BackupService {
             track.trackNumber = entry.trackNumber
             track.notes = entry.notes
             track.artworkFileName = entry.artworkFileName
+            track.isFavorite = track.isFavorite || entry.isFavorite
             track.metadataEditedAt = entry.editedAt
             try trackStore.upsert(track, artistName: artist?.name, albumName: album?.name)
+            try restore(entry.bookmarks, on: track.id)
         }
 
         // Like episode edits, a transcript needs its file already synced — there's no row
@@ -271,6 +283,21 @@ struct BackupService {
             playlistsImported: snapshot.playlists.count, tracksMatched: matched,
             tracksUnmatched: unmatched, editsAwaitingSync: awaiting
         )
+    }
+
+    /// Bookmarks are matched on the moment they mark, so restoring the same archive
+    /// twice — or onto a device that has been marking the same episode — doesn't leave
+    /// two marks a second apart.
+    private func restore(_ entries: [LibrarySnapshot.EpisodeEntry.BookmarkEntry], on trackID: String) throws {
+        let existing = try bookmarkStore.all(forTrack: trackID)
+        for entry in entries where !existing.contains(where: { abs($0.positionMs - entry.positionMs) < 1_000 }) {
+            var bookmark = try bookmarkStore.add(trackID: trackID, positionMs: entry.positionMs)
+            bookmark.note = entry.note
+            bookmark.tags = entry.tags
+            bookmark.transcriptText = entry.transcriptText
+            bookmark.createdAt = entry.createdAt
+            try bookmarkStore.update(bookmark)
+        }
     }
 
     /// The half of a snapshot that stands on its own — sources, playlists and speaker
