@@ -42,20 +42,22 @@ and flicker.
 
 ## Fast-scroll rail
 
-Right edge, only when the transcript has ≥15 lines. Hidden until the page
-moves, fades 1.4s after it stops.
+Right edge, only when the page runs past its own height. A 46pt disc, not a
+hairline — a bar down the edge of a page of text is there in principle and
+unfindable in practice. The system's own indicator is off: two things down one
+edge is what this replaces, not joins.
 
 ```
- idle          dragging
-   │              │
-   ┆            ( 24:30 )┆   time bubble while held
-   ▮  ← handle    ▮▮         wider + accent + shadow
-   ┆              ┆         36pt hit strip, 4pt visible line
-   ┆              ┆
+ at rest      dragging
+              ───────
+   ( ↕ )      ( ↕ )      accent fill, white glyph, 1.1×
+              ───────     56pt hit strip either way
 ```
 
-Handle sits at the spoken line's position in the transcript when nobody is
-holding it.
+Never hidden, only dimmed to 40% once the page has been still 3s: a control that
+vanishes has to be summoned back before it can be used, and scrolling to find
+the thing that scrolls is silly. Position is measured from the scroll view, so
+it means the same on an episode with no transcript at all.
 
 ## Up Next — sheet, medium/large detents
 
