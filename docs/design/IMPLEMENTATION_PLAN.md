@@ -54,7 +54,7 @@ real-world failures, and gets the build ready to ship.
 
 - [x] T5.1 LRU disk cache for streamed audio, backed by provider stream URLs — see `Sources/Playback/Cache.swift` — depends: T2.2
 - [x] T5.2 Error/retry handling: expired presigned URLs, offline state — see `Sources/Providers` — depends: T2.1
-- [x] T5.3 App icon, launch screen, TestFlight build config (signing, `eas`-equivalent: Xcode Cloud or manual archive) — see `project.yml` — depends: T1.1
+- [x] T5.3 App icon, launch screen, TestFlight build config (signing, Xcode Cloud or manual `xcodebuild archive` — no EAS/Expo build service) — see `project.yml` — depends: T1.1
 - [x] T5.4 QA pass: unit tests for provider/importer adapters + sync engine + matcher, manual playback test on device — see `Tests` — depends: T4.1, T4.2, T4.3, T4.4, T4.5, T4.6, T5.1, T5.2
 
 ## Phase 6: Sync & Backup
@@ -71,6 +71,14 @@ separate task, not scheduled here.
 - [x] T6.2 `S3Provider.uploadBackup`/`downloadBackup`: fixed-key JSON object in the bucket — see `Sources/Providers/S3` — depends: T2.1, T6.1
 - [x] T6.3 Wire Settings ▸ Sync & Backup: Export/Import via `.fileExporter`/`.fileImporter`, Backup/Restore via the active S3 provider — see `Sources/Screens/Settings` — depends: T6.1, T6.2
 - [x] T6.4 Unit tests: snapshot round-trip, restore matching (hit/miss by providerID+filePath), idempotent re-apply — see `Tests` — depends: T6.1
+
+## Dropped (not backlogged)
+- Expo / Expo Go and the `expo` Claude Code plugin: an Expo-account login,
+  a second runtime that can't run the native pieces this app is made of,
+  and enough flakiness to muddle "my bug" with "Expo's bug". The dev loop is
+  `xcodegen generate` + Xcode/Simulator, and the ship path is `xcodebuild
+  archive` or Xcode Cloud. Nothing in the repo references Expo; don't
+  reintroduce it.
 
 ## Backlog (not scheduled)
 - GoogleDriveProvider adapter: OAuth via `GoogleSignIn-iOS`, Drive REST v3
