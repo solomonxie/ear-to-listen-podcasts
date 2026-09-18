@@ -35,6 +35,7 @@ struct RealPlayerView: View {
     private static let scrollSpace = "player.scroll"
     private static let topAnchor = "player.top"
     private static let bottomAnchor = "player.bottom"
+    private static let transcriptAnchor = "player.transcript"
     /// Read, never observed. A running transcription republishes several times a second,
     /// and observing it here redrew the artwork, the transport and the whole details card
     /// along with the text — which is what made the page flash while transcribing. The
@@ -153,13 +154,15 @@ struct RealPlayerView: View {
                     .padding(.horizontal)
                 transport(for: track)
                     .background { transportVisibilityProbe }
-                queueControls
+                queueControls(proxy)
                 if let lastError = engine.lastError {
                     Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
                 }
                 EpisodeDetailsPane(playingTrack: track)
 
-                Divider().padding(.horizontal)
+                Divider()
+                    .padding(.horizontal)
+                    .id(Self.transcriptAnchor)
 
                 TranscriptPane(
                     currentTime: engine.currentTime,
@@ -289,16 +292,27 @@ struct RealPlayerView: View {
         }
     }
 
-    /// The two list actions, under the transport where the rest of the controls are —
-    /// they used to be a menu in the top-left corner, which is nowhere near the thumb
-    /// and hid the queue's length.
-    private var queueControls: some View {
+    /// The list actions and the way down to the text, under the transport where the rest
+    /// of the controls are — they used to be a menu in the top-left corner, which is
+    /// nowhere near the thumb and hid the queue's length.
+    ///
+    /// "Transcript" rather than lyrics, subtitles or captions: lyrics are for songs, and
+    /// subtitles are text laid over a picture. It's the word the rest of the app uses, for
+    /// the heading, the files beside the audio and what travels in a backup.
+    private func queueControls(_ proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 10) {
             Button { showingUpNext = true } label: {
                 Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
             }
             Button { showingAddToPlaylist = true } label: {
                 Label("Add to Playlist", systemImage: "text.badge.plus")
+            }
+            // The details card sits between the transport and the text, so on an episode
+            // with a transcript this saves a long scroll past everything you already know.
+            Button {
+                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.transcriptAnchor, anchor: .top) }
+            } label: {
+                Label("Transcript", systemImage: "captions.bubble")
             }
         }
         .font(.footnote)
