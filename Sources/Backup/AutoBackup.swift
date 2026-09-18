@@ -11,18 +11,25 @@ import Foundation
 /// bucket in the first place, and `SyncEngine` finds it again by itself.
 ///
 /// Foreground-only, like `SyncScheduler` — there's no background-refresh entitlement. A
-/// run ships the whole archive, so it only happens when something actually changed, and
-/// at most once per `minimumInterval`.
+/// run ships the whole archive, so it happens once a day at most, and only if the change
+/// log moved since the copy that destination last took. The mark is written down only
+/// after the upload succeeds: record it before, and a failed upload is remembered as done,
+/// so the next day's gate sees nothing new and skips — indefinitely.
+///
+/// Once a day rather than every few minutes because the gap is already covered: `ChangeLog`
+/// and the tier-1 copies in `LocalBackups` hold everything written since this morning, and
+/// they're on the phone the moment they're wanted.
 @MainActor
 final class AutoBackup: ObservableObject {
     static let shared = AutoBackup()
 
     private static let bucketEnabledKey = "backup.auto"
     private static let bucketLastKey = "backup.auto.lastAt"
+    private static let bucketMarkKey = "backup.auto.mark"
     private static let cloudDriveEnabledKey = "backup.icloud"
     private static let cloudDriveLastKey = "backup.icloud.lastAt"
+    private static let cloudDriveMarkKey = "backup.icloud.mark"
     private static let pollInterval: Duration = .seconds(60)
-    private static let minimumInterval: TimeInterval = 15 * 60
 
     @Published var isEnabled: Bool {
         didSet { persist(isEnabled, forKey: Self.bucketEnabledKey, changedFrom: oldValue) }
@@ -46,8 +53,6 @@ final class AutoBackup: ObservableObject {
     @Published private(set) var cloudDriveStatus: CloudDriveStatus = .notReady
 
     private var loopTask: Task<Void, Never>?
-    private var changeObserver: (any NSObjectProtocol)?
-    private var hasUnsavedChanges = false
 
     private init() {
         let defaults = UserDefaults.standard
@@ -71,25 +76,12 @@ final class AutoBackup: ObservableObject {
         isCloudDriveEnabled = true
     }
 
-    /// Something worth keeping changed. Cheap on purpose: it only sets a flag, and the
-    /// loop decides whether that's worth an upload yet.
-    func markChanged() {
-        hasUnsavedChanges = true
-    }
-
     /// Called on every foreground, because the fix for a blocked iCloud row happens in
     /// the Settings app — the listener leaves, changes it, and comes back to a row that
     /// has to agree with what they just did.
     func start() {
         Task { cloudDriveStatus = await CloudDrive.status() }
         guard isEnabled || isCloudDriveEnabled, loopTask == nil else { return }
-        if changeObserver == nil {
-            changeObserver = NotificationCenter.default.addObserver(
-                forName: .libraryDidChange, object: nil, queue: .main
-            ) { _ in
-                Task { @MainActor in AutoBackup.shared.markChanged() }
-            }
-        }
         loopTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.backUpIfDue()
@@ -119,16 +111,21 @@ final class AutoBackup: ObservableObject {
     }
 
     private func backUpIfDue() async {
-        guard hasUnsavedChanges, !isBackingUp else { return }
+        guard !isBackingUp else { return }
         await backUp(
-            toBucket: isEnabled && isDue(lastBackupAt),
-            toCloudDrive: isCloudDriveEnabled && isDue(lastCloudDriveBackupAt)
+            toBucket: isEnabled && isDue(lastBackupAt, markKey: Self.bucketMarkKey),
+            toCloudDrive: isCloudDriveEnabled && isDue(lastCloudDriveBackupAt, markKey: Self.cloudDriveMarkKey)
         )
     }
 
-    private func isDue(_ lastAt: Date?) -> Bool {
+    /// Once a day, and only if something was written since the copy this destination
+    /// already holds. Never having shipped one counts as changed — a library that predates
+    /// the change log has plenty worth keeping and a mark of zero.
+    private func isDue(_ lastAt: Date?, markKey: String) -> Bool {
+        guard let shipped = UserDefaults.standard.object(forKey: markKey) as? Int else { return true }
+        guard ChangeLog.mark != shipped else { return false }
         guard let lastAt else { return true }
-        return Date().timeIntervalSince(lastAt) >= Self.minimumInterval
+        return !Calendar.current.isDateInToday(lastAt)
     }
 
     private func backUp(toBucket: Bool, toCloudDrive: Bool) async {
@@ -146,12 +143,13 @@ final class AutoBackup: ObservableObject {
             return
         }
 
-        var stillUnsaved = false
+        let mark = ChangeLog.mark
         if toBucket {
             do {
                 try await service.upload(archive)
                 lastBackupAt = Date()
                 UserDefaults.standard.set(lastBackupAt, forKey: Self.bucketLastKey)
+                UserDefaults.standard.set(mark, forKey: Self.bucketMarkKey)
                 lastError = nil
             } catch BackupError.noActiveRemoteProvider {
                 // No bucket connected, or it was just switched off. Nothing to say about
@@ -159,7 +157,6 @@ final class AutoBackup: ObservableObject {
                 lastError = nil
             } catch {
                 lastError = error.localizedDescription
-                stillUnsaved = true
             }
         }
         if toCloudDrive {
@@ -167,6 +164,7 @@ final class AutoBackup: ObservableObject {
                 try await CloudDrive.write(archive)
                 lastCloudDriveBackupAt = Date()
                 UserDefaults.standard.set(lastCloudDriveBackupAt, forKey: Self.cloudDriveLastKey)
+                UserDefaults.standard.set(mark, forKey: Self.cloudDriveMarkKey)
                 cloudDriveError = nil
             } catch is CloudDriveError {
                 // Signed out of iCloud is not a sync failure: the row already says so,
@@ -175,13 +173,7 @@ final class AutoBackup: ObservableObject {
                 cloudDriveError = nil
             } catch {
                 cloudDriveError = error.localizedDescription
-                stillUnsaved = true
             }
         }
-        // Stays set if a destination that's switched on didn't take part in this run —
-        // one that wasn't due yet still hasn't got this change.
-        hasUnsavedChanges = stillUnsaved
-            || (isEnabled && !toBucket)
-            || (isCloudDriveEnabled && !toCloudDrive)
     }
 }

@@ -11,11 +11,14 @@ struct Album: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var notes: String? = nil
     /// Filename under `ImageFileStore.artwork`, not a full path.
     var artworkFileName: String? = nil
+    /// When the collection is from. Episodes with no year of their own read this one —
+    /// see `EpisodeDetailsPane` — so it only has to be typed once per album.
+    var year: Int? = nil
     /// BCP-47 identifier for the language this album is recorded in, overriding whatever
     /// its speaker is set to — one speaker's albums aren't all in one language. Nil means
     /// "whatever the speaker says".
     var language: String? = nil
-    /// Set when someone saves `AlbumEditView`, or applies a batch suggestion.
+    /// Set when someone edits the album header, or applies a batch suggestion.
     var metadataEditedAt: Date? = nil
     /// Seeded by `DemoDataSeeder`, wiped/reseeded together rather than treated as real data.
     var isDemo: Bool = false

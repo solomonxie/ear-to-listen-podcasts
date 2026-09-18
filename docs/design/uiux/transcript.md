@@ -15,30 +15,76 @@ Playing, lyric-style. Controls flat above the lines, never in a menu.
   …so the model runs entirely locally.       ← dim
   Which matters once you pipe in personal    ← BRIGHT: the spoken line,
   data.                                        scrolls itself to centre
-  12:14  ✎ edited                          ✎  ← pencil on the right edge
+  12:14  ✎ edited                             ← hold a line to correct it
 ```
 
 One button per recogniser and nothing else. Each transcribes the **whole
-episode** in the background, front to back, regardless of what playback is
-doing; the text appears all at once when the pass is done. Which recogniser
+episode** in the background, filling in the stretches that have nothing yet,
+regardless of what playback is doing; the text appears all at once when the pass
+is done. Which recogniser
 is the only real choice here — free and on this phone, or more accurate and
 charged for — so it is two buttons rather than a switch, a picker and a mode
 to understand first.
 
 ```
-On-device  idle → "On-device"   running → "Stop"
-AI         idle → "AI"          running → "Stop"
+On-device  idle → "On-device"   running → "Transcribing…"  ■ stop square
+AI         idle → "AI"          running → "Transcribing…"  ■ stop square
 Follow     off  → "Follow"      on      → "Following"
 ```
 
+The running one says what it's doing, not what pressing it does — the square
+already says that, and "Stop" left the page with no word for the thing taking
+all this time. Pressing it again stops, at any point; what's already recognised
+stays.
+
+**AI asks first, with the number in it.** On-device never asks — there is
+nothing to agree to:
+
+```
+ ┌──────────────────────────────────────────────┐
+ │ Transcribe with AI?                          │
+ │ 41 min of audio, about $0.25 charged to your │
+ │ own OpenAI key. Only the part with no        │
+ │ transcript yet is sent.                      │
+ │        [ Transcribe ]        ( Cancel )      │
+ └──────────────────────────────────────────────┘
+```
+
+The length is what would actually be **sent** — the holes, not the episode — so
+a second run after an interrupted one quotes a fraction of the first. Under a
+cent reads as "under $0.01" rather than "$0.00", which would look free.
+
 Pressing the running one stops it; the other is disabled while a pass runs —
 two passes over the same audio is twice the battery for one transcript.
-`Follow` is disabled while already following or with no lines.
+`Follow` is disabled while already following or with no lines — it also floats
+beside "Back to top" once the transport scrolls off, as a toggle (see
+`player.md`).
 
-**Nothing on disk changes until a pass finishes**, so pressing a recogniser on
-an episode that already has a transcript leaves the old one whole and readable
-until the new one is ready. A pass abandoned halfway is thrown away rather than
-half-applied.
+Correcting a line lives in its long-press menu, next to "Play from here". A
+pencil per row was a permanent target down the right edge for something done
+once or twice an episode, and it sat under the fast-scroll handle.
+
+**Every window is kept the moment it lands — and none of it is shown until the
+pass is done.** Keeping and showing are separate: the page holds the transcript
+as it stood when the pass began, so it never grows a line at a time under the
+reader, while what's been recognised is safe on disk the whole time. Leaving the
+app, taking a call, or a recogniser dying costs the window in flight and nothing
+else — coming back picks up at the first stretch with nothing in it rather than
+starting over:
+
+```
+ leave at 46%  →  come back  →  Transcribing the whole episode · 46%
+                               ↑ resumed by itself, not from zero
+```
+
+A stretch nothing was heard in is only written down as silence once the pass
+proves the recogniser is working — silence is never looked at again, and a
+recogniser that has quietly stopped looks exactly like a quiet episode:
+
+```
+ ⚠ Stopped — nothing was recognised in 3 minutes of audio.
+   Check the episode's language, or try the other recogniser.
+```
 
 Live transcription was removed: text rewrote itself under the reader, the page
 flickered, and the same audio was recognised several times over as the playhead
@@ -66,7 +112,8 @@ moved. A percentage says as much and costs nothing.
  │  in the background.                         │
  └─────────────────────────────────────────────┘
  running   Working through the episode — 46% done. The whole transcript
-           appears here at once when it's finished.
+           The whole transcript appears here at once when it's finished
+           — and leaving the app doesn't lose what's already done.
 ```
 
 ## Correcting a line

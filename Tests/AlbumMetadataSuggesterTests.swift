@@ -1,6 +1,6 @@
 import GRDB
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class AlbumMetadataSuggesterTests: XCTestCase {
     private static let album = Album(id: "a1", artistID: nil, name: "Collected talks")

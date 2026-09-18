@@ -376,6 +376,15 @@ enum Migrations {
             }
         }
 
+        // A collection has a year of its own — the season it ran, the year a series was
+        // recorded — and it's the sensible default for every episode in it, which is why
+        // an episode's own year row falls back to this one rather than sitting empty.
+        migrator.registerMigration("v21_album_year") { db in
+            try db.alter(table: "albums") { t in
+                t.add(column: "year", .integer)
+            }
+        }
+
         return migrator
     }
 }

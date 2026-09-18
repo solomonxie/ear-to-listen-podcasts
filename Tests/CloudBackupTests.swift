@@ -1,6 +1,6 @@
 import GRDB
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 /// Covers the reinstall path: a backup restored onto a device that hasn't synced a single
 /// episode yet, and what happens to the half of it that needs those files.

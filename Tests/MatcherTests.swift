@@ -1,5 +1,5 @@
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class MatcherTests: XCTestCase {
     private func makeTrack(title: String, artistID: String? = "artist1", durationMs: Int? = 180_000) -> Track {

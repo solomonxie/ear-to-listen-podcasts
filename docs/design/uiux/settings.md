@@ -8,10 +8,12 @@ opens the long one), never a paragraph at the bottom.
  Settings
  SYNC & BACKUP                                          ⓘ
  iCloud Drive                                           ─●
- Files / iCloud Drive / BYO Podcasts · Last: Sep 16, 2026 9:02 AM
+ Files / iCloud Drive / Ear to Listen · Last: Sep 18, 2026 9:02 AM
  ⬆ Export Library Data
  ⬇ Import Library Data
  <backup status message>
+ ↩ Undo restore — put back Sep 18, 2026 2:02 PM   ← only after a restore,
+                                                    only while the copy is here
 
  AI KEYS                                    ⓘ   Sequential ▾
  Better titles during sync, and transcription on playback.
@@ -45,6 +47,47 @@ Settings holds only what has nowhere better to live:
  per-episode transcribing → the episode's own page      (transcript.md)
 ```
 
+## Restoring — asked at the point of action
+
+The picker comes first; the question comes after, with the file already chosen,
+and says what will happen rather than "are you sure". The answer depends on
+knowing the old library is kept.
+
+```
+ ┌────────────────────────────────────────────────┐
+ │ Restore from this file?                        │
+ │ It becomes your library. The one here now is   │
+ │ kept on this phone for a week — you can put    │
+ │ it back.                                       │
+ │                                                │
+ │          [ Restore ]        ( Cancel )         │
+ └────────────────────────────────────────────────┘
+```
+
+After it lands, the status line says what came back and what's waiting, and the
+undo row appears above it for as long as the replaced library is still on the
+phone (seven days):
+
+```
+ Restored 3 playlists, 41 items waiting for the next sync.
+ ↩ Undo restore — put back Sep 18, 2026 2:02 PM
+```
+
+The copies on this phone are never listed as a **destination** — they share the
+app's sandbox, so deleting the app takes them and the library together. They
+show up in two places only: this one button, and the Files app.
+
+## Where the copies live — what ⓘ says
+
+```
+ one archive a day (20260918-ear-to-listen.zip), same bytes everywhere
+ ├─ this phone   7 days, in Files — for undoing a mistake, not a lost phone
+ ├─ iCloud       latest 10, older ones deleted
+ └─ the bucket   every one of them, never deleted
+ an extra copy before anything big: ear-to-listen-before-import-20260918-140233.zip
+ never: your episode files, and never your keys — including in backups
+```
+
 ## iCloud row — the four unusable states
 
 The explanation **replaces** the location line; only the fixable one carries
@@ -52,7 +95,7 @@ directions, spelled out in full.
 
 ```
  iCloud Drive                                          ─●
- Files / iCloud Drive / BYO Podcasts · Last: Sep 16
+ Files / iCloud Drive / Ear to Listen · Last: Sep 18
 
  iCloud Drive                                       ·  ○─
  iCloud Drive is off on this device.

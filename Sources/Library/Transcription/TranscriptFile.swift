@@ -49,7 +49,12 @@ enum TranscriptFile {
         return TranscriptSegment.normalized(segments)
     }
 
-    /// `NOTE byop silence <start> --> <end>` marks a stretch that was listened to with
+    /// Our own marker word in a `NOTE` block. What's read back doesn't depend on it —
+    /// the parser looks for `silence`, `edited` and `engine=` in any NOTE — so files
+    /// written under the app's old name still read correctly.
+    static let noteTag = "ear-to-listen"
+
+    /// `NOTE ear-to-listen silence <start> --> <end>` marks a stretch that was listened to with
     /// nothing said. Other players ignore NOTE blocks; we need them, or those stretches
     /// read as gaps and get transcribed again on every pass.
     private static func parseVTT(_ text: String) -> [TranscriptSegment] {
@@ -202,17 +207,17 @@ enum TranscriptFile {
     static func vtt(from segments: [TranscriptSegment]) -> String {
         var out = ["WEBVTT", ""]
         if let engine = segments.compactMap(\.engine).first {
-            out.append("NOTE byop engine=\(engine)")
+            out.append("NOTE \(noteTag) engine=\(engine)")
             out.append("")
         }
         for segment in TranscriptSegment.normalized(segments) {
             guard !segment.text.isEmpty else {
-                out.append("NOTE byop silence \(vttTime(segment.start)) --> \(vttTime(segment.end))")
+                out.append("NOTE \(noteTag) silence \(vttTime(segment.start)) --> \(vttTime(segment.end))")
                 out.append("")
                 continue
             }
             if segment.isEdited {
-                out.append("NOTE byop edited")
+                out.append("NOTE \(noteTag) edited")
                 out.append("")
             }
             out.append("\(vttTime(segment.start)) --> \(vttTime(segment.end))")
@@ -228,7 +233,7 @@ enum TranscriptFile {
         var out: [String] = []
         if let title { out.append("[ti:\(title)]") }
         if let artist { out.append("[ar:\(artist)]") }
-        out.append("[by:BYO Podcasts]")
+        out.append("[by:Ear to Listen]")
         for segment in TranscriptSegment.normalized(segments) where !segment.text.isEmpty {
             out.append("[\(lrcTime(segment.start))]\(segment.text)")
         }
@@ -270,7 +275,7 @@ enum TranscriptFile {
     /// `00:00:01.000 --> 00:00:04.000`, also accepting SRT's comma and a missing hour.
     ///
     /// Takes the token nearest the arrow on each side, because neither end is necessarily
-    /// alone on its line: our own `NOTE byop silence` prefixes the start, and cue settings
+    /// alone on its line: our own `NOTE ear-to-listen silence` prefixes the start, and cue settings
     /// (`align:start`) trail the end.
     private static func timeSpan(in line: String) -> (Double, Double)? {
         guard let range = line.range(of: "-->") else { return nil }

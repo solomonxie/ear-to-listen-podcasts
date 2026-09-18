@@ -17,6 +17,7 @@ struct SettingsSectionView: View {
     @State private var exportDocument: BackupDocument?
     @State private var showingExportPicker = false
     @State private var showingImportPicker = false
+    @State private var pendingImport: URL?
     @State private var showingAddAiKey = false
 
     /// Says which of the four reasons an iCloud folder can be unusable applies, because
@@ -35,12 +36,12 @@ struct SettingsSectionView: View {
         // Slashes, not arrows: it's where the file sits, and an arrow reads as a
         // sequence of taps — which is what the directions line below it actually is.
         guard autoBackup.isCloudDriveEnabled else {
-            return "Files / iCloud Drive / BYO Podcasts. Switch on to keep a copy that outlives deleting the app."
+            return "Files / iCloud Drive / Ear to Listen. Switch on to keep a copy that outlives deleting the app."
         }
         guard let lastBackupAt = autoBackup.lastCloudDriveBackupAt else {
-            return "Files / iCloud Drive / BYO Podcasts · \(BackupArchiveName.current())"
+            return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current())"
         }
-        return "Files / iCloud Drive / BYO Podcasts · \(BackupArchiveName.current()) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
+        return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current()) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private func loadDemoData() {
@@ -61,7 +62,7 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
                     title: "SYNC & BACKUP",
-                    info: "Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. One archive per calendar month (202609-byopo.zip), rewritten as the month goes on, so last month's copy is still there when this month's has eaten something. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync."
+                    info: "Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files. Keys never leave this device, including in backups. One archive a day (20260918-ear-to-listen.zip): iCloud keeps the last ten, the bucket keeps every one of them, and this phone keeps a week's worth in Files where you can drag one out — those go when the app does, so they're for undoing a mistake, not for a lost phone. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring builds a fresh library from the archive and keeps the one it replaced for a week. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync."
                 )
 
                 // A destination is one switch and nothing else: on means every change
@@ -101,13 +102,43 @@ struct SettingsSectionView: View {
                 }
                 .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.zip]) { result in
                     if case .success(let url) = result {
+                        pendingImport = url
+                    }
+                }
+                // Asked here, with the file already picked, and saying what it does rather
+                // than "are you sure": a restore replaces the library, and the answer
+                // depends on knowing the old one is kept.
+                .confirmationDialog(
+                    "Restore from this file?",
+                    isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } }),
+                    presenting: pendingImport
+                ) { url in
+                    Button("Restore") {
+                        pendingImport = nil
                         viewModel.importSnapshot(from: url)
                     }
+                    Button("Cancel", role: .cancel) { pendingImport = nil }
+                } message: { _ in
+                    Text("It becomes your library. The one here now is kept on this phone for a week — you can put it back.")
                 }
 
                 if let backupStatusMessage = viewModel.backupStatusMessage {
                     Text(backupStatusMessage)
                         .sectionHint()
+                }
+
+                // Only while the replaced library is still on the phone. Not a destination
+                // and not offered beside one — it's the way back from a restore, and it
+                // goes away with the copy it points at.
+                if let replacedAt = viewModel.replacedLibraryAt {
+                    Button {
+                        viewModel.undoRestore()
+                    } label: {
+                        Label(
+                            "Undo restore — put back \(replacedAt.formatted(date: .abbreviated, time: .shortened))",
+                            systemImage: "arrow.uturn.backward"
+                        )
+                    }
                 }
             }
             .padding(.horizontal)

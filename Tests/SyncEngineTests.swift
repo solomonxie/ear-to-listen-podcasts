@@ -1,6 +1,6 @@
 import GRDB
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 /// A `CloudProvider` whose file listing is set per-test via `SyncEngineTests.fakeFileLists`,
 /// keyed by provider id — the registry factory closure only receives a `CloudProviderConfig`,

@@ -82,7 +82,24 @@ enum TranscriptLines {
     /// episode's timeline, and folding them in would strand text at the window's start.
     static func absorbing(_ incoming: [RecognizedWord], into heard: [RecognizedWord]) -> [RecognizedWord] {
         guard hasTimings(incoming), let first = incoming.first else { return heard }
-        return heard.filter { $0.start < first.start } + incoming
+        // Anything the new hypothesis re-reports goes with it, timings and all — a
+        // recognizer revising the same words at a new position must move them, not leave a
+        // copy behind at the old one.
+        return withoutRepeat(of: incoming, in: heard.filter { $0.start < first.start }) + incoming
+    }
+
+    /// Drops the tail of `heard` that `incoming` says again, matched on the words
+    /// themselves: the same run at two timestamps is one revision, not two sentences.
+    private static func withoutRepeat(
+        of incoming: [RecognizedWord], in heard: [RecognizedWord]
+    ) -> [RecognizedWord] {
+        let spoken = incoming.map(\.text)
+        for overlap in stride(from: min(heard.count, spoken.count), to: 0, by: -1) {
+            if heard.suffix(overlap).map(\.text) == Array(spoken.prefix(overlap)) {
+                return Array(heard.dropLast(overlap))
+            }
+        }
+        return heard
     }
 
     /// Splits a hypothesis into what's stopped moving and what hasn't.
@@ -122,10 +139,18 @@ enum TranscriptLines {
         )
     }
 
-    /// Whether the recognizer gave any usable word timings. A hypothesis where every word
-    /// sits at zero has none — which is the normal shape of a partial result.
+    /// Whether the recognizer gave usable word timings.
+    ///
+    /// One non-zero duration is not enough. Apple's on-device recognizer routinely returns
+    /// a whole hypothesis with every `timestamp` at zero and real durations — which places
+    /// every word of it at the window's first instant. Read as timed, it gets folded in
+    /// beside the properly timed hypothesis of the same audio, and the sentence appears
+    /// twice: once at the top of the window, once where it was actually said. Past the
+    /// first word, a real hypothesis always moves.
     static func hasTimings(_ words: [RecognizedWord]) -> Bool {
-        words.contains { $0.start > 0 || $0.duration > 0 }
+        guard let first = words.first else { return false }
+        guard words.count > 1 else { return first.start > 0 || first.duration > 0 }
+        return words.dropFirst().contains { $0.start > 0 }
     }
 
     /// Readable chunks out of untimed words: break on sentence ends, otherwise on length.
@@ -134,7 +159,7 @@ enum TranscriptLines {
         var pending: [String] = []
 
         func flush() {
-            let text = pending.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            let text = joined(pending).trimmingCharacters(in: .whitespaces)
             if !text.isEmpty { out.append(text) }
             pending = []
         }
@@ -147,11 +172,38 @@ enum TranscriptLines {
         return out
     }
 
+    /// Joins tokens the way the language writes them. Recognizers hand back one token at a
+    /// time whatever the language, and a space between each is right for English and wrong
+    /// for Chinese, Japanese and Korean — where it turns a sentence into loose characters
+    /// with gaps down the middle of every word.
+    static func joined(_ tokens: [String]) -> String {
+        tokens.reduce(into: "") { text, token in
+            guard !text.isEmpty else { return text = token }
+            // Only between two of them: a Latin word in a Chinese sentence still reads
+            // better with air around it, and an English transcript is untouched.
+            let needsSpace = !(isScriptWithoutSpaces(text.last) && isScriptWithoutSpaces(token.first))
+            text += (needsSpace ? " " : "") + token
+        }
+    }
+
+    /// CJK ideographs, kana, Hangul and their full-width punctuation — the scripts that
+    /// don't put spaces between words.
+    private static func isScriptWithoutSpaces(_ character: Character?) -> Bool {
+        guard let scalar = character?.unicodeScalars.first else { return false }
+        switch scalar.value {
+        case 0x3000...0x303F, 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
+             0xAC00...0xD7AF, 0xF900...0xFAFF, 0xFF00...0xFFEF:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// One line out of consecutive words, or nothing when they're all whitespace.
     private static func line(
         from words: [RecognizedWord], startOffset: Double, engine: String
     ) -> TranscriptSegment? {
-        let text = words.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        let text = joined(words.map(\.text)).trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty, let first = words.first else { return nil }
         let end = words.map(\.end).max() ?? first.start
         return TranscriptSegment(

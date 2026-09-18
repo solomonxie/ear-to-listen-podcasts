@@ -7,36 +7,35 @@ struct RealPlayerView: View {
     @State private var showingUpNext = false
     @State private var showingAddToPlaylist = false
     @State private var bookmarkCount = 0
-    /// Bumped by every scroll, so the rail can show itself while the page is moving and
-    /// get out of the way again when it stops.
-    @State private var scrollTick = 0
-    @State private var isRailShowing = false
-    /// How far down the whole page the reader is, 0…1, and how much of it there is to
-    /// scroll. Measured rather than inferred from the transcript, so the rail means the
-    /// same thing on an episode with no transcript at all.
-    @State private var scrollFraction: Double = 0
-    @State private var viewportHeight: CGFloat = 0
-    @State private var contentHeight: CGFloat = 0
-    /// How far a back-swipe from the left edge has got, so the page follows the finger
-    /// rather than jumping when it's let go.
-    @State private var backSwipe: CGFloat = 0
+    /// How far the page has been pulled past its own top, so it can shrink under the
+    /// finger on the way out instead of just vanishing at the threshold.
+    @State private var pullDown: CGFloat = 0
+    /// How far the header has been dragged down, so the page follows the finger.
+    @State private var dragDown: CGFloat = 0
+    @State private var isDismissing = false
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
     /// at the transport, and text that scrolls itself the moment you arrive takes the
     /// controls out from under your thumb. Any scroll of your own turns it off again.
     @State private var isFollowingTranscript = false
-    /// Where the drag on the rail has got to, 0…1. Nil when nobody's holding it, so the
-    /// rail shows where the page actually is instead.
-    @State private var railFraction: Double?
     /// Whether the big transport has scrolled out of sight. The docked bar is a stand-in
     /// for it, so showing both at once is just clutter.
     @State private var isTransportOffscreen = false
 
     private static let scrollSpace = "player.scroll"
     private static let topAnchor = "player.top"
-    private static let bottomAnchor = "player.bottom"
     private static let transcriptAnchor = "player.transcript"
-    private static let railHandleSize: CGFloat = 46
+    /// How far sideways counts as "the next one" rather than a scroll that wandered.
+    private static let swipeToChapter: CGFloat = 80
+    /// How far past the top the page has to come before it goes away. Read off the scroll
+    /// view's overscroll, which rubber-bands: the finger travels two to three times this,
+    /// so it's well clear of the idle bounce at the top of a long page without asking for
+    /// a stroke longer than the screen.
+    private static let pullToDismiss: CGFloat = 70
+    /// The same gesture, on the artwork and titles, where a scroll view isn't in the way.
+    /// This is the one that actually gets used — a card is put down by dragging the top of
+    /// it, not by fighting a transcript for the overscroll underneath.
+    private static let dragToDismiss: CGFloat = 110
     /// Read, never observed. A running transcription republishes several times a second,
     /// and observing it here redrew the artwork, the transport and the whole details card
     /// along with the text — which is what made the page flash while transcribing. The
@@ -68,8 +67,7 @@ struct RealPlayerView: View {
                                     isFollowingTranscript = false
                                 }
                             )
-                            .overlay(alignment: .trailing) { scrollRail(proxy) }
-                            .overlay(alignment: .bottom) { backToTopButton(proxy) }
+                            .overlay(alignment: .bottom) { floatingControls(proxy) }
                             // Pinned: the page is now arbitrarily long, and the transport
                             // shouldn't be a scroll away at the bottom of a 40-minute
                             // transcript.
@@ -92,11 +90,11 @@ struct RealPlayerView: View {
                 .background(Color.appBackground.ignoresSafeArea())
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    // A page, not a card: it has a back button where every other page has
-                    // one, and the same edge swipe.
+                    // A card you put down, not a page you back out of: the arrow points
+                    // the way the gesture goes, and both leave the same way.
                     ToolbarItem(placement: .topBarLeading) {
                         Button { dismiss() } label: {
-                            Label("Back", systemImage: "chevron.left").font(.body.weight(.semibold))
+                            Label("Close", systemImage: "chevron.down").font(.body.weight(.semibold))
                         }
                     }
                     // Tapping the title goes back to the top, as it does in every iOS app
@@ -121,27 +119,46 @@ struct RealPlayerView: View {
                 }
             }
         }
-        .offset(x: backSwipe)
-        // A strip at the leading edge rather than a gesture over the page: the page is a
-        // scroll view, and a swipe anywhere in it belongs to the scroll view.
-        .overlay(alignment: .leading) { backSwipeCatcher }
+        // Put the card down by pulling it down — either by dragging its top, or by pulling
+        // the whole page past its own top, which the scroll view reports as overscroll. It
+        // follows the finger and shrinks as it goes, so the pull is answered before the
+        // threshold rather than at it.
+        .offset(y: dragDown)
+        .scaleEffect(1 - min(max(pullDown, dragDown), Self.pullToDismiss) / 1600, anchor: .center)
+        .animation(.interactiveSpring(response: 0.3), value: pullDown)
     }
 
-    private var backSwipeCatcher: some View {
-        Color.clear
-            .frame(width: 22)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 10)
-                    .onChanged { backSwipe = max(0, $0.translation.width) }
-                    .onEnded { value in
-                        if value.translation.width > 90 || value.predictedEndTranslation.width > 220 {
-                            dismiss()
-                        } else {
-                            withAnimation(.easeOut(duration: 0.2)) { backSwipe = 0 }
-                        }
-                    }
-            )
+    /// The two gestures the top of the card carries, told apart by which way the finger
+    /// actually went: **down** puts the card away, **sideways** moves a chapter. Dragging
+    /// up on the artwork is how you get to the transcript, and that belongs to the scroll
+    /// view.
+    private var putDownDrag: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                dragDown = max(0, value.translation.height)
+            }
+            .onEnded { value in
+                let sideways = value.translation.width
+                guard abs(value.translation.height) > abs(sideways) else {
+                    withAnimation(.easeOut(duration: 0.2)) { dragDown = 0 }
+                    guard abs(sideways) > Self.swipeToChapter else { return }
+                    // Where a book's pages go: left for the next one, right for the last.
+                    sideways < 0 ? engine.skipToNext() : engine.skipToPrevious()
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    return
+                }
+                // The flick counts as well as the distance, so putting it down briskly
+                // doesn't need the full stroke.
+                let thrown = value.predictedEndTranslation.height > Self.dragToDismiss * 2
+                guard value.translation.height > Self.dragToDismiss || thrown else {
+                    withAnimation(.easeOut(duration: 0.2)) { dragDown = 0 }
+                    return
+                }
+                guard !isDismissing else { return }
+                isDismissing = true
+                dismiss()
+            }
     }
 
     /// Split out of `body` purely so the type-checker can cope — it timed out once the
@@ -149,8 +166,14 @@ struct RealPlayerView: View {
     private func page(for track: Track, proxy: ScrollViewProxy) -> some View {
         ScrollView {
             VStack(spacing: 20) {
-                artwork(for: track)
-                titles(for: track)
+                // Artwork and titles move together, and carry the put-down gesture: the
+                // top of the card is the part of it a hand reaches for, and it's the one
+                // part with no scrolling text underneath to fight over the drag.
+                VStack(spacing: 20) {
+                    artwork(for: track)
+                    titles(for: track)
+                }
+                .gesture(putDownDrag)
                 Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
                     .padding(.horizontal)
                 transport(for: track)
@@ -172,7 +195,6 @@ struct RealPlayerView: View {
                     onFollow: { follow(proxy) }
                 ) { engine.seek(to: $0) }
 
-                Color.clear.frame(height: 1).id(Self.bottomAnchor)
             }
             .padding(.vertical)
             .background { scrollProbe }
@@ -181,16 +203,6 @@ struct RealPlayerView: View {
         // The page draws its own bar below; the system's would sit a few points
         // beside it, two indicators of different lengths down the same edge.
         .scrollIndicators(.hidden)
-        // How much of the page fits at once — half of what the rail needs to know. An
-        // overlay rather than a wrapper so nothing about the layout changes to measure it.
-        .overlay {
-            GeometryReader { geometry in
-                Color.clear.onChange(of: geometry.size.height, initial: true) { _, height in
-                    viewportHeight = height
-                }
-            }
-            .allowsHitTesting(false)
-        }
         // The details are edited in place, so a keyboard can be up over a page that
         // scrolls — dragging it away is how everyone expects to be rid of it.
         .scrollDismissesKeyboard(.interactively)
@@ -306,7 +318,7 @@ struct RealPlayerView: View {
     private func queueControls(_ proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 10) {
             Button { showingUpNext = true } label: {
-                Label("Up Next (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
+                Label("Chapters (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
             }
             Button { showingAddToPlaylist = true } label: {
                 Label("Add to Playlist", systemImage: "text.badge.plus")
@@ -355,7 +367,7 @@ struct RealPlayerView: View {
         GeometryReader { proxy in
             let bottomEdge = proxy.frame(in: .named(Self.scrollSpace)).maxY
             Color.clear.onChange(of: bottomEdge, initial: true) { previous, edge in
-                if previous != edge { showRail() }
+                _ = previous
                 if isTransportOffscreen {
                     if edge > 96 { isTransportOffscreen = false }
                 } else if edge < 0 {
@@ -365,145 +377,72 @@ struct RealPlayerView: View {
         }
     }
 
-    /// The way back to the artwork and the transport from anywhere in a 40-minute
-    /// transcript — and the way to stop the page moving itself, since following and
-    /// reading the top of the page are contradictory things to want. Centred: it's a
-    /// thumb-reach control, and off to one side it sat under the scroll rail.
+    /// The two things you want from deep inside a 40-minute transcript: back to the
+    /// artwork and the transport, and back to the line being spoken. Both are a reach
+    /// away from the bottom of the page, where the thumb already is — the copies at the
+    /// top of the transcript are a scroll away by the time you need them.
+    ///
+    /// "Back to top" also stops the page moving itself: following and reading the top of
+    /// the page are contradictory things to want.
     @ViewBuilder
-    private func backToTopButton(_ proxy: ScrollViewProxy) -> some View {
+    private func floatingControls(_ proxy: ScrollViewProxy) -> some View {
         if isTransportOffscreen {
-            Button {
-                isFollowingTranscript = false
-                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-            } label: {
-                Label("Back to top", systemImage: "arrow.up")
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(.quaternary))
+            HStack(spacing: 10) {
+                floatingButton("Back to top", systemImage: "arrow.up", isOn: false) {
+                    isFollowingTranscript = false
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
+                }
+                if !transcript.lines.isEmpty {
+                    // A toggle here, where the one above the transcript only turns it on:
+                    // this one is in reach of the thumb that just scrolled away from the
+                    // spoken line, and stopping is as likely to be the ask as starting.
+                    // One label, one icon — colour alone says whether it's on, so the
+                    // button doesn't change shape under the thumb that just pressed it.
+                    floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
+                        if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
+                    }
+                }
             }
-            .buttonStyle(.plain)
             .padding(.bottom, 12)
             .transition(.opacity)
         }
     }
 
-    /// The page's own scroller: where the reader is, and a way to get somewhere else
-    /// quickly on a page that runs to hundreds of lines. Measured from the scroll view
-    /// rather than guessed from the transcript, so it means the same thing on an episode
-    /// with no text at all.
-    ///
-    /// A handle you can see and hit, not a hairline: a 3pt bar down the edge of a page of
-    /// text was there in principle and unfindable in practice. It never leaves while the
-    /// page is long enough to need it — it only dims once the page has been still a few
-    /// seconds, so it stops pulling at the eye without going away on the reader.
-    @ViewBuilder
-    private func scrollRail(_ proxy: ScrollViewProxy) -> some View {
-        // Nothing to drag on a page that fits.
-        if contentHeight > viewportHeight + 120 {
-            GeometryReader { geometry in
-                let height = geometry.size.height
-                let travel = max(height - Self.railHandleSize, 1)
-                let isDragging = railFraction != nil
-                Color.clear
-                    .overlay(alignment: .top) {
-                        railHandle(isDragging: isDragging)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .offset(y: travel * (railFraction ?? scrollFraction))
-                            .animation(.easeOut(duration: 0.15), value: isDragging)
-                    }
-                    // The hit area is the whole strip beside the handle too: a control you
-                    // have to hit exactly is one nobody uses.
-                    .contentShape(Rectangle())
-                    .highPriorityGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                // Held by its middle wherever it's caught, so the page
-                                // doesn't jump on the first touch.
-                                let fraction = (value.location.y - Self.railHandleSize / 2) / travel
-                                railFraction = min(max(fraction, 0), 1)
-                                isFollowingTranscript = false
-                                showRail()
-                                scroll(to: railFraction ?? 0, proxy: proxy)
-                            }
-                            .onEnded { _ in
-                                railFraction = nil
-                                showRail()
-                            }
-                    )
-            }
-            .frame(width: 56)
-            .padding(.trailing, 4)
-            .padding(.vertical, 60)
-            // Dimmed, never gone: a control that vanishes is one you have to make reappear
-            // before you can use it, and scrolling to find the thing that scrolls is silly.
-            .opacity(isRailShowing ? 1 : 0.4)
-            .animation(.easeInOut(duration: 0.4), value: isRailShowing)
-            // Restarted by every scroll — `task(id:)` cancels the pending dim, so the
-            // handle stays up for as long as the page keeps moving.
-            .task(id: scrollTick) {
-                guard isRailShowing else { return }
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                if railFraction == nil { isRailShowing = false }
-            }
+    private func floatingButton(
+        _ title: String,
+        systemImage: String,
+        isOn: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.primary))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(isOn ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(Material.ultraThin),
+                            in: Capsule())
+                .overlay(
+                    Capsule().stroke(isOn ? AnyShapeStyle(Color.accentColor.opacity(0.6)) : AnyShapeStyle(HierarchicalShapeStyle.quaternary))
+                )
         }
+        .buttonStyle(.plain)
     }
 
-    /// Big enough to find and to hold: a thumb-sized disc carrying the one gesture it
-    /// takes — drag me up or down. It takes the accent colour under a finger, where the
-    /// disc itself is hidden by the hand holding it and only its colour still reads.
-    private func railHandle(isDragging: Bool) -> some View {
-        Image(systemName: "arrow.up.and.down")
-            .font(.footnote.weight(.bold))
-            .foregroundStyle(isDragging ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-            .frame(width: Self.railHandleSize, height: Self.railHandleSize)
-            .background {
-                Circle()
-                    .fill(isDragging ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Material.ultraThin))
-                    .overlay(Circle().stroke(.quaternary))
-                    .shadow(color: .black.opacity(0.18), radius: isDragging ? 6 : 3, y: 1)
-            }
-            .scaleEffect(isDragging ? 1.1 : 1)
-            .accessibilityLabel("Scroll the page")
-            .accessibilityHint("Drag up or down to move through the episode")
-    }
-
-    /// Where the page can actually be sent: its two ends, and every transcript line in
-    /// between — those are the only things on it with an id to scroll to. The top of the
-    /// rail is the top of the page rather than the first line, since the artwork and the
-    /// details sit above the text.
-    private func scroll(to fraction: Double, proxy: ScrollViewProxy) {
-        let lines = transcript.lines
-        guard !lines.isEmpty else {
-            proxy.scrollTo(fraction < 0.5 ? Self.topAnchor : Self.bottomAnchor, anchor: fraction < 0.5 ? .top : .bottom)
-            return
-        }
-        guard fraction > 0.02 else {
-            proxy.scrollTo(Self.topAnchor, anchor: .top)
-            return
-        }
-        let index = Int((Double(lines.count - 1) * fraction).rounded())
-        proxy.scrollTo(lines[min(max(index, 0), lines.count - 1)].start, anchor: .top)
-    }
-
-    private func showRail() {
-        isRailShowing = true
-        scrollTick &+= 1
-    }
-
-    /// Watches the page go by: how far down it is, how long it is, and how much of it fits.
+    /// Watches the page go by, for one purpose: whether it's being pulled off the top.
     /// One probe behind the whole content, rather than the transport's — that one stopped
     /// being a useful signal the moment it scrolled off the top.
     private var scrollProbe: some View {
         GeometryReader { geometry in
             let frame = geometry.frame(in: .named(Self.scrollSpace))
             Color.clear
-                .onChange(of: frame.minY, initial: true) { previous, minY in
-                    contentHeight = frame.height
-                    let scrollable = max(frame.height - viewportHeight, 1)
-                    scrollFraction = min(max(-minY / scrollable, 0), 1)
-                    if previous != minY { showRail() }
+                .onChange(of: frame.minY, initial: true) { _, minY in
+                    // Above its own top: the page is being pulled off, not scrolled.
+                    pullDown = max(0, minY)
+                    if pullDown > Self.pullToDismiss, !isDismissing {
+                        isDismissing = true
+                        dismiss()
+                    }
                 }
         }
     }

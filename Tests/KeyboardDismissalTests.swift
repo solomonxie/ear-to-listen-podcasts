@@ -1,6 +1,6 @@
 import SwiftUI
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 /// The tap-anywhere dismissal lives on the window, so the thing that can silently fail is
 /// the attaching: a recogniser added to a window that wasn't there yet does nothing, and

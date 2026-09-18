@@ -11,15 +11,26 @@ struct BookmarkStore {
             note: nil, tags: nil, transcriptText: transcriptText, createdAt: Date()
         )
         try dbQueue.write { db in try bookmark.insert(db) }
+        ChangeLog.record("bookmarks", key: bookmark.id, new: bookmark, in: dbQueue)
         return bookmark
     }
 
     func update(_ bookmark: Bookmark) throws {
-        try dbQueue.write { db in try bookmark.update(db) }
+        let old: Bookmark? = try dbQueue.write { db in
+            let old = try Bookmark.fetchOne(db, key: bookmark.id)
+            try bookmark.update(db)
+            return old
+        }
+        ChangeLog.record("bookmarks", key: bookmark.id, old: old, new: bookmark, in: dbQueue)
     }
 
     func delete(id: String) throws {
-        _ = try dbQueue.write { db in try Bookmark.deleteOne(db, key: id) }
+        let old: Bookmark? = try dbQueue.write { db in
+            let old = try Bookmark.fetchOne(db, key: id)
+            _ = try Bookmark.deleteOne(db, key: id)
+            return old
+        }
+        ChangeLog.record("bookmarks", key: id, old: old, in: dbQueue)
     }
 
     /// In episode order, which is the order they're listened back in.

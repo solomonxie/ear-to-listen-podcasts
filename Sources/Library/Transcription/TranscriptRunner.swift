@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Owns the transcript of whatever's playing: what's stored, the corrections made to it,
 /// and whichever whole-episode pass is running right now.
@@ -10,10 +11,17 @@ import Foundation
 /// pass now runs whole and out of sight, reports a percentage, and puts the whole
 /// transcript up at once when it's done.
 ///
-/// Nothing on disk changes until a pass finishes. Pressing a recogniser's button while an
-/// episode already has a transcript is safe: the old one stays whole and readable until
-/// the new one is ready to replace it. The tradeoff is deliberate — a pass abandoned
-/// halfway (cancelled, failed, app killed) is thrown away rather than half-applied.
+/// Every window is stored the moment it lands, and a pass only ever works on the
+/// stretches that have nothing yet (`TranscriptCoverage.windows`). So leaving the app,
+/// taking a call, or a recogniser dying mid-episode costs the window in flight and
+/// nothing else: coming back picks up at the first hole rather than starting again at
+/// zero. Holding the whole pass in memory until the last window read better on paper and
+/// meant an hour of recognition thrown away by switching apps.
+///
+/// **Storing it is not showing it.** While a pass is working the page holds the transcript
+/// as it stood when the pass began, and the finished one arrives in one piece. A page that
+/// grows a line at a time under the reader — each line a fresh guess at audio they're not
+/// listening to yet — is a worse thing to read than a percentage.
 @MainActor
 final class TranscriptRunner: ObservableObject {
     static let shared = TranscriptRunner()
@@ -45,6 +53,10 @@ final class TranscriptRunner: ObservableObject {
         didSet { UserDefaults.standard.set(startsAutomatically, forKey: Self.autoStartDefaultsKey) }
     }
 
+    /// The transcript as it stood when the running pass began. Nil when nothing is
+    /// running, which is when the page follows what's stored again.
+    private var frozenLines: [TranscriptSegment]?
+
     /// What's on screen: the stored lines, in time order, silences dropped.
     ///
     /// Stored rather than computed. It's read once per visible row plus again for every
@@ -75,6 +87,19 @@ final class TranscriptRunner: ObservableObject {
     /// Bumped on every stop/start so a cancelled pass can't clear the state of the one
     /// that replaced it.
     private var runGeneration = 0
+    /// The recogniser a pass was using when something other than the listener stopped it —
+    /// an error, a window that never came back, the app being put away long enough for the
+    /// recognizer to die. Picked up again on the next foreground.
+    private var interruptedEngine: TranscriptionEngineKind?
+    /// Keeps the app alive a little past leaving it, so the window in flight can finish
+    /// and be stored rather than thrown away at the door.
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    /// How many windows in a row may come back with no words before the pass gives up.
+    /// A recognizer that has quietly stopped working returns exactly what a silent
+    /// stretch does, and the difference matters: silence is recorded as covered and never
+    /// looked at again, so believing it on a failing recognizer writes off the episode.
+    private static let silentWindowLimit = 6
 
     private init() {
         startsAutomatically = UserDefaults.standard.bool(forKey: Self.autoStartDefaultsKey)
@@ -84,9 +109,9 @@ final class TranscriptRunner: ObservableObject {
     // MARK: Display
 
     private func rebuildLines() {
-        let saved = segments.filter { !$0.text.isEmpty }
-        lines = saved
-        isFromSidecar = !saved.isEmpty && saved.allSatisfy { $0.engine == Self.sidecarEngine }
+        let shown = frozenLines ?? segments.filter { !$0.text.isEmpty }
+        lines = shown
+        isFromSidecar = !shown.isEmpty && shown.allSatisfy { $0.engine == Self.sidecarEngine }
     }
 
     /// Binary search rather than a scan: this is asked once per redraw of a list that can
@@ -118,6 +143,20 @@ final class TranscriptRunner: ObservableObject {
 
     var isRunning: Bool { runningEngine != nil }
 
+    /// How much audio a pass would actually send — the holes, not the episode. A second
+    /// run after an interrupted one costs a fraction of the first, and saying so is the
+    /// difference between a number someone believes and one they don't.
+    var untranscribedSeconds: Double {
+        guard duration > 0 else { return 0 }
+        return TranscriptCoverage.gaps(in: segments, duration: duration).reduce(0) { $0 + $1.duration }
+    }
+
+    /// What this engine would charge for what's left, or nil when nobody is charged.
+    func estimatedCost(of engine: TranscriptionEngineKind) -> Double? {
+        guard let rate = engine.pricePerMinuteUSD else { return nil }
+        return untranscribedSeconds / 60 * rate
+    }
+
     // MARK: Lifecycle
 
     func attach(track newTrack: Track?) {
@@ -129,6 +168,7 @@ final class TranscriptRunner: ObservableObject {
         lastError = nil
         duration = newTrack?.durationMs.map { Double($0) / 1000 } ?? 0
         guard let newTrack else { return }
+        frozenLines = nil
         segments = (try? transcriptStore.find(trackID: newTrack.id)) ?? []
         edits = (try? transcriptStore.edits(trackID: newTrack.id)) ?? []
 
@@ -205,16 +245,37 @@ final class TranscriptRunner: ObservableObject {
         runningEngine = engine
         runGeneration += 1
         let generation = runGeneration
+        // Held still for the duration: what lands from here arrives all at once at the end.
+        frozenLines = lines
+        beginBackgroundAssertion()
         runTask = Task { [weak self] in
             await self?.transcribeWholeEpisode(track: track, engine: engine)
             guard let self, generation == runGeneration else { return }
             runTask = nil
             runningEngine = nil
             progress = 0
+            thaw()
+            endBackgroundAssertion()
+            exportSidecar()
         }
     }
 
+    /// The listener stopping it. Anything else that ends a pass leaves `interruptedEngine`
+    /// set, and this is what says they didn't mean to.
     func cancel() {
+        interruptedEngine = nil
+        stopRunning()
+    }
+
+    /// Picks up a pass that stopped on its own — the usual cause being the app being put
+    /// away for long enough that the recognizer was taken down with it. Called on every
+    /// foreground, and cheap when there's nothing to pick up.
+    func resumeIfInterrupted() {
+        guard let engine = interruptedEngine, track != nil, !isRunning, !isComplete else { return }
+        run(engine: engine)
+    }
+
+    private func stopRunning() {
         runGeneration += 1
         sidecarTask?.cancel()
         sidecarTask = nil
@@ -222,6 +283,33 @@ final class TranscriptRunner: ObservableObject {
         runTask = nil
         runningEngine = nil
         progress = 0
+        thaw()
+        endBackgroundAssertion()
+    }
+
+    /// The pass is over, one way or another — the page shows what's actually stored again,
+    /// including a part-finished transcript, which is the truth about the episode once
+    /// nothing is working on it.
+    private func thaw() {
+        guard frozenLines != nil else { return }
+        frozenLines = nil
+        rebuildLines()
+    }
+
+    /// Leaving the app suspends it within seconds, which kills the recognizer mid-window.
+    /// This buys the window in flight the time to land and be stored.
+    private func beginBackgroundAssertion() {
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "transcribe") { [weak self] in
+            self?.interruptedEngine = self?.runningEngine
+            self?.stopRunning()
+        }
+    }
+
+    private func endBackgroundAssertion() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
     }
 
     private func transcribeWholeEpisode(track: Track, engine: TranscriptionEngineKind) async {
@@ -251,39 +339,68 @@ final class TranscriptRunner: ObservableObject {
         let transcriber = engine.transcriber
         let context = transcriptionContext()
         let windowSeconds = engine.windowSeconds
-        let windows = Int(ceil(duration / windowSeconds))
-        // Held here, not written, until the last window lands — see the type's note on why
-        // a half-finished pass never touches what's already stored.
-        var produced: [TranscriptSegment] = []
+        // Only the stretches with nothing in them yet, front to back. This is what makes
+        // coming back cheap: whatever an interrupted pass already stored is never sent out
+        // a second time.
+        let plan = TranscriptCoverage.windows(
+            in: segments, duration: duration, windowSeconds: windowSeconds, from: 0
+        )
+        guard !plan.isEmpty else { return }
 
-        for index in 0..<max(windows, 1) {
+        // Windows that came back with nothing are held rather than stored: a stretch
+        // recorded as silence is a stretch nothing will ever look at again, and a
+        // recognizer that has stopped working looks exactly like a quiet one.
+        var unheard: [TranscriptSegment] = []
+        var silentInARow = 0
+
+        for (index, window) in plan.enumerated() {
             guard !Task.isCancelled else { return }
-            let window = TimeWindow(
-                start: Double(index) * windowSeconds,
-                end: min(duration, Double(index + 1) * windowSeconds)
-            )
+            let produced: [TranscriptSegment]
             do {
-                produced += try await Self.transcribe(
+                produced = try await Self.transcribe(
                     window: window, of: audioURL, using: transcriber, context: context
                 )
             } catch {
                 guard !Task.isCancelled else { return }
+                // Not a dead end: what's already stored stands, and the next foreground
+                // picks the pass up at this window.
+                interruptedEngine = engine
                 lastError = "Stopped at \(Int(progress * 100))% — \(error.localizedDescription)"
                 return
             }
             guard !Task.isCancelled, self.track?.id == track.id else { return }
-            progress = Double(index + 1) / Double(max(windows, 1))
+
+            if produced.contains(where: { !$0.text.isEmpty }) {
+                // Something was heard, so the quiet windows before it really were quiet.
+                store(unheard + produced, for: track, engine: engine)
+                unheard = []
+                silentInARow = 0
+            } else {
+                unheard += produced
+                silentInARow += 1
+                guard silentInARow < Self.silentWindowLimit else {
+                    interruptedEngine = engine
+                    lastError = "Stopped — nothing was recognised in \(Int(Double(Self.silentWindowLimit) * windowSeconds / 60)) minutes of audio. Check the episode's language, or try the other recogniser."
+                    return
+                }
+            }
+            progress = Double(index + 1) / Double(plan.count)
         }
 
         guard !Task.isCancelled, self.track?.id == track.id else { return }
-        // The one moment anything on disk changes. Merging rather than replacing, so a
-        // line the listener corrected survives a re-run with a different recogniser.
+        // A pass that ran to the end proves the recognizer was working, so a quiet tail is
+        // genuinely quiet and can be recorded as covered.
+        if !unheard.isEmpty { store(unheard, for: track, engine: engine) }
+        interruptedEngine = nil
+    }
+
+    /// One window, onto disk, the moment it's done. Merging rather than replacing, so a
+    /// line the listener corrected survives a re-run with a different recogniser.
+    private func store(_ produced: [TranscriptSegment], for track: Track, engine: TranscriptionEngineKind) {
         segments = (try? transcriptStore.merge(
             trackID: track.id, incoming: produced, engine: engine.rawValue
         )) ?? TranscriptStore.merging(existing: segments, incoming: produced)
         needsSidecarExport = true
-        AutoBackup.shared.markChanged()
-        exportSidecar()
     }
 
     // MARK: Editing
@@ -295,7 +412,6 @@ final class TranscriptRunner: ObservableObject {
         segments = (try? transcriptStore.applyEdit(trackID: track.id, segmentStart: segment.start, newText: trimmed)) ?? segments
         edits = (try? transcriptStore.edits(trackID: track.id)) ?? edits
         needsSidecarExport = true
-        AutoBackup.shared.markChanged()
         // A correction is hand-typed and can't be regenerated, so it goes back out at once
         // rather than waiting for the loop to settle.
         exportSidecar()

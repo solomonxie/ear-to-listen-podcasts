@@ -1,5 +1,5 @@
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 /// A `CloudProvider` backed by a fixed flat file list, to exercise the default
 /// `listDirectory` derivation without a real provider.

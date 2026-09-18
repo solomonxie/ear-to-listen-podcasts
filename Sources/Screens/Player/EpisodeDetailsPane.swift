@@ -148,7 +148,10 @@ struct EpisodeDetailsPane: View {
         EditableRow("Speaker", text: $artistName, field: .speaker, focus: $focusedField, link: artist.map(EpisodeLink.speaker))
         EditableRow("Album", text: $albumName, field: .album, focus: $focusedField, link: album.map(EpisodeLink.album))
         EditableRow("Show", text: $showName, field: .show, focus: $focusedField, link: show.map(EpisodeLink.show))
-        EditableRow("Year", text: $year, field: .year, focus: $focusedField, keyboard: .numberPad)
+        EditableRow(
+            "Year", text: $year, field: .year, focus: $focusedField, keyboard: .numberPad,
+            placeholder: album?.year.map { "\($0) · from album" } ?? "—"
+        )
         EditableRow("Track no.", text: $trackNumber, field: .trackNumber, focus: $focusedField, keyboard: .numberPad)
 
         // The one field that isn't the listener's own text: it's asked for here, where
@@ -257,7 +260,7 @@ struct EpisodeDetailsPane: View {
         updated.trackNumber = trimmed(trackNumber).flatMap { Int($0) }
         updated.notes = trimmed(notes)
         updated.metadataEditedAt = Date()
-        try? trackStore.upsert(updated, artistName: artist?.name, albumName: album?.name)
+        try? trackStore.saveEdit(updated, artistName: artist?.name, albumName: album?.name)
         savedSnapshot = snapshot
         // Home and the player hold their own copies of these rows, so they need telling —
         // otherwise the edit only lands after some unrelated refresh.
@@ -278,7 +281,7 @@ struct EpisodeDetailsPane: View {
         var updated = track
         updated.artworkFileName = fileName
         updated.metadataEditedAt = Date()
-        try? trackStore.upsert(updated, artistName: artist?.name, albumName: album?.name)
+        try? trackStore.saveEdit(updated, artistName: artist?.name, albumName: album?.name)
         ImageFileStore.artwork.remove(previous)
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
@@ -342,6 +345,14 @@ private enum EpisodeLink {
     case show(Show)
 }
 
+/// How wide the label column is. Fixed, so every value in a card starts at the same
+/// place and sits next to the word that names it. Pushing labels left and values right
+/// put a hand's width of nothing between "Size" and "24.1 MB", and made a card of short
+/// values read as two unrelated lists.
+private enum DetailLayout {
+    static let labelWidth: CGFloat = 104
+}
+
 /// Skips itself when there's no value, so an episode with thin metadata shows a short
 /// card rather than a column of dashes. For anything editable see `EditableRow`.
 private struct DetailRow: View {
@@ -355,21 +366,23 @@ private struct DetailRow: View {
 
     var body: some View {
         if let value, !value.isEmpty {
-            HStack(alignment: .firstTextBaseline) {
-                Text(label).sectionRowSecondary()
-                Spacer(minLength: 12)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(label)
+                    .sectionRowSecondary()
+                    .frame(width: DetailLayout.labelWidth, alignment: .leading)
                 Text(value)
                     .font(.footnote)
-                    .multilineTextAlignment(.trailing)
                     .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 }
 
-/// An editable field dressed as a detail row: label on the left, the value itself on the
-/// right where the read-only rows put theirs. Shown even when empty — a blank Year is
-/// something to fill in, not something to hide.
+/// An editable field dressed as a detail row: the value sits in the same column the
+/// read-only rows use, so a card doesn't visibly split into "things you can change" and
+/// "things you can't". Shown even when empty — a blank Year is something to fill in, not
+/// something to hide.
 private struct EditableRow: View {
     let label: String
     @Binding var text: String
@@ -377,10 +390,12 @@ private struct EditableRow: View {
     var focus: FocusState<EpisodeField?>.Binding
     var keyboard: UIKeyboardType = .default
     var link: EpisodeLink?
+    var placeholder: String = "—"
 
     init(
         _ label: String, text: Binding<String>, field: EpisodeField,
-        focus: FocusState<EpisodeField?>.Binding, keyboard: UIKeyboardType = .default, link: EpisodeLink? = nil
+        focus: FocusState<EpisodeField?>.Binding, keyboard: UIKeyboardType = .default,
+        link: EpisodeLink? = nil, placeholder: String = "—"
     ) {
         self.label = label
         self._text = text
@@ -388,17 +403,19 @@ private struct EditableRow: View {
         self.focus = focus
         self.keyboard = keyboard
         self.link = link
+        self.placeholder = placeholder
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label).sectionRowSecondary()
-            Spacer(minLength: 12)
-            // An em dash rather than the field's name: the label is already on the left,
-            // and an empty row that repeats it reads as a value rather than a gap.
-            TextField("—", text: $text)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label)
+                .sectionRowSecondary()
+                .frame(width: DetailLayout.labelWidth, alignment: .leading)
+            // The placeholder is what the episode would show if this were left alone — the
+            // album's year, say — rather than the field's own name, which the label to the
+            // left already says.
+            TextField(placeholder, text: $text)
                 .font(.footnote)
-                .multilineTextAlignment(.trailing)
                 .keyboardType(keyboard)
                 .focused(focus, equals: field)
                 .submitLabel(.done)
@@ -428,9 +445,10 @@ private struct TagRow: View {
     let names: [String]
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Topics").sectionRowSecondary()
-            Spacer(minLength: 12)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Topics")
+                .sectionRowSecondary()
+                .frame(width: DetailLayout.labelWidth, alignment: .leading)
             HStack(spacing: 6) {
                 ForEach(names, id: \.self) { name in
                     Text(name)
@@ -440,6 +458,7 @@ private struct TagRow: View {
                         .background(.quaternary, in: Capsule())
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -452,11 +471,13 @@ private struct EpisodeLanguageRow: View {
     @ObservedObject private var languages = OnDeviceLanguages.shared
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Language").sectionRowSecondary()
-            Spacer(minLength: 12)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Language")
+                .sectionRowSecondary()
+                .frame(width: DetailLayout.labelWidth, alignment: .leading)
             TranscriptLanguageMenu(playing: transcript, languages: languages)
                 .equatable()
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await languages.refreshIfNeeded() }
     }
