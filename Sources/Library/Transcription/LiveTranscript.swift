@@ -18,14 +18,18 @@ final class LiveTranscript: ObservableObject {
     static let shared = LiveTranscript()
 
     @Published private(set) var track: Track?
-    @Published private(set) var segments: [TranscriptSegment] = []
+    @Published private(set) var segments: [TranscriptSegment] = [] {
+        didSet { rebuildLines() }
+    }
     @Published private(set) var edits: [TranscriptEdit] = []
     @Published private(set) var activeWindow: TimeWindow?
     /// What the running engine has made out but not finished with. Never saved — the
     /// merge when the window completes is what makes it permanent. Split into lines that
     /// have stopped moving and a tail that hasn't, because the tail rewrites itself
     /// several times a second and must not churn the list around it.
-    @Published private(set) var draft = TranscriptDraft()
+    @Published private(set) var draft = TranscriptDraft() {
+        didSet { rebuildLines() }
+    }
     @Published private(set) var isWorking = false
     /// Idle on purpose, waiting for playback to start again — not stuck, and not off.
     @Published private(set) var isWaitingForPlayback = false
@@ -72,8 +76,30 @@ final class LiveTranscript: ObservableObject {
     /// (and, on Whisper, money) on audio the listener walked away from. A window already
     /// in flight when playback pauses is still finished — throwing it away would mean
     /// redoing it on every pause.
+    ///
+    /// Driven by `toggleWholeEpisode()` rather than a switch of its own: "run the whole
+    /// thing now" and "stop running ahead" are the two things anyone actually wants, and
+    /// they are one button.
     @Published var runsWhilePaused: Bool {
         didSet { UserDefaults.standard.set(runsWhilePaused, forKey: Self.whilePausedDefaultsKey) }
+    }
+
+    /// Transcribing the whole episode under its own steam, rather than following the
+    /// playhead.
+    var isRunningAhead: Bool { isLiveEnabled && runsWhilePaused }
+
+    /// The one manual control: transcribe the rest of the episode now, or stop doing so.
+    /// Starting it turns the transcript on if it was off, so it's a single tap from a
+    /// cold episode to "do all of this".
+    func toggleWholeEpisode() {
+        if isRunningAhead {
+            runsWhilePaused = false
+            return
+        }
+        runsWhilePaused = true
+        // `start()` is a no-op while a pass is already in flight — one that was merely
+        // waiting for playback picks the change up on its own poll.
+        if isLiveEnabled { start() } else { isLiveEnabled = true }
     }
 
     /// Recorded against segments that came from a file beside the audio rather than a
@@ -108,34 +134,56 @@ final class LiveTranscript: ObservableObject {
 
     // MARK: Display
 
-    /// Silent stretches are stored as empty lines — they're how "this part has been
-    /// listened to, there was nothing said" is remembered — but they're not shown.
-    /// In-flight lines sit alongside the saved ones; they can't collide, since a window is
-    /// only ever sent out for a stretch nothing is stored for.
-    var lines: [TranscriptSegment] {
+    /// What's on screen: the saved lines with the in-flight ones folded in, in time order.
+    ///
+    /// Stored rather than computed. A running transcription republishes `draft` several
+    /// times a second, and this list is read once per visible row plus again for every
+    /// "is this the current line?" test — as a computed property that was a filter and a
+    /// sort per read, which is what made the page stutter and flash while transcribing.
+    /// Silent stretches are stored as empty lines — that's how "listened to, nothing said"
+    /// is remembered — and dropped here.
+    @Published private(set) var lines: [TranscriptSegment] = []
+
+    /// Starts of the lines still being revised, as a set: the row view asks this per row.
+    private var provisionalStarts: Set<Double> = []
+
+    /// Every line came out of a file beside the audio rather than a recognizer. Worth
+    /// saying plainly: text is on screen while the engine menu still reads "Off", and
+    /// those two facts look contradictory otherwise.
+    @Published private(set) var isFromSidecar = false
+
+    private func rebuildLines() {
         let saved = segments.filter { !$0.text.isEmpty }
-        guard !draft.settled.isEmpty else { return saved }
-        return (saved + draft.settled).sorted { $0.start < $1.start }
+        let settled = draft.settled
+        provisionalStarts = Set(settled.map(\.start))
+        lines = settled.isEmpty ? saved : (saved + settled).sorted { $0.start < $1.start }
+        isFromSidecar = !saved.isEmpty && saved.allSatisfy { $0.engine == Self.sidecarEngine }
     }
 
     /// The moving tail, as phrases. Carries no timestamps — every word in it can still be
     /// rewritten, so it can't be tapped to seek and doesn't belong in the list proper.
     var volatilePhrases: [String] { draft.volatile }
 
-    /// Every line came out of a file beside the audio rather than a recognizer. Worth
-    /// saying plainly: text is on screen while the engine menu still reads "Off", and
-    /// those two facts look contradictory otherwise.
-    var isFromSidecar: Bool {
-        let saved = segments.filter { !$0.text.isEmpty }
-        return !saved.isEmpty && saved.allSatisfy { $0.engine == Self.sidecarEngine }
-    }
-
     func isProvisional(_ segment: TranscriptSegment) -> Bool {
-        draft.settled.contains { $0.start == segment.start }
+        provisionalStarts.contains(segment.start)
     }
 
+    /// Binary search rather than a scan: this is asked once per redraw of a list that can
+    /// be a thousand lines long, while playback is republishing the time twice a second.
     func currentLine(at time: Double) -> TranscriptSegment? {
-        lines.last { $0.start <= time }
+        var low = 0
+        var high = lines.count - 1
+        var found: TranscriptSegment?
+        while low <= high {
+            let middle = (low + high) / 2
+            if lines[middle].start <= time {
+                found = lines[middle]
+                low = middle + 1
+            } else {
+                high = middle - 1
+            }
+        }
+        return found
     }
 
     var coverageFraction: Double {

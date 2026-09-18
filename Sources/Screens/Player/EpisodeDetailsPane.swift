@@ -1,8 +1,14 @@
+import PhotosUI
 import SwiftUI
 
 /// Everything known about what's playing — the tags that came off the file, where the
 /// file actually lives, and the dates that explain why it looks the way it does. Grouped
 /// cards rather than one flat list, so "who/what" doesn't blur into "which file".
+///
+/// The Episode card is the editor too: every field is a live control, showing even when
+/// empty, and a change lands as soon as you leave the field. Correcting a title is the
+/// commonest thing anyone does here, and routing it through a modal cost a tap in, a tap
+/// out and the scroll position of a long transcript.
 struct EpisodeDetailsPane: View {
     let playingTrack: Track
 
@@ -15,11 +21,33 @@ struct EpisodeDetailsPane: View {
     @State private var topics: [Topic] = []
     @State private var connectionLabel: String?
     @State private var downloadedBytes: Int64?
-    @State private var showingEdit = false
+
+    @State private var title = ""
+    @State private var artistName = ""
+    @State private var albumName = ""
+    @State private var showName = ""
+    @State private var year = ""
+    @State private var trackNumber = ""
+    @State private var notes = ""
+    /// What the fields held the last time they matched the database — the test for
+    /// "is there anything to save", without an `onChange` per field.
+    @State private var savedSnapshot = ""
+    /// Which track the fields are currently holding. Playback can move on mid-edit, and
+    /// without this the half-typed year would be saved onto whatever came next.
+    @State private var draftTrackID = ""
+    @FocusState private var focusedField: EpisodeField?
+
+    @State private var bookmarks: [Bookmark] = []
+    @State private var editingBookmark: Bookmark?
+    @State private var artworkItem: PhotosPickerItem?
+    @State private var isSuggesting = false
+    @State private var suggestionError: String?
+    @State private var readiness: EpisodeMetadataSuggester.Readiness = .noTranscript
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     private var track: Track { latest ?? playingTrack }
 
@@ -31,38 +59,24 @@ struct EpisodeDetailsPane: View {
                     .foregroundStyle(.orange)
             }
 
-            DetailCard("Episode") {
-                if let artist {
-                    NavigationLink { SpeakerDetailView(speaker: artist) } label: {
-                        DetailRow("Speaker", artist.name, isLink: true)
-                    }
-                    .buttonStyle(.plain)
-                }
-                if let album {
-                    NavigationLink { AlbumDetailView(album: album) } label: {
-                        DetailRow("Album", album.name, isLink: true)
-                    }
-                    .buttonStyle(.plain)
-                }
-                if let show {
-                    NavigationLink { ShowDetailView(show: show) } label: {
-                        DetailRow("Show", show.name, isLink: true)
-                    }
-                    .buttonStyle(.plain)
-                }
-                DetailRow("Year", track.year.map(String.init))
-                DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
-                DetailRow("Track no.", track.trackNumber.map(String.init))
-                if !topics.isEmpty {
-                    TagRow(names: topics.map(\.name))
-                }
-                Button("Edit Details", systemImage: "pencil") { showingEdit = true }
+            DetailCard("Episode") { episodeFields }
+            DetailCard("Notes") {
+                TextField("What this episode is about", text: $notes, axis: .vertical)
                     .font(.footnote)
+                    .lineLimit(2...8)
+                    .focused($focusedField, equals: .notes)
             }
 
-            if let notes = track.notes, !notes.isEmpty {
-                DetailCard("Notes") {
-                    Text(notes).font(.footnote).foregroundStyle(.secondary)
+            if !bookmarks.isEmpty {
+                DetailCard("Bookmarks") {
+                    ForEach(bookmarks) { bookmark in
+                        BookmarkRow(bookmark: bookmark) {
+                            PlaybackEngine.shared.seek(to: bookmark.position)
+                        } onEdit: {
+                            editingBookmark = bookmark
+                        }
+                        if bookmark.id != bookmarks.last?.id { Divider() }
+                    }
                 }
             }
 
@@ -91,12 +105,94 @@ struct EpisodeDetailsPane: View {
         }
         .padding(.horizontal)
         .task(id: playingTrack.id) { await load() }
-        // Saving an edit doesn't change which track is playing, so `task(id:)` won't fire —
-        // this is what puts a new title/speaker/notes on screen right away.
+        .task(id: playingTrack.id) { readiness = EpisodeMetadataSuggester().readiness(track: track) }
+        // Sync and the other editors hold their own copies of these rows; this is what
+        // puts their changes on screen without waiting for the next track change.
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
             Task { await load() }
         }
-        .sheet(isPresented: $showingEdit) { EpisodeEditView(track: track) }
+        .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
+            bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
+        }
+        .sheet(item: $editingBookmark) { bookmark in
+            BookmarkEditorView(bookmark: bookmark)
+        }
+        // Leaving a field is the commit. Scrolling away, or the page closing, counts too.
+        .onChange(of: focusedField) { previous, _ in
+            if previous != nil { save() }
+        }
+        .onChange(of: artworkItem) { _, item in
+            Task { await handleArtworkPick(item) }
+        }
+        .onDisappear { save() }
+        // Nothing on this page is a form with a Save button, so the keyboard needs its own
+        // way out — tapping the artwork or scrolling the page works too, but Done is the
+        // one that's always in the same place.
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var episodeFields: some View {
+        HStack(alignment: .top, spacing: 12) {
+            // Room under the thumbnail for the camera badge, which hangs past its corner.
+            VStack(spacing: 8) {
+                PhotosPicker(selection: $artworkItem, matching: .images) {
+                    ArtworkThumbnail(fileName: track.artworkFileName, seed: track.id)
+                }
+                .buttonStyle(.plain)
+                // Spelled out under the picture rather than hidden in a long-press menu:
+                // a picture picked by mistake is the commonest thing to want undone, and
+                // nobody long-presses to find out what an app can do.
+                if track.artworkFileName != nil {
+                    Button("Remove", role: .destructive) { setArtwork(nil) }
+                        .font(.caption2)
+                }
+            }
+            TextField("Title", text: $title, axis: .vertical)
+                .font(.footnote.weight(.medium))
+                .lineLimit(1...3)
+                .focused($focusedField, equals: .title)
+                .submitLabel(.done)
+                .onSubmit { focusedField = nil }
+        }
+
+        EditableRow("Speaker", text: $artistName, field: .speaker, focus: $focusedField, link: artist.map(EpisodeLink.speaker))
+        EditableRow("Album", text: $albumName, field: .album, focus: $focusedField, link: album.map(EpisodeLink.album))
+        EditableRow("Show", text: $showName, field: .show, focus: $focusedField, link: show.map(EpisodeLink.show))
+        EditableRow("Year", text: $year, field: .year, focus: $focusedField, keyboard: .numberPad)
+        EditableRow("Track no.", text: $trackNumber, field: .trackNumber, focus: $focusedField, keyboard: .numberPad)
+
+        // The one field that isn't the listener's own text: it's asked for here, where
+        // the rest of the episode is described, and the transcript pane no longer asks.
+        EpisodeLanguageRow()
+
+        DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
+        if !topics.isEmpty {
+            TagRow(names: topics.map(\.name))
+        }
+
+        Divider()
+        Button {
+            Task { await suggest() }
+        } label: {
+            HStack(spacing: 6) {
+                Label("Suggest with AI", systemImage: "sparkles")
+                if isSuggesting { ProgressView().controlSize(.mini) }
+            }
+            .font(.footnote)
+        }
+        .disabled(isSuggesting || !readiness.isReady)
+        if let blockedReason = readiness.blockedReason {
+            Text(blockedReason).font(.caption).foregroundStyle(.secondary)
+        }
+        if let suggestionError {
+            Text(suggestionError).font(.caption).foregroundStyle(.orange)
+        }
     }
 
     private var folder: String? {
@@ -121,6 +217,96 @@ struct EpisodeDetailsPane: View {
         topics = show.flatMap { try? libraryStore.topics(forShow: $0.id) } ?? []
         connectionLabel = (try? providerStore.all())?.first { $0.id == track.providerID }?.label
         downloadedBytes = await AudioCache.shared.cachedSize(providerID: track.providerID, filePath: track.filePath)
+        bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
+        // Half-typed words outrank whatever the database says — a sync landing mid-edit
+        // must not pull the text out from under the cursor. A different track is the one
+        // exception: those words have nowhere left to go.
+        guard draftTrackID != track.id || (focusedField == nil && snapshot == savedSnapshot) else { return }
+        if draftTrackID != track.id { focusedField = nil }
+        fillFields()
+    }
+
+    private func fillFields() {
+        title = track.title
+        artistName = artist?.name ?? ""
+        albumName = album?.name ?? ""
+        showName = show?.name ?? ""
+        year = track.year.map(String.init) ?? ""
+        trackNumber = track.trackNumber.map(String.init) ?? ""
+        notes = track.notes ?? ""
+        draftTrackID = track.id
+        savedSnapshot = snapshot
+    }
+
+    private var snapshot: String {
+        [title, artistName, albumName, showName, year, trackNumber, notes].joined(separator: "\u{1}")
+    }
+
+    private func save() {
+        guard draftTrackID == track.id, snapshot != savedSnapshot else { return }
+        let artist = trimmed(artistName).flatMap { try? libraryStore.upsertArtist(name: $0) }
+        let album = trimmed(albumName).flatMap { name in try? libraryStore.upsertAlbum(name: name, artistID: artist?.id) }
+        let show = trimmed(showName).flatMap { try? libraryStore.upsertShow(name: $0) }
+
+        var updated = track
+        updated.title = trimmed(title) ?? TrackRow.fileName(for: track)
+        updated.artistID = artist?.id
+        updated.albumID = album?.id
+        updated.showID = show?.id
+        updated.year = trimmed(year).flatMap { Int($0) }
+        updated.trackNumber = trimmed(trackNumber).flatMap { Int($0) }
+        updated.notes = trimmed(notes)
+        updated.metadataEditedAt = Date()
+        try? trackStore.upsert(updated, artistName: artist?.name, albumName: album?.name)
+        savedSnapshot = snapshot
+        // Home and the player hold their own copies of these rows, so they need telling —
+        // otherwise the edit only lands after some unrelated refresh.
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
+    private func handleArtworkPick(_ item: PhotosPickerItem?) async {
+        guard let item, let picked = try? await item.loadTransferable(type: PickedImageFile.self) else { return }
+        defer { picked.discard() }
+        guard let fileName = try? await ImageFileStore.artwork.save(contentsOf: picked.url, maxDimension: 800) else { return }
+        setArtwork(fileName)
+    }
+
+    /// Artwork saves on its own rather than waiting for a field to lose focus: picking a
+    /// picture is already a deliberate, finished act.
+    private func setArtwork(_ fileName: String?) {
+        let previous = track.artworkFileName
+        var updated = track
+        updated.artworkFileName = fileName
+        updated.metadataEditedAt = Date()
+        try? trackStore.upsert(updated, artistName: artist?.name, albumName: album?.name)
+        ImageFileStore.artwork.remove(previous)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
+    private func suggest() async {
+        isSuggesting = true
+        suggestionError = nil
+        do {
+            let suggestion = try await EpisodeMetadataSuggester().suggest(
+                track: track, title: title, artist: artistName, album: albumName, show: showName, notes: notes
+            )
+            // Only fills what the model actually improved on — a null field leaves
+            // whatever's in the form alone rather than blanking it.
+            if let suggested = suggestion.title { title = suggested }
+            if let suggested = suggestion.artist { artistName = suggested }
+            if let suggested = suggestion.album { albumName = suggested }
+            if let suggested = suggestion.show { showName = suggested }
+            if let suggested = suggestion.year { year = String(suggested) }
+            if let suggested = suggestion.notes { notes = suggested }
+            save()
+        } catch {
+            suggestionError = error.localizedDescription
+        }
+        isSuggesting = false
+    }
+
+    private func trimmed(_ value: String) -> String? {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 }
 
@@ -144,17 +330,27 @@ private struct DetailCard<Content: View>: View {
     }
 }
 
+/// Where a field's value is also a page of its own — the chevron stays, so a speaker is
+/// still one tap from their episodes even though the name is now editable in place.
+private enum EpisodeField: Hashable {
+    case title, speaker, album, show, year, trackNumber, notes
+}
+
+private enum EpisodeLink {
+    case speaker(Artist)
+    case album(Album)
+    case show(Show)
+}
+
 /// Skips itself when there's no value, so an episode with thin metadata shows a short
-/// card rather than a column of dashes.
+/// card rather than a column of dashes. For anything editable see `EditableRow`.
 private struct DetailRow: View {
     let label: String
     let value: String?
-    var isLink = false
 
-    init(_ label: String, _ value: String?, isLink: Bool = false) {
+    init(_ label: String, _ value: String?) {
         self.label = label
         self.value = value
-        self.isLink = isLink
     }
 
     var body: some View {
@@ -164,13 +360,66 @@ private struct DetailRow: View {
                 Spacer(minLength: 12)
                 Text(value)
                     .font(.footnote)
-                    .foregroundStyle(isLink ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.primary))
                     .multilineTextAlignment(.trailing)
                     .lineLimit(2)
-                if isLink {
+            }
+        }
+    }
+}
+
+/// An editable field dressed as a detail row: label on the left, the value itself on the
+/// right where the read-only rows put theirs. Shown even when empty — a blank Year is
+/// something to fill in, not something to hide.
+private struct EditableRow: View {
+    let label: String
+    @Binding var text: String
+    let field: EpisodeField
+    var focus: FocusState<EpisodeField?>.Binding
+    var keyboard: UIKeyboardType = .default
+    var link: EpisodeLink?
+
+    init(
+        _ label: String, text: Binding<String>, field: EpisodeField,
+        focus: FocusState<EpisodeField?>.Binding, keyboard: UIKeyboardType = .default, link: EpisodeLink? = nil
+    ) {
+        self.label = label
+        self._text = text
+        self.field = field
+        self.focus = focus
+        self.keyboard = keyboard
+        self.link = link
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).sectionRowSecondary()
+            Spacer(minLength: 12)
+            // An em dash rather than the field's name: the label is already on the left,
+            // and an empty row that repeats it reads as a value rather than a gap.
+            TextField("—", text: $text)
+                .font(.footnote)
+                .multilineTextAlignment(.trailing)
+                .keyboardType(keyboard)
+                .focused(focus, equals: field)
+                .submitLabel(.done)
+                .onSubmit { focus.wrappedValue = nil }
+            if let link {
+                NavigationLink {
+                    destination(link)
+                } label: {
                     Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
                 }
+                .buttonStyle(.plain)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func destination(_ link: EpisodeLink) -> some View {
+        switch link {
+        case .speaker(let artist): SpeakerDetailView(speaker: artist)
+        case .album(let album): AlbumDetailView(album: album)
+        case .show(let show): ShowDetailView(show: show)
         }
     }
 }
@@ -192,5 +441,42 @@ private struct TagRow: View {
                 }
             }
         }
+    }
+}
+
+/// The artwork, small, with the camera badge that says it's a button.
+private struct ArtworkThumbnail: View {
+    let fileName: String?
+    let seed: String
+
+    var body: some View {
+        ArtworkTile(fileName: fileName, seed: seed, cornerRadius: 8, symbolSize: 20)
+            .frame(width: 56, height: 56)
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 9))
+                    .padding(4)
+                    .background(Color.accentColor, in: Circle())
+                    .foregroundStyle(.white)
+                    .offset(x: 4, y: 4)
+            }
+    }
+}
+
+/// The episode's language, with the list of what this phone can actually recognise
+/// offline. Its own view so the twice-a-second churn of a transcription run redraws one
+/// row rather than every field on the page.
+private struct EpisodeLanguageRow: View {
+    @ObservedObject private var transcript = LiveTranscript.shared
+    @ObservedObject private var languages = OnDeviceLanguages.shared
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Language").sectionRowSecondary()
+            Spacer(minLength: 12)
+            TranscriptLanguageMenu(playing: transcript, languages: languages)
+                .equatable()
+        }
+        .task { await languages.refreshIfNeeded() }
     }
 }

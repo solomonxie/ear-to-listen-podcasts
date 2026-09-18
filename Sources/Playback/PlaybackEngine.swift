@@ -17,6 +17,10 @@ final class PlaybackEngine: ObservableObject {
     /// full player up with it.
     @Published var isPresentingPlayer = false
 
+    /// Where the next load should start, when something asked for a particular moment
+    /// rather than "carry on where I was".
+    private var pendingStart: TimeInterval?
+
     private let player = AVQueuePlayer()
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -83,7 +87,7 @@ final class PlaybackEngine: ObservableObject {
             observeStatus(of: item, track: track)
             player.removeAllItems()
             player.insert(item, after: nil)
-            seekToResumePosition(of: track)
+            seekToStart(of: track)
             player.play()
             isPlaying = true
             lastError = nil
@@ -91,6 +95,17 @@ final class PlaybackEngine: ObservableObject {
         } catch {
             lastError = "Playback failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Where this load should begin: the moment something asked for, otherwise wherever
+    /// playback last left off.
+    private func seekToStart(of track: Track) {
+        guard let pendingStart else {
+            seekToResumePosition(of: track)
+            return
+        }
+        self.pendingStart = nil
+        seek(to: pendingStart)
     }
 
     /// Resumes from where playback last left off, unless the track was already finished.
@@ -166,6 +181,20 @@ final class PlaybackEngine: ObservableObject {
         isPresentingPlayer = true
     }
 
+    /// Opens an episode at a saved moment — a bookmark tapped from Home or an album page.
+    /// Beats the resume position for this one load, which is the whole point of having
+    /// marked the spot.
+    func open(track: Track, queue: [Track], startingAt position: TimeInterval) {
+        if currentTrack?.id == track.id {
+            seek(to: position)
+            resume()
+        } else {
+            pendingStart = position
+            play(track: track, queue: queue)
+        }
+        isPresentingPlayer = true
+    }
+
     func seek(to time: TimeInterval) {
         player.seek(to: CMTime(seconds: time, preferredTimescale: 600))
     }
@@ -233,11 +262,22 @@ final class PlaybackEngine: ObservableObject {
         var info: [String: Any] = [MPMediaItemPropertyTitle: track.title]
         if let url = ImageFileStore.artwork.url(for: track.artworkFileName),
            let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
-            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            info[MPMediaItemPropertyArtwork] = Self.nowPlayingArtwork(image)
         }
         info[MPMediaItemPropertyPlaybackDuration] = duration
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// `MPMediaItemArtwork` asks for the picture on a queue of its own, and a closure
+    /// written inside this main-actor class inherits the main actor — so the request
+    /// handler trapped (`EXC_BREAKPOINT` in `swift_task_isCurrentExecutor`) the moment
+    /// MediaPlayer called it off the main thread. That is why giving an episode artwork
+    /// made it kill the app on the next play. Built out here, `nonisolated`, where there
+    /// is no isolation to inherit. MediaPlayer's blocks aren't `Sendable`-audited, so
+    /// nothing warns about this at compile time.
+    nonisolated static func nowPlayingArtwork(_ image: UIImage) -> MPMediaItemArtwork {
+        MPMediaItemArtwork(boundsSize: image.size) { _ in image }
     }
 
     private func updateNowPlayingElapsedTime() {

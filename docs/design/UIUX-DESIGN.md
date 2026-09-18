@@ -1,5 +1,8 @@
 # Bring-Your-Own-Podcasts — UI/UX Design
 
+**Every screen is drawn in `uiux/` — start there.** This file carries the rules,
+flows and copy behind those drawings; where the two disagree, `uiux/` is current.
+
 Screens, flows, states and copy as actually built. `DESIGN.md` covers the product
 decision and options; the per-folder `README.md`s cover code structure. Reusable
 preferences extracted from this app live in the `uiux` skill
@@ -74,13 +77,14 @@ subfolder. No separate detail screen, no per-level difference.
 The `⋯` menu is identical at every depth:
 
 ```
-Sync: Manual                    ▸   ← submenu carrying the current value
-Last synced: 9 hours ago
-Sync Now
+Last synced: 9 hours ago            ← text, not a control
 Queue                           ☰
 ──────────
 Delete Connection               🗑  ← destructive, last
 ```
+
+Sync Now and the frequency picker are *not* here: they're decisions about a
+connection, so they sit on the source's own row in the Remote section.
 
 The listing is **live**: each level is one delimited `listObjectsV2` per folder
 (`CloudProvider.listDirectory`), so a file uploaded a minute ago is there before
@@ -166,12 +170,10 @@ ABOUT THE SHOW   the show's summary, only if there is one
 
 ```
 ┌──────────────────────────────────────────┐
-│ TRANSCRIPT                      3 edits  │
-│ Transcribe this episode            ●──   │ ← off for every episode until switched on
-│ [ On-device | OpenAI Whisper ]           │ ← dimmed, not hidden, while it's off
-│ 🌐 Language: English    Transcribe again…│
-│ Keep going while paused            ──○   │
-│ Transcribing 12:00–13:00… · 46% done     │
+│ TRANSCRIPT       3 edits  Transcribe again…│
+│ [💬 Subtitles] [⚡ Whole episode] [⌖ Follow]│ ← each button's title is its
+│ [ ON-DEVICE | OpenAI Whisper ]           │   state; tint = on
+│ Listening to 12:00–13:00… · 46% done     │ ← dimmed, not hidden, while off
 ├──────────────────────────────────────────┤
 │  …so the model runs entirely locally.    │ ← dim
 │  Which matters once you pipe in          │ ← BRIGHT = the line being spoken,
@@ -181,10 +183,10 @@ ABOUT THE SHOW   the show's summary, only if there is one
 ```
 
 Rules this encodes:
-- Every option is in view, in a fixed place. There are five, they're the ones you reach
-  for while listening, and a menu made each one a tap-and-hunt — worse, it hid whether
-  anything was running at all. Only the language stays a menu: it's a list of every
-  language the phone can recognise, which is a picker, not a row of buttons.
+- Every option is in view, in a fixed place. They're the ones you reach for while
+  listening, and a menu made each one a tap-and-hunt — worse, it hid whether anything
+  was running at all. The spoken language is a menu, and it sits with the episode's
+  own details, since it describes the episode rather than this pass.
 - Options the switch governs are dimmed rather than hidden, so the section doesn't reflow
   under your thumb as you flip it.
 - **Off for every episode**, and not remembered between them. Transcribing spends battery

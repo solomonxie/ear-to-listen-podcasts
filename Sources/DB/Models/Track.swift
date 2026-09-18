@@ -39,4 +39,7 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// Playback progress, in milliseconds, as of `lastPlayedAt`.
     var positionMs: Int? = nil
     var lastPlayedAt: Date? = nil
+    /// Marked by hand from the player. Says nothing about how often it's played — that's
+    /// what `lastPlayedAt` is for — only that the listener wants it findable.
+    var isFavorite: Bool = false
 }
