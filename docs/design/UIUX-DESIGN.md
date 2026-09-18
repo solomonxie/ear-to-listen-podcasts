@@ -170,10 +170,9 @@ ABOUT THE SHOW   the show's summary, only if there is one
 
 ```
 ┌──────────────────────────────────────────┐
-│ TRANSCRIPT       3 edits  Transcribe again…│
-│ [💬 Subtitles] [⚡ Whole episode] [⌖ Follow]│ ← each button's title is its
-│ [ ON-DEVICE | OpenAI Whisper ]           │   state; tint = on
-│ Listening to 12:00–13:00… · 46% done     │ ← dimmed, not hidden, while off
+│ TRANSCRIPT                        3 edits│
+│ [📱 On-device] [✨ AI] [⌖ Follow]        │ ← one button per recogniser;
+│ Transcribing the whole episode · 46%     │   each does the whole episode
 ├──────────────────────────────────────────┤
 │  …so the model runs entirely locally.    │ ← dim
 │  Which matters once you pipe in          │ ← BRIGHT = the line being spoken,
@@ -187,6 +186,9 @@ Rules this encodes:
   listening, and a menu made each one a tap-and-hunt — worse, it hid whether anything
   was running at all. The spoken language is a menu, and it sits with the episode's
   own details, since it describes the episode rather than this pass.
+- A pass runs whole and out of sight: a percentage while it works, the text all at
+  once when it's done. Live transcription rewrote lines under the reader and
+  recognised the same audio several times over as the playhead moved.
 - Options the switch governs are dimmed rather than hidden, so the section doesn't reflow
   under your thumb as you flip it.
 - **Off for every episode**, and not remembered between them. Transcribing spends battery

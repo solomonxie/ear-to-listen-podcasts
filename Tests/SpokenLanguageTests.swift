@@ -22,7 +22,7 @@ final class SpokenLanguageTests: XCTestCase {
     }
 
     func testTheEpisodeOutranksItsAlbumAndSpeaker() {
-        let resolved = LiveTranscript.resolveLanguage(
+        let resolved = TranscriptRunner.resolveLanguage(
             track: makeTrack(language: "en-US"),
             album: makeAlbum(language: "zh-CN"),
             artist: makeArtist(language: "zh-CN")
@@ -32,7 +32,7 @@ final class SpokenLanguageTests: XCTestCase {
     }
 
     func testTheAlbumOutranksItsSpeaker() {
-        let resolved = LiveTranscript.resolveLanguage(
+        let resolved = TranscriptRunner.resolveLanguage(
             track: makeTrack(language: nil),
             album: makeAlbum(language: "en-US"),
             artist: makeArtist(language: "zh-CN")
@@ -42,7 +42,7 @@ final class SpokenLanguageTests: XCTestCase {
     }
 
     func testItFallsBackToTheSpeaker() {
-        let resolved = LiveTranscript.resolveLanguage(
+        let resolved = TranscriptRunner.resolveLanguage(
             track: makeTrack(language: nil), album: makeAlbum(language: nil), artist: makeArtist(language: "zh-CN")
         )
         XCTAssertEqual(resolved?.identifier, "zh-CN")
@@ -52,7 +52,7 @@ final class SpokenLanguageTests: XCTestCase {
     /// Nobody has said, so nothing is claimed — the caller falls back to the app-wide
     /// choice rather than guessing from the phone.
     func testNoAnswerAnywhereResolvesToNothing() {
-        XCTAssertNil(LiveTranscript.resolveLanguage(
+        XCTAssertNil(TranscriptRunner.resolveLanguage(
             track: makeTrack(language: nil), album: makeAlbum(language: nil), artist: makeArtist(language: nil)
         ))
     }
