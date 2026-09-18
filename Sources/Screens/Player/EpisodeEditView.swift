@@ -217,7 +217,7 @@ struct EpisodeEditView: View {
         updated.notes = trimmed(notes)
         updated.artworkFileName = artworkFileName
         updated.metadataEditedAt = Date()
-        try? trackStore.upsert(updated, artistName: artist?.name, albumName: album?.name)
+        try? trackStore.saveEdit(updated, artistName: artist?.name, albumName: album?.name)
 
         if artworkFileName != track.artworkFileName {
             ImageFileStore.artwork.remove(track.artworkFileName)

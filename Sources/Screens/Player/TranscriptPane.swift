@@ -1,11 +1,13 @@
 import SwiftUI
 
 /// Lyric-style transcript: the line being spoken is the only bright one, it scrolls
-/// itself, tapping a line plays from there and reads along, and the pencil beside it
-/// corrects the text.
+/// itself, tapping a line plays from there and reads along, and holding a line down
+/// offers to correct it.
 ///
 /// Two buttons above it, one per recogniser: each transcribes the whole episode in the
-/// background and the text arrives all at once when it's done. Nothing is shown while a
+/// background, storing each window as it lands — so leaving the app costs the window in
+/// flight rather than the hour — and putting the finished transcript up in one piece.
+/// Nothing is shown while a
 /// pass runs but a percentage — text that rewrites itself under the reader was worse than
 /// waiting for it.
 struct TranscriptPane: View {
@@ -25,6 +27,8 @@ struct TranscriptPane: View {
 
     @State private var editing: TranscriptSegment?
     @State private var showingEdits = false
+    /// The recogniser waiting on "yes, spend that" — only ever one that charges.
+    @State private var confirmingEngine: TranscriptionEngineKind?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -42,6 +46,21 @@ struct TranscriptPane: View {
         }
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
+        }
+        // Asked before a penny is spent, with the number in it. On-device never asks —
+        // there's nothing to agree to.
+        .confirmationDialog(
+            "Transcribe with AI?",
+            isPresented: Binding(get: { confirmingEngine != nil }, set: { if !$0 { confirmingEngine = nil } }),
+            presenting: confirmingEngine
+        ) { engine in
+            Button("Transcribe") {
+                confirmingEngine = nil
+                transcript.run(engine: engine)
+            }
+            Button("Cancel", role: .cancel) { confirmingEngine = nil }
+        } message: { engine in
+            Text(estimate(for: engine))
         }
     }
 
@@ -86,19 +105,39 @@ struct TranscriptPane: View {
             systemImage: isRunningThis ? "stop.fill" : engine.symbolName,
             isOn: isRunningThis
         ) {
-            transcript.run(engine: engine)
+            // Stopping never asks; starting something billed always does.
+            guard !isRunningThis, engine.pricePerMinuteUSD != nil else {
+                return transcript.run(engine: engine)
+            }
+            confirmingEngine = engine
         }
         // The other recogniser waits its turn: two passes over the same audio at once is
         // twice the battery for one transcript.
         .disabled(transcript.track == nil || (transcript.isRunning && !isRunningThis))
     }
 
+    /// The running one says what it's doing rather than what pressing it does — the stop
+    /// square already says that, and "Stop" on its own left the page with no word for the
+    /// thing taking all this time.
     private func title(for engine: TranscriptionEngineKind) -> LocalizedStringKey {
-        if transcript.runningEngine == engine { return "Stop" }
+        guard transcript.runningEngine != engine else { return "Transcribing…" }
         switch engine {
         case .onDevice: return "On-device"
         case .openAIWhisper: return "AI"
         }
+    }
+
+    /// What the pass would cost and why it's that much: the length it would actually send,
+    /// which on a part-finished episode is a fraction of the episode.
+    private func estimate(for engine: TranscriptionEngineKind) -> String {
+        let seconds = transcript.untranscribedSeconds
+        guard seconds > 0, let cost = transcript.estimatedCost(of: engine) else {
+            return "This episode is already transcribed."
+        }
+        let length = TrackRow.formattedDuration(Int(seconds * 1000))
+        let price = cost < 0.01 ? "under $0.01" : "about " + cost.formatted(.currency(code: "USD"))
+        let sent = transcript.lines.isEmpty ? "" : " Only the part with no transcript yet is sent."
+        return "\(length) of audio, \(price) charged to your own OpenAI key.\(sent)"
     }
 
     private var status: LocalizedStringKey? {
@@ -127,7 +166,7 @@ struct TranscriptPane: View {
 
     private var emptyStateDetail: LocalizedStringKey {
         if transcript.isRunning {
-            return "Working through the episode — \(percent) done. The whole transcript appears here at once when it's finished."
+            return "Working through the episode — \(percent) done. The whole transcript appears here at once when it's finished — and leaving the app doesn't lose what's already done."
         }
         return "Nothing transcribed yet. On-device costs battery and no money; AI is more accurate, needs a key, and sends the audio to the vendor. Either one does the whole episode in the background. A transcript file sitting beside the episode is used instead when there is one."
     }
@@ -192,37 +231,27 @@ private struct TranscriptLine: View, Equatable {
     let onEdit: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(segment.text)
-                    .font(isCurrent ? .body.weight(.semibold) : .body)
-                    .foregroundStyle(isCurrent ? .primary : .secondary)
-                HStack(spacing: 6) {
-                    Text(Scrubber.formatted(segment.start))
-                    if segment.isEdited {
-                        Label("edited", systemImage: "pencil").labelStyle(.titleAndIcon)
-                    }
+        VStack(alignment: .leading, spacing: 3) {
+            Text(segment.text)
+                .font(isCurrent ? .body.weight(.semibold) : .body)
+                .foregroundStyle(isCurrent ? .primary : .secondary)
+            HStack(spacing: 6) {
+                Text(Scrubber.formatted(segment.start))
+                if segment.isEdited {
+                    Label("edited", systemImage: "pencil").labelStyle(.titleAndIcon)
                 }
-                .font(.caption2)
-                .foregroundStyle(isCurrent ? .secondary : .tertiary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            // Tapping a lyric plays from it — that's what the timestamps are for, and it's
-            // the thing you want while listening. Correcting is the deliberate act, so it
-            // gets its own small target.
-            .onTapGesture(perform: onPlay)
-
-            Button(action: onEdit) {
-                Image(systemName: "pencil")
-                    .font(.footnote)
-                    .padding(6)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tertiary)
-            .accessibilityLabel("Correct this line")
+            .font(.caption2)
+            .foregroundStyle(isCurrent ? .secondary : .tertiary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        // Tapping a lyric plays from it — that's what the timestamps are for, and it's
+        // the thing you want while listening. Correcting is the deliberate act, so it
+        // lives in the long-press menu: a pencil per line was a permanent target down the
+        // edge of the page for something done once or twice an episode, and it sat under
+        // the scroll handle.
+        .onTapGesture(perform: onPlay)
         .contextMenu {
             Button("Play from here", systemImage: "play.fill", action: onPlay)
             Button("Correct this line", systemImage: "pencil", action: onEdit)

@@ -1,5 +1,5 @@
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 /// The rule for "which recognizer transcribes this?": the most specific answer wins.
 /// Language belongs to the recording, not the person — a Mandarin speaker gives a talk in

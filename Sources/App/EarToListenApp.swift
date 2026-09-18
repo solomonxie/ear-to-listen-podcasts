@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct BringYourOwnPodcastsApp: App {
+struct EarToListenApp: App {
     @StateObject private var playback = PlaybackEngine.shared
     @StateObject private var language = AppLanguageStore.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -30,9 +30,16 @@ struct BringYourOwnPodcastsApp: App {
             if newPhase == .active {
                 SyncScheduler.shared.start()
                 AutoBackup.shared.start()
+                // A transcription pass the system took down while the app was away picks
+                // up where it stopped, rather than waiting to be asked again.
+                TranscriptRunner.shared.resumeIfInterrupted()
             } else {
                 SyncScheduler.shared.stop()
                 AutoBackup.shared.stop()
+                // Leaving the app is the moment nothing is mid-write, so it's when the
+                // copies that stay on the phone are taken. At most once a day, and only if
+                // something was written — see `LocalBackups`.
+                LocalBackups.runIfDue { try BackupService().currentArchive() }
             }
         }
     }

@@ -155,6 +155,11 @@ struct AlbumAnalysisView: View {
     private func apply() {
         guard let result else { return }
         let ready = partition.ready
+        // Accepting a whole album's suggestions rewrites every episode in it at once, so
+        // it leaves a copy of what it's about to overwrite under a name of its own.
+        if let current = try? BackupService().currentArchive() {
+            LocalBackups.writeBefore("suggestions", archive: current)
+        }
 
         for suggestion in result.episodes where acceptedEpisodes.contains(suggestion.index) {
             guard suggestion.index < ready.count else { continue }
@@ -163,7 +168,7 @@ struct AlbumAnalysisView: View {
             if let notes = suggestion.notes { track.notes = notes }
             if let year = suggestion.year { track.year = year }
             track.metadataEditedAt = Date()
-            try? trackStore.upsert(track, artistName: artistName, albumName: album.name)
+            try? trackStore.saveEdit(track, artistName: artistName, albumName: album.name)
         }
 
         if acceptsAlbum, let suggestion = result.album {
@@ -171,7 +176,8 @@ struct AlbumAnalysisView: View {
                 id: album.id,
                 name: suggestion.name ?? album.name,
                 notes: suggestion.notes ?? album.notes,
-                artworkFileName: album.artworkFileName
+                artworkFileName: album.artworkFileName,
+                year: album.year
             )
             if let artist = suggestion.artist, artist != artistName {
                 _ = try? libraryStore.reassignAlbumArtist(albumID: album.id, artistName: artist)

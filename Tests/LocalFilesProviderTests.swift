@@ -1,5 +1,5 @@
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class LocalFilesProviderTests: XCTestCase {
     private var tempDir: URL!

@@ -31,6 +31,15 @@ struct TrackStore {
         }
     }
 
+    /// An episode edited by hand, as opposed to one a sync found. Same write as `upsert`,
+    /// plus a line in the change log: this is the half of an episode row that nothing can
+    /// rebuild, and the sync path writing thousands of rows has no business in that log.
+    func saveEdit(_ track: Track, artistName: String?, albumName: String?) throws {
+        let old = try find(providerID: track.providerID, filePath: track.filePath)
+        try upsert(track, artistName: artistName, albumName: albumName)
+        ChangeLog.record("episodes", key: track.filePath, old: old, new: track, in: dbQueue)
+    }
+
     func deleteAll(forProvider providerID: String) throws {
         try dbQueue.write { db in
             let ids = try String.fetchAll(db, sql: "SELECT id FROM tracks WHERE providerID = ?", arguments: [providerID])
@@ -60,11 +69,15 @@ struct TrackStore {
     }
 
     func setFavorite(id: String, isFavorite: Bool) throws {
-        try dbQueue.write { db in
-            guard var track = try Track.fetchOne(db, key: id) else { return }
+        let was: Bool? = try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return nil }
+            let was = track.isFavorite
             track.isFavorite = isFavorite
             try track.update(db)
+            return was
         }
+        guard let was else { return }
+        ChangeLog.record("episodes", key: id, old: ["isFavorite": was], new: ["isFavorite": isFavorite], in: dbQueue)
     }
 
     func favorites() throws -> [Track] {

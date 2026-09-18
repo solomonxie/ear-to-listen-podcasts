@@ -1,7 +1,7 @@
 import MediaPlayer
 import UIKit
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class PlaybackEngineTests: XCTestCase {
     /// MediaPlayer asks for the lock-screen picture on a queue of its own. When the

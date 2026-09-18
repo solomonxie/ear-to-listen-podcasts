@@ -1,6 +1,6 @@
 import GRDB
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class EpisodeMetadataSuggesterTests: XCTestCase {
     private func decode(_ json: String) throws -> EpisodeMetadataSuggester.Suggestion {

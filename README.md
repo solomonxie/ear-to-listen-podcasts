@@ -1,4 +1,4 @@
-# Bring Your Own Podcasts
+# Ear to Listen Podcasts
 
 Podcast player for iPhone that streams episodes from your own cloud storage
 (S3 primary; iCloud/Drive/Dropbox/OneDrive/Aliyun OSS/Tencent COS backlogged),
@@ -21,7 +21,7 @@ local sources, per-source sync frequency + manual "Sync Now", and a foreground
 ## How It's Wired
 
 ```
-BringYourOwnPodcastsApp.swift:init()
+EarToListenApp.swift:init()
   registers CloudProviders (S3, Local) + SpotifyImportSource
         │
         ▼
@@ -68,7 +68,7 @@ through the same tables, so it appears exactly as a synced source would.
 The app's own data — playlists, hand edits and their images, transcripts and
 corrections — is backed up automatically to either or both of two places
 (`Sources/Backup/README.md`): the listener's own iCloud Drive (one switch in
-Settings, nothing to set up, visible in Files under "BYO Podcasts") and the
+Settings, nothing to set up, visible in Files under "Ear to Listen") and the
 connected S3 bucket (a switch on that connection's row). Episode audio is never
 uploaded. Deleting and reinstalling the app puts the data back by itself on
 first launch, and the parts that need the episode files re-link themselves as
@@ -78,14 +78,14 @@ the next sync fetches them.
 
 ```sh
 xcodegen generate
-open BringYourOwnPodcasts.xcodeproj
+open EarToListen.xcodeproj
 ```
 
 Or build from the CLI (add `-skipPackagePluginValidation` — this environment's
 Xcode otherwise fails validating the AWS SDK's Smithy code-gen plugin):
 
 ```sh
-xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts \
+xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
   -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build
 ```
 
@@ -94,22 +94,22 @@ xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts 
 Signing is automatic against the team in `project.yml`
 (`DEVELOPMENT_TEAM`) — change that one line to your own Apple Developer Team
 ID. Simulator builds don't need one. iCloud backup needs the
-`iCloud.com.solomonxie.byopo` container entitlement
-(`Sources/App/BringYourOwnPodcasts.entitlements`), which needs a paid developer
+`iCloud.com.solomonxie.eartolisten` container entitlement
+(`Sources/App/EarToListen.entitlements`), which needs a paid developer
 account — a free-team build still builds and runs, and the iCloud row in
 Settings reports itself unavailable instead of pretending:
 
 ```sh
 xcodegen generate
-xcodebuild -project BringYourOwnPodcasts.xcodeproj -scheme BringYourOwnPodcasts \
-  -configuration Release -archivePath build/BringYourOwnPodcasts.xcarchive \
+xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
+  -configuration Release -archivePath build/EarToListen.xcarchive \
   -skipPackagePluginValidation archive
-xcodebuild -exportArchive -archivePath build/BringYourOwnPodcasts.xcarchive \
+xcodebuild -exportArchive -archivePath build/EarToListen.xcarchive \
   -exportOptionsPlist ExportOptions.plist -exportPath build/export
 ```
 
 Fill in your team ID in `ExportOptions.plist` before exporting, then upload
-`build/export/BringYourOwnPodcasts.ipa` via Transporter or `xcrun altool`.
+`build/export/EarToListen.ipa` via Transporter or `xcrun altool`.
 Xcode Cloud is a no-repo-changes alternative — configure it in App Store
 Connect instead of running the commands above.
 
@@ -122,14 +122,8 @@ English + Simplified Chinese from the start, via a String Catalog
 
 ## Screenshots
 
-**Home**
-<img src="docs/screenshots/home-page.png" alt="Home" width="200">
-
-**Browse by speaker, year & topic**
-<img src="docs/screenshots/sections.png" alt="Browse by speaker, year & topic" width="200">
-
-**Remote & Settings**
-<img src="docs/screenshots/settings.png" alt="Remote & Settings" width="200">
-
-**Now Playing**
-<img src="docs/screenshots/player.png" alt="Now Playing" width="200">
+| Home | Browse by speaker, year & topic |
+|:---:|:---:|
+| <img src="docs/screenshots/home-page.png" alt="Home" width="200"> | <img src="docs/screenshots/sections.png" alt="Browse by speaker, year and topic" width="200"> |
+| **Remote & Settings** | **Now Playing** |
+| <img src="docs/screenshots/settings.png" alt="Remote and Settings" width="200"> | <img src="docs/screenshots/player.png" alt="Now Playing" width="200"> |

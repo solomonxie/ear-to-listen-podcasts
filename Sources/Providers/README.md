@@ -3,7 +3,7 @@
 `CloudProvider` protocol (list/metadata/stream/test-connection) plus a
 `CloudProviderRegistry` that maps a provider type string to a factory, so
 adding a backend means implementing the protocol and registering it in
-`BringYourOwnPodcastsApp.init()` — nothing else has to change. S3 and local
+`EarToListenApp.init()` — nothing else has to change. S3 and local
 files are implemented; iCloud/Drive/Dropbox/OneDrive/Aliyun OSS/Tencent COS
 are backlogged behind the same protocol.
 
@@ -13,7 +13,7 @@ provider instance and owns its settings/credentials lifecycle.
 ## Resolution Workflow
 
 ```
-BringYourOwnPodcastsApp.swift:init()
+EarToListenApp.swift:init()
   registers factories: "s3" → S3Provider.init, "local" → LocalFilesProvider.init
         │
         ▼ (later, on sync or playback)

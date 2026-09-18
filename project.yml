@@ -1,4 +1,4 @@
-name: BringYourOwnPodcasts
+name: EarToListen
 options:
   bundleIdPrefix: com.solomonxie
   deploymentTarget:
@@ -17,7 +17,7 @@ packages:
     from: 8.0.0
 
 targets:
-  BringYourOwnPodcasts:
+  EarToListen:
     type: application
     platform: iOS
     sources:
@@ -38,9 +38,9 @@ targets:
       path: Sources/App/Info.plist
       properties:
         # Home-screen name. CFBundleName too, or iOS falls back to PRODUCT_NAME
-        # ("BringYourOwnPodcasts") wherever the display name isn't consulted.
-        CFBundleDisplayName: BYO Podcasts
-        CFBundleName: BYO Podcasts
+        # ("EarToListen") wherever the display name isn't consulted.
+        CFBundleDisplayName: Ear to Listen
+        CFBundleName: Ear to Listen
         UIUserInterfaceStyle: Dark
         UILaunchScreen:
           UIColorName: AccentColor
@@ -52,16 +52,16 @@ targets:
         # kept there can actually be got at. A container that syncs but stays hidden is
         # worse than a local file.
         NSUbiquitousContainers:
-          iCloud.com.solomonxie.byopo:
+          iCloud.com.solomonxie.eartolisten:
             NSUbiquitousContainerIsDocumentScopePublic: true
-            NSUbiquitousContainerName: BYO Podcasts
+            NSUbiquitousContainerName: Ear to Listen
             NSUbiquitousContainerSupportedFolderLevels: Any
         NSSpeechRecognitionUsageDescription: >-
           Transcribes episodes on this device so you can read and correct them.
           Audio stays on your phone.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.solomonxie.byopo
+        PRODUCT_BUNDLE_IDENTIFIER: com.solomonxie.eartolisten
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
@@ -71,7 +71,7 @@ targets:
         # iCloud backup needs the container entitlement, which needs a paid team — see
         # the README. Simulator builds still build without one; the iCloud row in
         # Settings reports itself unavailable rather than pretending.
-        CODE_SIGN_ENTITLEMENTS: Sources/App/BringYourOwnPodcasts.entitlements
+        CODE_SIGN_ENTITLEMENTS: Sources/App/EarToListen.entitlements
         CODE_SIGN_STYLE: Automatic
         # The team that owns the bundle id and the iCloud container. Written here rather
         # than read from the environment: a regenerate without the variable set produced a
@@ -79,24 +79,24 @@ targets:
         # confusing way to find out. Fork this repo and it's the one line to change.
         DEVELOPMENT_TEAM: REPLACE_WITH_YOUR_TEAM_ID
 
-  BringYourOwnPodcastsTests:
+  EarToListenTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests
     dependencies:
-      - target: BringYourOwnPodcasts
+      - target: EarToListen
     settings:
       base:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
-  BringYourOwnPodcasts:
+  EarToListen:
     build:
       targets:
-        BringYourOwnPodcasts: all
-        BringYourOwnPodcastsTests: [test]
+        EarToListen: all
+        EarToListenTests: [test]
     test:
       targets:
-        - BringYourOwnPodcastsTests
+        - EarToListenTests

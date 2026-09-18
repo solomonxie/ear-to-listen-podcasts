@@ -12,7 +12,7 @@ page. Reached at launch; nothing pushes back to it but Back.
  │ [artwork]  │ │ [artwork]  │ │ [artwork]     160×90 tile
  └────────────┘ └────────────┘ └───────────
  Sleep Toolkit   Focus & Flow    Deep Work
- …/ep-004.mp3    …/ep-011.mp3    …/ep-02…     ← head-truncated path
+ Season 3 · An…  Season 3 · An…  Deep Work…   ← album · speaker
  ████████░░░░    ██░░░░░░░░░░                 ← only if part-played
  Favorites            (hidden when none)
  Bookmarks            (hidden when none)
@@ -74,6 +74,21 @@ Episodes. An empty section is not drawn. Episodes match title **or file
 path** — a folder of files often shares one embedded title tag.
 
 ## Mini player
+## Episode row — everywhere one appears  `Home/TrackRow.swift`
+
+```
+ ▢  Sleep Toolkit — Part 2                    ← 44pt thumbnail: the episode's
+ 44 Season 3 · Andrew Huberman                  own artwork, else its album's
+    41 min                                      (and the album's colour)
+ ▢  Untitled 004
+ 44 …/bible-audio/2026/ep-004.mp3             ← the path only when there is
+    18 min  ⚠ Missing                           no album and no speaker
+```
+
+Which collection, and whose voice. A folder of files often shares one embedded
+title tag, so the second line has to tell two rows apart — and the album and
+speaker do that while being worth reading, which a file path never was.
+
 
 ```
  ▁▂▃ progress hairline, 1.5pt, accent ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁

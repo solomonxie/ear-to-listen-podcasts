@@ -7,9 +7,12 @@ import Speech
 struct AppleSpeechTranscriber: SpeechTranscribing {
     let kind: TranscriptionEngineKind = .onDevice
 
-    /// A window that hasn't come back by now is stuck — the recognizer reports neither a
-    /// result nor an error in that case, so the live loop needs its own way out.
-    private static let timeoutSeconds: TimeInterval = 180
+    /// How long a window may go without a single sign of life before it's called stuck.
+    /// The recognizer reports neither a result nor an error in that case, so the loop
+    /// needs its own way out — but measured from the last revision rather than from the
+    /// start, or a long window that is working perfectly well gets cut off at the same
+    /// mark, and an app that was put away comes back to a window already declared dead.
+    private static let silenceTimeoutSeconds: TimeInterval = 60
 
     /// How long to let a freshly built recognizer settle before believing its flags.
     private static let availabilitySeconds: TimeInterval = 5
@@ -131,10 +134,15 @@ struct AppleSpeechTranscriber: SpeechTranscribing {
         let gate = RecognitionGate()
         let pace = PartialPace(minimumInterval: partialInterval)
         let heard = HeardWords()
+        let watchdog = Watchdog(timeout: silenceTimeoutSeconds) {
+            gate.finish(.failure(TranscriptionError.requestFailed))
+        }
+        defer { watchdog.stop() }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 gate.attach(continuation)
                 let task = recognizer.recognitionTask(with: request) { result, error in
+                    watchdog.touch()
                     if let error {
                         gate.finish(.failure(error))
                         return
@@ -158,9 +166,6 @@ struct AppleSpeechTranscriber: SpeechTranscribing {
                     }
                 }
                 gate.attach(task: task)
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds) {
-                    gate.finish(.failure(TranscriptionError.requestFailed))
-                }
             }
         } onCancel: {
             // The listener jumped elsewhere in the episode: this window is no longer the
@@ -243,6 +248,49 @@ private final class RecognitionGate: @unchecked Sendable {
         lock.unlock()
         task?.cancel()
         finish(.failure(CancellationError()))
+    }
+}
+
+/// Ends a window that has gone quiet. Every revision resets it, so it measures silence
+/// rather than elapsed time: a long window that's still producing is left alone, and one
+/// that stopped — the usual cause being the app suspended out from under the recognizer —
+/// gives up in a minute instead of hanging the pass.
+private final class Watchdog: @unchecked Sendable {
+    private let lock = NSLock()
+    private let timeout: TimeInterval
+    private let onTimeout: @Sendable () -> Void
+    private var lastActivity = Date()
+    private var isStopped = false
+
+    init(timeout: TimeInterval, onTimeout: @escaping @Sendable () -> Void) {
+        self.timeout = timeout
+        self.onTimeout = onTimeout
+        schedule()
+    }
+
+    func touch() {
+        lock.lock()
+        lastActivity = Date()
+        lock.unlock()
+    }
+
+    func stop() {
+        lock.lock()
+        isStopped = true
+        lock.unlock()
+    }
+
+    private func schedule() {
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout / 4) { [weak self] in
+            guard let self else { return }
+            lock.lock()
+            let stopped = isStopped
+            let quietFor = Date().timeIntervalSince(lastActivity)
+            lock.unlock()
+            guard !stopped else { return }
+            guard quietFor < timeout else { return onTimeout() }
+            schedule()
+        }
     }
 }
 

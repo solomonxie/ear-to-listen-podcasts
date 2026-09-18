@@ -153,7 +153,7 @@ enum DemoDataSeeder {
             TranscriptSegment(start: 3.43, text: "Priya Rao: And I'm Priya Rao. Today we're talking about on-device AI."),
             TranscriptSegment(start: 7.22, text: "Alex Chen: The big shift is models small enough to run locally, so nothing leaves your phone."),
             TranscriptSegment(start: 12.52, text: "Priya Rao: Which matters a lot once you're piping in personal data, like a podcast library."),
-            TranscriptSegment(start: 17.07, text: "Alex Chen: Exactly. That's the whole idea behind Bring Your Own Podcasts. Your files, your metadata, your device."),
+            TranscriptSegment(start: 17.07, text: "Alex Chen: Exactly. That's the whole idea behind Ear to Listen Podcasts. Your files, your metadata, your device."),
             TranscriptSegment(start: 25.69, text: "Priya Rao: Alright, that's our show for today. Thanks for listening."),
         ])
         try transcriptStore.save(trackID: historyTrack.id, segments: [

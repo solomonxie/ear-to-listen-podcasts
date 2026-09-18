@@ -13,7 +13,7 @@ struct AddS3ProviderView: View {
     @State private var isValidating = false
     @State private var validationError: String?
 
-    private static let setupGuideURL = URL(string: "https://github.com/solomonxie/bring-your-own-podcasts/blob/main/docs/guides/s3-bucket-setup.md")!
+    private static let setupGuideURL = URL(string: "https://github.com/solomonxie/ear-to-listen-podcasts/blob/main/docs/guides/s3-bucket-setup.md")!
 
     private var existingS3Providers: [ProviderRecord] {
         viewModel.providers.filter { $0.type == S3Provider.providerType }

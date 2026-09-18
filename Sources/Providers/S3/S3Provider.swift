@@ -186,22 +186,26 @@ struct S3Provider: CloudProvider {
     /// A folder of its own, spelled out in full: this sits in a bucket the listener
     /// browses in every S3 client they own, often years later, and ".byop" tells them
     /// nothing about which app left it there or whether it's safe to delete.
-    private var backupFolder: String { (keyPrefix ?? "") + "bring-your-own-podcasts/" }
+    private var backupFolder: String { (keyPrefix ?? "") + "ear-to-listen-podcasts/" }
 
-    /// This month's archive — see `BackupArchiveName`. Derived rather than picked, so
+    /// Where the app kept them under its old name. Read, never written — a rename must
+    /// not strand the copies already in someone's bucket.
+    private var legacyBackupFolder: String { (keyPrefix ?? "") + "bring-your-own-podcasts/" }
+
+    /// Today's archive — see `BackupArchiveName`. Derived rather than picked, so
     /// backing up and restoring still need no picker.
     private var backupKey: String { backupFolder + BackupArchiveName.current() }
 
     /// Names this backup has had before. Read-only, in order, so a copy written by any
     /// older build still restores — losing track of one means losing the library it holds.
     ///
-    /// `app-data-backup.zip` was the single file every build wrote before monthly
+    /// `app-data-backup.zip` was the single file every build wrote before dated
     /// archives; `.byop/library-backup.zip` was an abbreviation nobody could expand; the
     /// `.json` before that was a zip with a lying extension, chosen only to fall outside
     /// the old "is this an episode" filter, which `FileKind` now decides properly.
     private var legacyBackupKeys: [String] {
         [
-            backupFolder + "app-data-backup.zip",
+            legacyBackupFolder + "app-data-backup.zip",
             (keyPrefix ?? "") + ".byop/library-backup.zip",
             (keyPrefix ?? "") + "byop-backup.json",
         ]
@@ -239,8 +243,15 @@ struct S3Provider: CloudProvider {
         return nil
     }
 
+    /// The newest archive in either folder — the app's own, and the one it used to write
+    /// to. Both are listed rather than one falling back to the other: whichever holds the
+    /// most recent copy is the one to restore from.
     private func newestBackupKey() async throws -> String? {
-        let output = try await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, prefix: backupFolder))
-        return BackupArchiveName.newest(among: (output.contents ?? []).compactMap(\.key))
+        var keys: [String] = []
+        for prefix in [backupFolder, legacyBackupFolder] {
+            let output = try? await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, prefix: prefix))
+            keys += (output?.contents ?? []).compactMap(\.key)
+        }
+        return BackupArchiveName.newest(among: keys)
     }
 }

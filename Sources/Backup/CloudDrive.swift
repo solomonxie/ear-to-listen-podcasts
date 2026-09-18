@@ -27,15 +27,20 @@ enum CloudDriveError: Error, LocalizedError {
 ///
 /// Archives only — the zip `BackupService` builds, never the live SQLite file. iCloud
 /// syncs file-at-a-time and knows nothing about WAL sidecars, so pointing it at the
-/// working database buys `byopo 2.sqlite` conflict copies and corruption.
+/// working database buys `ear-to-listen 2.sqlite` conflict copies and corruption.
 ///
-/// One file per month (`BackupArchiveName`), rewritten until the month turns over. The
-/// folder is document-scope public (`NSUbiquitousContainers`, see `project.yml`) and opens
-/// in Files under "BYO Podcasts", so a zip per run would be a pile to tidy up — but a
-/// single overwritten file kept no history at all, and something deleted by mistake was
-/// backed up over before anyone noticed.
+/// One file per day (`BackupArchiveName`), and the latest ten are kept — older ones are
+/// deleted on the way past. Count, not age, because this is the tier the listener pays
+/// for: a count is what bounds the bill and what keeps a folder they open in Files from
+/// becoming a pile. Ten days back is far enough that a mistake noticed the following week
+/// still has a copy from before it.
 enum CloudDrive {
-    static let containerID = "iCloud.com.solomonxie.byopo"
+    static let containerID = "iCloud.com.solomonxie.eartolisten"
+
+    /// The container this app used under its old name. Still listed in the entitlements
+    /// and still read, so a library backed up before the rename comes back by itself —
+    /// renaming an app must not strand the copies it already took.
+    static let legacyContainerID = "iCloud.com.solomonxie.byopo"
 
     /// What every build before monthly archives wrote, read so those copies still restore.
     static let legacyBackupFileName = "byo-podcasts-backup.zip"
@@ -53,16 +58,49 @@ enum CloudDrive {
         return .notReady
     }
 
+    /// How many days back this destination keeps. The bucket is where "what did this look
+    /// like in March" lives; here, ten is what a phone's worth of mistakes needs.
+    static let keptArchives = 10
+
     static func write(_ archive: Data) async throws {
         guard let documents = documentsURL() else { throw CloudDriveError.unavailable }
         try archive.write(to: documents.appending(path: BackupArchiveName.current()), options: .atomic)
+        prune(in: documents)
+    }
+
+    /// Drops everything past the newest `keptArchives`. Undownloaded copies sit under a
+    /// hidden placeholder name, so they're ranked by the name they'll have and deleted by
+    /// the one they have now.
+    private static func prune(in documents: URL) {
+        let listed = (try? FileManager.default.contentsOfDirectory(atPath: documents.path)) ?? []
+        let onDisk = Dictionary(
+            listed.map { (realName(ofPlaceholder: $0), $0) }, uniquingKeysWith: { first, _ in first }
+        )
+        let oldestFirst = BackupArchiveName.oldestFirst(among: onDisk.keys)
+        guard oldestFirst.count > keptArchives else { return }
+        for name in oldestFirst.prefix(oldestFirst.count - keptArchives) {
+            guard let fileName = onDisk[name] else { continue }
+            try? FileManager.default.removeItem(at: documents.appending(path: fileName))
+        }
     }
 
     /// The backup, waiting for iCloud to fetch it if it's still a placeholder — which, on
     /// the fresh install this exists for, it always is.
     static func latestBackup(timeout: TimeInterval = 30) async throws -> Data? {
-        guard let documents = documentsURL() else { throw CloudDriveError.unavailable }
-        guard let fileName = newestBackupFileName(in: documents) else { return nil }
+        guard let documents = documentsURL() ?? documentsURL(of: legacyContainerID) else {
+            throw CloudDriveError.unavailable
+        }
+        guard let fileName = newestBackupFileName(in: documents) else {
+            // Nothing under the new name — look where the old one kept them.
+            guard let legacy = documentsURL(of: legacyContainerID), legacy != documents,
+                  let fileName = newestBackupFileName(in: legacy)
+            else { return nil }
+            return try await read(fileName, in: legacy, timeout: timeout)
+        }
+        return try await read(fileName, in: documents, timeout: timeout)
+    }
+
+    private static func read(_ fileName: String, in documents: URL, timeout: TimeInterval) async throws -> Data? {
         let url = documents.appending(path: fileName)
         try? FileManager.default.startDownloadingUbiquitousItem(at: url)
         let deadline = Date().addingTimeInterval(timeout)
@@ -73,7 +111,7 @@ enum CloudDrive {
         return nil
     }
 
-    /// The newest month's archive that's there — or the one older builds wrote, if that's
+    /// The newest day's archive that's there — or the one older builds wrote, if that's
     /// all there is. Undownloaded files show up under a hidden placeholder name rather
     /// than their own, so those count too; the read below is what waits for the bytes.
     private static func newestBackupFileName(in documents: URL) -> String? {
@@ -85,14 +123,14 @@ enum CloudDrive {
         return legacyBackupFileName
     }
 
-    /// `.202609-byopo.zip.icloud` is how iCloud names a file it hasn't fetched yet.
+    /// `.202609-ear-to-listen.zip.icloud` is how iCloud names a file it hasn't fetched yet.
     private static func realName(ofPlaceholder name: String) -> String {
         guard name.hasPrefix("."), name.hasSuffix(".icloud") else { return name }
         return String(name.dropFirst().dropLast(".icloud".count))
     }
 
-    private static func documentsURL() -> URL? {
-        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: containerID) else { return nil }
+    private static func documentsURL(of identifier: String? = nil) -> URL? {
+        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: identifier ?? containerID) else { return nil }
         let documents = container.appending(path: "Documents", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
         return documents

@@ -6,7 +6,7 @@ flows and copy behind those drawings; where the two disagree, `uiux/` is current
 Screens, flows, states and copy as actually built. `DESIGN.md` covers the product
 decision and options; the per-folder `README.md`s cover code structure. Reusable
 preferences extracted from this app live in the `uiux` skill
-(`my-mobile-design-guideline.bring-your-own-podcasts.md`) — this file is the concrete
+(`my-mobile-design-guideline.ear-to-listen-podcasts.md`) — this file is the concrete
 design, not the general rules.
 
 
@@ -292,7 +292,7 @@ under their own name:
 
 ```
  iCloud Drive                                         ●──
- Files / iCloud Drive / BYO Podcasts · Last: Sep 16
+ Files / iCloud Drive / Ear to Listen · Last: Sep 16
 
  iCloud Drive                                         ──○   ← disabled
  iCloud Drive is off on this device.

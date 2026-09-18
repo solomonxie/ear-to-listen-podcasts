@@ -6,19 +6,28 @@ struct PlaylistStore {
 
     func create(_ playlist: Playlist) throws {
         try dbQueue.write { db in try playlist.insert(db) }
+        ChangeLog.record("playlists", key: playlist.id, new: playlist, in: dbQueue)
     }
 
     func rename(id: String, to name: String) throws {
-        try dbQueue.write { db in
-            if var playlist = try Playlist.fetchOne(db, key: id) {
-                playlist.name = name
-                try playlist.update(db)
-            }
+        let old: String? = try dbQueue.write { db in
+            guard var playlist = try Playlist.fetchOne(db, key: id) else { return nil }
+            let old = playlist.name
+            playlist.name = name
+            try playlist.update(db)
+            return old
         }
+        guard let old else { return }
+        ChangeLog.record("playlists", key: id, old: ["name": old], new: ["name": name], in: dbQueue)
     }
 
     func delete(id: String) throws {
-        try dbQueue.write { db in _ = try Playlist.deleteOne(db, key: id) }
+        let old: Playlist? = try dbQueue.write { db in
+            let old = try Playlist.fetchOne(db, key: id)
+            _ = try Playlist.deleteOne(db, key: id)
+            return old
+        }
+        ChangeLog.record("playlists", key: id, old: old, in: dbQueue)
     }
 
     func all() throws -> [Playlist] {
@@ -29,14 +38,26 @@ struct PlaylistStore {
         try dbQueue.write { db in
             try PlaylistTrack(playlistID: playlistID, trackID: trackID, position: position).save(db)
         }
+        ChangeLog.record(
+            "playlistTracks", key: "\(playlistID)/\(trackID)",
+            new: ["position": position], in: dbQueue
+        )
     }
 
     func removeTrack(_ trackID: String, fromPlaylist playlistID: String) throws {
-        try dbQueue.write { db in
+        let old: Int? = try dbQueue.write { db in
+            let old = try PlaylistTrack
+                .filter(Column("playlistID") == playlistID && Column("trackID") == trackID)
+                .fetchOne(db)?.position
             try PlaylistTrack
                 .filter(Column("playlistID") == playlistID && Column("trackID") == trackID)
                 .deleteAll(db)
+            return old
         }
+        ChangeLog.record(
+            "playlistTracks", key: "\(playlistID)/\(trackID)",
+            old: old.map { ["position": $0] }, in: dbQueue
+        )
     }
 
     func tracks(inPlaylist playlistID: String) throws -> [Track] {
