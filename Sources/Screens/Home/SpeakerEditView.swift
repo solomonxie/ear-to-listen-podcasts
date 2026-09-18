@@ -91,6 +91,7 @@ struct SpeakerEditView: View {
                     Text("Used to transcribe this speaker's episodes. Recognizers have to be told which language to expect — they can't work it out, and the wrong one returns confident nonsense rather than failing.")
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Speaker")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -113,8 +114,7 @@ struct SpeakerEditView: View {
         photoSearchMessage = nil
         defer { isSearchingPhoto = false }
         guard let data = await SpeakerPhotoFinder.find(for: speaker.id),
-              let image = UIImage(data: data),
-              let newFileName = try? ImageFileStore.speakerPhotos.save(image, maxDimension: 400) else {
+              let newFileName = try? await ImageFileStore.speakerPhotos.save(data, maxDimension: 400) else {
             photoSearchMessage = "No artwork found on this speaker's episodes."
             return
         }
@@ -123,8 +123,9 @@ struct SpeakerEditView: View {
     }
 
     private func handlePick(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
-              let newFileName = try? ImageFileStore.speakerPhotos.save(image, maxDimension: 400) else { return }
+        guard let item, let picked = try? await item.loadTransferable(type: PickedImageFile.self) else { return }
+        defer { picked.discard() }
+        guard let newFileName = try? await ImageFileStore.speakerPhotos.save(contentsOf: picked.url, maxDimension: 400) else { return }
         // Drop a photo picked earlier in this same session but never committed via Save.
         discardIfUncommitted(photoFileName)
         photoFileName = newFileName

@@ -9,6 +9,11 @@ extension Notification.Name {
     /// next full view reload.
     static let libraryDidChange = Notification.Name("libraryDidChange")
 
+    /// Posted whenever a bookmark is added or removed. Bookmarks show in four places at
+    /// once — the player's button, Now Playing's list, the album page and Home — and none
+    /// of them owns the others.
+    static let bookmarksDidChange = Notification.Name("bookmarksDidChange")
+
     /// Posted by `SyncEngine.sync(providerRecord:)` around each per-file job it runs
     /// inline (not through `SyncQueueManager`'s own drain loop), so the queue's
     /// `@Published` state — and anything showing it — stays live during a whole-bucket

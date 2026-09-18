@@ -14,10 +14,13 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var topics: [Topic] = []
     @Published private(set) var playlists: [Playlist] = []
     @Published private(set) var years: [Int] = []
+    @Published private(set) var bookmarks: [Bookmark] = []
+    @Published private(set) var favoriteTracks: [Track] = []
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     /// Nothing synced and no sample library loaded — a fresh install, where shelves of
     /// empty headings would read as a broken screen rather than an empty one.
@@ -35,6 +38,8 @@ final class HomeLibraryViewModel: ObservableObject {
         topics = (try? libraryStore.topics()) ?? []
         playlists = (try? playlistStore.all()) ?? []
         years = (try? trackStore.years()) ?? []
+        bookmarks = (try? bookmarkStore.recent()) ?? []
+        favoriteTracks = (try? trackStore.favorites()) ?? []
 
         var downloaded: [Track] = []
         for track in tracks {
@@ -52,6 +57,12 @@ final class HomeLibraryViewModel: ObservableObject {
     }
 
     func favoriteShows() -> [Show] { shows.filter(\.isSaved) }
+
+    func track(id: String) -> Track? { tracks.first { $0.id == id } }
+
+    func refreshBookmarks() {
+        bookmarks = (try? bookmarkStore.recent()) ?? []
+    }
 
     func tracks(forShow showID: String) -> [Track] { tracks.filter { $0.showID == showID } }
     func tracks(forTopic topicID: String) -> [Track] {

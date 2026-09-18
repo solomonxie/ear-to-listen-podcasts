@@ -9,9 +9,12 @@ struct AlbumDetailView: View {
     @State private var transcribedCount = 0
     @State private var showingEdit = false
     @State private var showingAnalysis = false
+    @State private var bookmarks: [Bookmark] = []
+    @State private var editingBookmark: Bookmark?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     private var shown: Album { current ?? album }
 
@@ -70,6 +73,23 @@ struct AlbumDetailView: View {
             }
             .font(.footnote)
 
+            // Above the episode list on purpose: a moment someone marked by hand is
+            // worth more than the twentieth row of a folder listing.
+            if !bookmarks.isEmpty {
+                Section("Bookmarks") {
+                    ForEach(bookmarks) { bookmark in
+                        BookmarkRow(
+                            bookmark: bookmark,
+                            episodeTitle: tracks.first { $0.id == bookmark.trackID }?.title
+                        ) {
+                            play(bookmark)
+                        } onEdit: {
+                            editingBookmark = bookmark
+                        }
+                    }
+                }
+            }
+
             Section("Episodes") {
                 ForEach(tracks) { track in
                     Button {
@@ -95,6 +115,12 @@ struct AlbumDetailView: View {
                 }
             }
         }
+        .sheet(item: $editingBookmark) { bookmark in
+            BookmarkEditorView(bookmark: bookmark, episodeTitle: tracks.first { $0.id == bookmark.trackID }?.title)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
+            bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
+        }
         .sheet(isPresented: $showingEdit) { AlbumEditView(album: shown, artistName: artistName) }
         .sheet(isPresented: $showingAnalysis) {
             AlbumAnalysisView(album: shown, artistName: artistName, tracks: tracks)
@@ -103,6 +129,13 @@ struct AlbumDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
             Task { await load() }
         }
+    }
+
+    /// Plays the episode the mark belongs to, from the mark — the album is the queue, so
+    /// listening carries on from there.
+    private func play(_ bookmark: Bookmark) {
+        guard let track = tracks.first(where: { $0.id == bookmark.trackID }) else { return }
+        PlaybackEngine.shared.open(track: track, queue: tracks, startingAt: bookmark.position)
     }
 
     private var totalDuration: String? {
@@ -134,6 +167,7 @@ struct AlbumDetailView: View {
         tracks = (try? trackStore.tracks(forAlbum: album.id)) ?? []
         artistName = (shown.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name
         transcribedCount = AlbumMetadataSuggester().partition(tracks: tracks).ready.count
+        bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
         var downloaded = 0
         for track in tracks where await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil {
             downloaded += 1

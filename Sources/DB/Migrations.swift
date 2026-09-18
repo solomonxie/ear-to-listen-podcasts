@@ -351,6 +351,31 @@ enum Migrations {
             }
         }
 
+        // Favourites and bookmarks are the only two marks a listener leaves on an episode
+        // while listening rather than editing it: one says "this one", the other says
+        // "this moment". Bookmarks are their own table because there are many per episode
+        // and each carries its own time.
+        migrator.registerMigration("v20_favorites_and_bookmarks") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "isFavorite", .boolean).notNull().defaults(to: false)
+            }
+            try db.create(table: "bookmarks") { t in
+                t.column("id", .text).primaryKey()
+                t.column("trackID", .text).notNull().indexed()
+                    .references("tracks", onDelete: .cascade)
+                t.column("positionMs", .integer).notNull()
+                t.column("note", .text)
+                // Comma-separated, like the tags on a photo — a table of its own for two
+                // words per bookmark would be a join nobody reads.
+                t.column("tags", .text)
+                // The words that were being spoken there, copied at the moment the mark
+                // was made and editable afterwards: the transcript may be re-run, and the
+                // point of the mark is what was said, not what the recogniser now thinks.
+                t.column("transcriptText", .text)
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

@@ -8,15 +8,17 @@ struct ContentView: View {
             HomeView()
         }
         .safeAreaInset(edge: .bottom) {
-            MiniPlayerBar(showingNowPlaying: $engine.isPresentingPlayer)
+            // Hidden behind the player, where it would be a second copy of the same
+            // controls sitting on top of the real ones.
+            if !engine.isPresentingPlayer {
+                MiniPlayerBar(showingNowPlaying: $engine.isPresentingPlayer)
+            }
         }
         // One place presents the player, so tapping an episode behaves the same wherever
-        // you tapped it.
-        .sheet(isPresented: $engine.isPresentingPlayer) {
+        // you tapped it. A whole page rather than a card: it holds a full transcript, and
+        // a sheet's downward drag fought the text under the finger for every swipe.
+        .fullScreenCover(isPresented: $engine.isPresentingPlayer) {
             RealPlayerView()
-                // Without a handle there's nothing to grab, and with a transcript under
-                // the finger a downward drag scrolls the text rather than dismissing.
-                .presentationDragIndicator(.visible)
         }
         .preferredColorScheme(.dark)
     }

@@ -126,6 +126,7 @@ struct EpisodeEditView: View {
                         .textSelection(.enabled)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Episode")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -177,8 +178,9 @@ struct EpisodeEditView: View {
     }
 
     private func handlePick(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
-              let newFileName = try? ImageFileStore.artwork.save(image, maxDimension: 800) else { return }
+        guard let item, let picked = try? await item.loadTransferable(type: PickedImageFile.self) else { return }
+        defer { picked.discard() }
+        guard let newFileName = try? await ImageFileStore.artwork.save(contentsOf: picked.url, maxDimension: 800) else { return }
         // Drop artwork picked earlier in this same session but never committed via Save.
         discardIfUncommitted(artworkFileName)
         artworkFileName = newFileName

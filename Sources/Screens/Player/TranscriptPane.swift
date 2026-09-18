@@ -1,11 +1,12 @@
 import SwiftUI
 
 /// Lyric-style transcript: the line being spoken is the only bright one, it scrolls
-/// itself, tapping a line plays from there, and the pencil beside it corrects the text.
+/// itself, tapping a line plays from there and reads along, and the pencil beside it
+/// corrects the text.
 ///
-/// The controls sit flat above the lines rather than inside a menu. There are only five
-/// of them, they're the ones you reach for while listening, and a menu made every one of
-/// them a tap-and-hunt — worse, it hid whether anything was running at all.
+/// The controls sit flat above the lines rather than inside a menu — three buttons whose
+/// look is their state, since a menu made each one a tap-and-hunt and hid whether
+/// anything was running at all.
 struct TranscriptPane: View {
     @ObservedObject var transcript = LiveTranscript.shared
     let currentTime: TimeInterval
@@ -21,7 +22,6 @@ struct TranscriptPane: View {
     let onFollow: () -> Void
     let onSeek: (TimeInterval) -> Void
 
-    @ObservedObject private var languages = OnDeviceLanguages.shared
     @State private var editing: TranscriptSegment?
     @State private var showingEdits = false
     @State private var confirmingReload = false
@@ -56,13 +56,11 @@ struct TranscriptPane: View {
         } message: {
             Text("Throws away the stored transcript and starts over. Your corrections are kept — they're used as hints for the new pass.")
         }
-        .task { await languages.refreshIfNeeded() }
     }
 
-    /// Every option, in view, in a fixed place. The switch reads as the state it is —
-    /// nothing is transcribed until it's on, for this episode only — and the settings it
-    /// governs sit under it, dimmed while it's off rather than hidden, so the screen
-    /// doesn't reflow as you flip it.
+    /// Three buttons and a recogniser, in view and in a fixed place. Icons rather than a
+    /// column of rows: these are reached for mid-listen, they sit above a page of text,
+    /// and each one is a state you need to see at a glance — on, running ahead, following.
     private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -72,21 +70,41 @@ struct TranscriptPane: View {
                     Button("\(transcript.edits.count) edit\(transcript.edits.count == 1 ? "" : "s")") { showingEdits = true }
                         .font(.caption)
                 }
+                Button("Transcribe again…") { confirmingReload = true }
+                    .font(.caption)
+                    .disabled(transcript.track == nil)
             }
 
-            // A button, not a switch: it starts a pass over this episode, which then runs
-            // until it's done or stopped. A switch implies a setting that sticks, and
-            // this one is deliberately forgotten when the next episode opens.
-            Button {
-                transcript.isLiveEnabled.toggle()
-            } label: {
-                Label(
-                    transcript.isLiveEnabled ? "Stop live transcript" : "Live transcript this episode",
-                    systemImage: transcript.isLiveEnabled ? "stop.circle" : "waveform"
-                )
-                .font(.subheadline)
+            HStack(spacing: 10) {
+                // The captions button everyone already knows, doing what it looks like:
+                // turning the words on for this episode. Deliberately forgotten when the
+                // next episode opens — see `isLiveEnabled`.
+                TranscriptControlButton(
+                    title: transcript.isLiveEnabled ? "Subtitles on" : "Subtitles",
+                    systemImage: transcript.isLiveEnabled ? "captions.bubble.fill" : "captions.bubble",
+                    isOn: transcript.isLiveEnabled
+                ) { transcript.isLiveEnabled.toggle() }
+                    .disabled(transcript.track == nil)
+
+                // Transcribing otherwise follows the episode, so one you walked away from
+                // stops costing battery. This is how you ask for the rest of it now — and
+                // the same button is how you stop it again.
+                TranscriptControlButton(
+                    title: transcript.isRunningAhead ? "Pause" : (transcript.coverageFraction > 0 ? "Finish all" : "Whole episode"),
+                    systemImage: transcript.isRunningAhead ? "pause.fill" : "bolt.fill",
+                    isOn: transcript.isRunningAhead
+                ) { transcript.toggleWholeEpisode() }
+                    .disabled(transcript.track == nil || transcript.isComplete)
+
+                TranscriptControlButton(
+                    title: isFollowing ? "Following" : "Follow",
+                    systemImage: isFollowing ? "location.fill" : "location",
+                    isOn: isFollowing
+                ) { onFollow() }
+                    .disabled(isFollowing || transcript.lines.isEmpty)
+
+                Spacer(minLength: 0)
             }
-            .disabled(transcript.track == nil)
 
             Picker("Recogniser", selection: engineSelection) {
                 ForEach(TranscriptionEngineKind.allCases, id: \.self) { kind in
@@ -95,61 +113,12 @@ struct TranscriptPane: View {
             }
             .pickerStyle(.segmented)
             .disabled(!transcript.isLiveEnabled)
-
-            HStack(spacing: 12) {
-                // Still a menu: it's a list of every language the phone can recognise,
-                // which is a picker, not a row of buttons. Value-only and `Equatable`
-                // because this pane redraws several times a second while a window is
-                // being recognised, and SwiftUI shuts a `Menu` it rebuilds underneath.
-                TranscriptLanguageMenu(
-                    localeIdentifier: transcript.track?.language,
-                    inheritedLabel: inheritedLanguageLabel,
-                    readyLanguages: languages.ready,
-                    hasCheckedLanguages: languages.hasChecked
-                )
-                .equatable()
-                Spacer()
-                Button("Transcribe again…") { confirmingReload = true }
-                    .font(.caption)
-                    .disabled(transcript.track == nil)
-            }
-
-            // Following playback is the default, so the episode you walked away from
-            // stops costing battery. Running ahead is the deliberate choice.
-            Toggle("Keep transcribing while paused", isOn: pausedSelection)
-                .font(.footnote)
-                .disabled(!transcript.isLiveEnabled)
-
-            // A button rather than a switch, because it's a place to go, not a mode:
-            // it scrolls to the line being spoken and keeps up from there, and any
-            // scroll of your own — or Back to top — hands the page back to you.
-            Button {
-                onFollow()
-            } label: {
-                Label(isFollowing ? "Following the transcript" : "Follow the transcript",
-                      systemImage: isFollowing ? "location.fill" : "location")
-                    .font(.footnote)
-            }
-            .disabled(isFollowing || transcript.lines.isEmpty)
         }
         .padding(.horizontal)
     }
 
     private var engineSelection: Binding<TranscriptionEngineKind> {
         Binding(get: { transcript.engineKind }, set: { transcript.engineKind = $0 })
-    }
-
-    /// What this episode falls back to without a language of its own — its album's, then
-    /// its speaker's. Named so the menu can say whose answer it's inheriting.
-    private var inheritedLanguageLabel: String {
-        guard let inherited = transcript.inheritedLanguage, inherited.source != .episode else {
-            return "automatic"
-        }
-        return "\(TranscriptPane.languageName(Locale(identifier: inherited.identifier))) · \(inherited.source.displayName)"
-    }
-
-    private var pausedSelection: Binding<Bool> {
-        Binding(get: { transcript.runsWhilePaused }, set: { transcript.runsWhilePaused = $0 })
     }
 
     private var status: LocalizedStringKey? {
@@ -181,12 +150,20 @@ struct TranscriptPane: View {
             return "Working through \(Scrubber.formatted(window.start))–\(Scrubber.formatted(window.end)) — lines appear as they're recognised. Nothing yet means no speech has been made out so far."
         }
         if transcript.isWaitingForPlayback {
-            return "Waiting for playback — transcribing follows the episode. Turn on \u{201C}Keep transcribing while paused\u{201D} above to let it run ahead on its own."
+            return "Waiting for playback — transcribing follows the episode. Tap \u{201C}Whole episode\u{201D} above to let it run ahead on its own."
         }
         if transcript.isLiveEnabled {
             return "Listening from where you are — lines appear as they're recognised."
         }
-        return "Off for this episode — tap \u{201C}Live transcript this episode\u{201D} above to start one. Anything transcribed before, or a transcript file sitting beside the episode, still shows here either way."
+        return "Off for this episode — tap Subtitles above to start one. Anything transcribed before, or a transcript file sitting beside the episode, still shows here either way."
+    }
+
+    /// Tapping a line is "read along from here", not just "seek here" — it jumps
+    /// playback to the line and hands the page back to the transcript, which is what
+    /// everyone reaches for next anyway.
+    private func play(from segment: TranscriptSegment) {
+        onSeek(segment.start)
+        isFollowing = true
     }
 
     @ViewBuilder private var lines: some View {
@@ -199,15 +176,24 @@ struct TranscriptPane: View {
             // Inside the page's scroller it would otherwise collapse to nothing.
             .frame(minHeight: 220)
         } else {
+            // Looked up once for the whole list, not once per row: while a transcription
+            // is running this list is rebuilt several times a second, and "am I the line
+            // being spoken?" asked per row was the difference between a page that scrolls
+            // and a page that stutters.
+            let spokenStart = transcript.currentLine(at: currentTime)?.start
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(transcript.lines) { segment in
                     TranscriptLine(
                         segment: segment,
-                        isCurrent: segment.start == transcript.currentLine(at: currentTime)?.start,
+                        isCurrent: segment.start == spokenStart,
                         isProvisional: transcript.isProvisional(segment),
-                        onPlay: { onSeek(segment.start) },
+                        onPlay: { play(from: segment) },
                         onEdit: { editing = segment }
                     )
+                    // Nothing but the text, the highlight and the "still being revised"
+                    // flag can change a row, so a redraw of the list leaves settled rows
+                    // alone instead of rebuilding hundreds of them.
+                    .equatable()
                     .id(segment.start)
                 }
                 // One view with one identity, however often the words inside it change.
@@ -215,6 +201,7 @@ struct TranscriptPane: View {
                 // revision — several times a second — and nothing would hold still.
                 if !transcript.volatilePhrases.isEmpty {
                     VolatileTail(phrases: transcript.volatilePhrases)
+                        .equatable()
                         .id(Self.volatileRowID)
                 }
             }
@@ -227,75 +214,13 @@ struct TranscriptPane: View {
     }
 }
 
-/// The language the recognizer should expect. Value-only and `Equatable` on purpose: the
-/// pane redraws several times a second while a window is being recognised, and SwiftUI
-/// shuts an open `Menu` whose content it rebuilds — which made this impossible to reach
-/// at exactly the moment you'd want it. Writes go straight to the shared `LiveTranscript`
-/// rather than through a binding, since a binding would defeat the equality check.
-private struct TranscriptLanguageMenu: View, Equatable {
-    /// This episode's own answer, not the app's — the pane is the place someone has just
-    /// heard the audio, so what they pick here belongs to the episode and outranks the
-    /// album's and the speaker's.
-    let localeIdentifier: String?
-    let inheritedLabel: String
-    /// BCP-47 languages this phone can recognise offline, so the picker can say so before
-    /// you pick one rather than after it fails.
-    let readyLanguages: Set<String>
-    let hasCheckedLanguages: Bool
-
-    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.localeIdentifier == rhs.localeIdentifier
-            && lhs.inheritedLabel == rhs.inheritedLabel
-            && lhs.hasCheckedLanguages == rhs.hasCheckedLanguages
-            && lhs.readyLanguages == rhs.readyLanguages
-    }
-
-    var body: some View {
-        Menu {
-            // The phone's language says nothing about the episode's, and picking the
-            // wrong recognizer doesn't fail — it returns confident nonsense forever.
-            Picker("Language", selection: languageSelection) {
-                Text("Inherit (\(inheritedLabel))").tag(String?.none)
-                ForEach(orderedLocales, id: \.identifier) { locale in
-                    Text(label(for: locale)).tag(String?.some(locale.identifier(.bcp47)))
-                }
-            }
-        } label: {
-            Label("Language: \(languageLabel)", systemImage: "globe")
-                .font(.caption)
-        }
-    }
-
-    private var languageLabel: String {
-        guard let localeIdentifier else { return inheritedLabel }
-        return TranscriptPane.languageName(Locale(identifier: localeIdentifier))
-    }
-
-    /// Languages with a model already on this phone come first — that's the practical
-    /// difference between a choice that works offline and one that has to download first.
-    private var orderedLocales: [Locale] {
-        let all = AppleSpeechTranscriber.supportedLocales
-        guard hasCheckedLanguages else { return all }
-        let ready = all.filter { readyLanguages.contains($0.identifier(.bcp47)) }
-        return ready + all.filter { !readyLanguages.contains($0.identifier(.bcp47)) }
-    }
-
-    private func label(for locale: Locale) -> String {
-        let name = TranscriptPane.languageName(locale)
-        guard hasCheckedLanguages else { return name }
-        return readyLanguages.contains(locale.identifier(.bcp47)) ? "\(name) · on this iPhone" : name
-    }
-
-    private var languageSelection: Binding<String?> {
-        Binding(get: { localeIdentifier }, set: { LiveTranscript.shared.setEpisodeLanguage($0) })
-    }
-}
-
 /// The words the recognizer hasn't finished with. Rendered as one block rather than a row
 /// per phrase so it keeps a single identity in the list — it is rewritten several times a
 /// second, and anything keyed off its contents would thrash. No timestamps and no tap
 /// target, because none of it is settled enough to seek to.
-private struct VolatileTail: View {
+private struct VolatileTail: View, Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.phrases == rhs.phrases }
+
     let phrases: [String]
 
     var body: some View {
@@ -316,7 +241,13 @@ private struct VolatileTail: View {
     }
 }
 
-private struct TranscriptLine: View {
+private struct TranscriptLine: View, Equatable {
+    /// Closures are left out of the comparison on purpose: they only ever capture this
+    /// row's own segment and the pane's state, both of which survive a skipped redraw.
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.segment == rhs.segment && lhs.isCurrent == rhs.isCurrent && lhs.isProvisional == rhs.isProvisional
+    }
+
     let segment: TranscriptSegment
     let isCurrent: Bool
     /// Still being revised by the engine — shown so text arrives as it's heard, but not
@@ -468,5 +399,34 @@ private struct TranscriptEditsView: View {
         case .removed: return Text(token.text).foregroundColor(.red).strikethrough()
         case .added: return Text(token.text).foregroundColor(.green)
         }
+    }
+}
+
+/// One of the three transcript buttons: an icon that lights up when its state is on, with
+/// the word under it. Sized like a transport control rather than a list row — they sit
+/// above a page of text and get tapped mid-listen.
+private struct TranscriptControlButton: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    let isOn: Bool
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage).font(.subheadline)
+                Text(title).font(.caption2)
+            }
+            .frame(minWidth: 72)
+            .padding(.vertical, 8)
+            .background(isOn ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(.ultraThinMaterial),
+                        in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(isOn ? Color.accentColor.opacity(0.5) : .clear))
+            .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.primary))
+            .opacity(isEnabled ? 1 : 0.4)
+        }
+        .buttonStyle(.plain)
     }
 }
