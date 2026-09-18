@@ -27,13 +27,16 @@ that don't post it. Two destinations, each its own switch:
 - **iCloud Drive** (`CloudDrive`) — the one with nothing to set up, so it's the
   default offer, and the one that outlives deleting the app. Archives only,
   never the live SQLite file: iCloud syncs file-at-a-time and knows nothing
-  about WAL sidecars. One file, `Documents/byo-podcasts-backup.zip`,
-  overwritten every run: the job is surviving a reinstall, not keeping a
-  history, and the folder is document-scope public
-  (`NSUbiquitousContainers`) — somewhere the listener opens in Files, where a
-  pile of dated zips is something to tidy up rather than to restore. A fresh
-  install finds it as an undownloaded placeholder, so the read asks iCloud for
-  it and waits.
+  about WAL sidecars. One file per calendar month
+  (`Documents/202609-byopo.zip`, see `BackupArchiveName`), rewritten every run
+  until the month turns over: a single overwritten file kept no history, so a
+  mistake noticed a week later had already been backed up over, while a zip per
+  run turns a document-scope-public folder (`NSUbiquitousContainers`) the
+  listener opens in Files into a pile to tidy up. The name is the sort order —
+  zero-padded month first — so "newest archive" is `max()` over the names, with
+  no dates to parse. A fresh install finds it as an undownloaded placeholder
+  (listed under a hidden `.<name>.icloud`), so the read asks iCloud for it and
+  waits. The old single file is still read when it's all that's there.
   `CloudDriveStatus` splits "unavailable" into the four causes that need four
   different things said (`notEntitled` / `driveOff` / `notReady` / `ready`),
   checking the build's entitlement *before* `ubiquityIdentityToken` — that
@@ -44,8 +47,11 @@ that don't post it. Two destinations, each its own switch:
 
 Two manual front ends, same archive format, in `Sources/Screens/Settings`:
 - Export/Import: `.fileExporter`/`.fileImporter` — user picks the `.zip` file.
-- Backup/Restore: `S3Provider.uploadBackup`/`downloadBackup` — fixed key in
-  the active S3 provider's bucket, no picker.
+- Backup/Restore: `S3Provider.uploadBackup`/`downloadBackup` — derived key in
+  the active S3 provider's bucket, no picker:
+  `bring-your-own-podcasts/<YYYYMM>-byopo.zip`. Restore lists that folder and
+  takes the newest month (a device back from a reinstall hasn't written this
+  month's yet), then falls back to the keys older builds wrote.
 
 ## Coming Back After a Reinstall
 
