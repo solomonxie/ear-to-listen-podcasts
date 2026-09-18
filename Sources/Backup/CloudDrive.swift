@@ -29,13 +29,16 @@ enum CloudDriveError: Error, LocalizedError {
 /// syncs file-at-a-time and knows nothing about WAL sidecars, so pointing it at the
 /// working database buys `byopo 2.sqlite` conflict copies and corruption.
 ///
-/// One file, overwritten every time. The job is to survive deleting the app, not to keep
-/// a history — and the folder is document-scope public (`NSUbiquitousContainers`, see
-/// `project.yml`), so it opens in Files under "BYO Podcasts", where a pile of dated
-/// near-identical zips would be something to tidy up rather than something to restore.
+/// One file per month (`BackupArchiveName`), rewritten until the month turns over. The
+/// folder is document-scope public (`NSUbiquitousContainers`, see `project.yml`) and opens
+/// in Files under "BYO Podcasts", so a zip per run would be a pile to tidy up — but a
+/// single overwritten file kept no history at all, and something deleted by mistake was
+/// backed up over before anyone noticed.
 enum CloudDrive {
     static let containerID = "iCloud.com.solomonxie.byopo"
-    static let backupFileName = "byo-podcasts-backup.zip"
+
+    /// What every build before monthly archives wrote, read so those copies still restore.
+    static let legacyBackupFileName = "byo-podcasts-backup.zip"
 
     /// `nonisolated async` throughout: resolving the container and reading it hit the
     /// filesystem and iCloud's daemon, which is not something to do on the main actor.
@@ -52,15 +55,15 @@ enum CloudDrive {
 
     static func write(_ archive: Data) async throws {
         guard let documents = documentsURL() else { throw CloudDriveError.unavailable }
-        try archive.write(to: documents.appending(path: backupFileName), options: .atomic)
+        try archive.write(to: documents.appending(path: BackupArchiveName.current()), options: .atomic)
     }
 
     /// The backup, waiting for iCloud to fetch it if it's still a placeholder — which, on
     /// the fresh install this exists for, it always is.
     static func latestBackup(timeout: TimeInterval = 30) async throws -> Data? {
         guard let documents = documentsURL() else { throw CloudDriveError.unavailable }
-        let url = documents.appending(path: backupFileName)
-        guard FileManager.default.fileExists(atPath: url.path) || placeholderExists(for: url) else { return nil }
+        guard let fileName = newestBackupFileName(in: documents) else { return nil }
+        let url = documents.appending(path: fileName)
         try? FileManager.default.startDownloadingUbiquitousItem(at: url)
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
@@ -68,6 +71,24 @@ enum CloudDrive {
             try? await Task.sleep(for: .milliseconds(500))
         } while Date() < deadline && !Task.isCancelled
         return nil
+    }
+
+    /// The newest month's archive that's there — or the one older builds wrote, if that's
+    /// all there is. Undownloaded files show up under a hidden placeholder name rather
+    /// than their own, so those count too; the read below is what waits for the bytes.
+    private static func newestBackupFileName(in documents: URL) -> String? {
+        let listed = (try? FileManager.default.contentsOfDirectory(atPath: documents.path)) ?? []
+        let names = listed.map(realName(ofPlaceholder:))
+        if let newest = BackupArchiveName.newest(among: names) { return newest }
+        let legacy = documents.appending(path: legacyBackupFileName)
+        guard FileManager.default.fileExists(atPath: legacy.path) || placeholderExists(for: legacy) else { return nil }
+        return legacyBackupFileName
+    }
+
+    /// `.202609-byopo.zip.icloud` is how iCloud names a file it hasn't fetched yet.
+    private static func realName(ofPlaceholder name: String) -> String {
+        guard name.hasPrefix("."), name.hasSuffix(".icloud") else { return name }
+        return String(name.dropFirst().dropLast(".icloud".count))
     }
 
     private static func documentsURL() -> URL? {

@@ -38,9 +38,9 @@ struct SettingsSectionView: View {
             return "Files / iCloud Drive / BYO Podcasts. Switch on to keep a copy that outlives deleting the app."
         }
         guard let lastBackupAt = autoBackup.lastCloudDriveBackupAt else {
-            return "Files / iCloud Drive / BYO Podcasts"
+            return "Files / iCloud Drive / BYO Podcasts · \(BackupArchiveName.current())"
         }
-        return "Files / iCloud Drive / BYO Podcasts · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
+        return "Files / iCloud Drive / BYO Podcasts · \(BackupArchiveName.current()) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
     }
 
     private func loadDemoData() {
@@ -61,7 +61,7 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
                     title: "SYNC & BACKUP",
-                    info: "Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync."
+                    info: "Every copy holds your playlists, source list, transcripts and corrections, and any speaker or episode edits with their images — a .zip, never your episode files and never your keys. One archive per calendar month (202609-byopo.zip), rewritten as the month goes on, so last month's copy is still there when this month's has eaten something. Deleting and reinstalling the app puts it back by itself: iCloud first, then the bucket if it's keeping app data. It's a backup, not a link between phones — restoring adds to this device, it doesn't merge two. Playlist tracks, edits and transcripts re-link themselves as the files they name come back in on the next sync."
                 )
 
                 // A destination is one switch and nothing else: on means every change
@@ -91,7 +91,7 @@ struct SettingsSectionView: View {
                     isPresented: $showingExportPicker,
                     document: exportDocument,
                     contentType: .zip,
-                    defaultFilename: "bring-your-own-podcasts-backup"
+                    defaultFilename: BackupArchiveName.base()
                 ) { _ in exportDocument = nil }
 
                 Button {
