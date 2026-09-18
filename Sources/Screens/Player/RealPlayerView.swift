@@ -36,6 +36,7 @@ struct RealPlayerView: View {
     private static let topAnchor = "player.top"
     private static let bottomAnchor = "player.bottom"
     private static let transcriptAnchor = "player.transcript"
+    private static let railHandleSize: CGFloat = 46
     /// Read, never observed. A running transcription republishes several times a second,
     /// and observing it here redrew the artwork, the transport and the whole details card
     /// along with the text — which is what made the page flash while transcribing. The
@@ -177,6 +178,9 @@ struct RealPlayerView: View {
             .background { scrollProbe }
         }
         .coordinateSpace(name: Self.scrollSpace)
+        // The page draws its own bar below; the system's would sit a few points
+        // beside it, two indicators of different lengths down the same edge.
+        .scrollIndicators(.hidden)
         // How much of the page fits at once — half of what the rail needs to know. An
         // overlay rather than a wrapper so nothing about the layout changes to measure it.
         .overlay {
@@ -385,43 +389,39 @@ struct RealPlayerView: View {
         }
     }
 
-    /// The page's own scrollbar: where the reader is, and a way to get somewhere else
+    /// The page's own scroller: where the reader is, and a way to get somewhere else
     /// quickly on a page that runs to hundreds of lines. Measured from the scroll view
     /// rather than guessed from the transcript, so it means the same thing on an episode
     /// with no text at all.
     ///
-    /// Nothing but the bar itself — no track behind it, no ridges on it. It sits over a
-    /// page of text people are reading, and anything more decorative competes with the
-    /// words. It appears while the page is moving and fades a moment after it stops.
+    /// A handle you can see and hit, not a hairline: a 3pt bar down the edge of a page of
+    /// text was there in principle and unfindable in practice. It never leaves while the
+    /// page is long enough to need it — it only dims once the page has been still a few
+    /// seconds, so it stops pulling at the eye without going away on the reader.
     @ViewBuilder
     private func scrollRail(_ proxy: ScrollViewProxy) -> some View {
-        // Nothing to drag on a page that fits, and a bar as long as its own travel is just
-        // furniture.
+        // Nothing to drag on a page that fits.
         if contentHeight > viewportHeight + 120 {
             GeometryReader { geometry in
                 let height = geometry.size.height
-                // As long a bar as the page is short, the way every scrollbar does it,
-                // with a floor so it stays catchable on a very long transcript.
-                let barHeight = max(44, height * min(1, viewportHeight / max(contentHeight, 1)))
+                let travel = max(height - Self.railHandleSize, 1)
                 let isDragging = railFraction != nil
                 Color.clear
                     .overlay(alignment: .top) {
-                        Capsule()
-                            .fill(isDragging ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
-                            .frame(width: 4, height: barHeight)
+                        railHandle(isDragging: isDragging)
                             .frame(maxWidth: .infinity, alignment: .trailing)
-                            .offset(y: (height - barHeight) * (railFraction ?? scrollFraction))
+                            .offset(y: travel * (railFraction ?? scrollFraction))
                             .animation(.easeOut(duration: 0.15), value: isDragging)
                     }
-                    // The hit area is the whole 36pt strip, not the 4pt bar: one you have
-                    // to hit exactly is one nobody uses.
+                    // The hit area is the whole strip beside the handle too: a control you
+                    // have to hit exactly is one nobody uses.
                     .contentShape(Rectangle())
                     .highPriorityGesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
                                 // Held by its middle wherever it's caught, so the page
                                 // doesn't jump on the first touch.
-                                let fraction = (value.location.y - barHeight / 2) / max(height - barHeight, 1)
+                                let fraction = (value.location.y - Self.railHandleSize / 2) / travel
                                 railFraction = min(max(fraction, 0), 1)
                                 isFollowingTranscript = false
                                 showRail()
@@ -433,19 +433,40 @@ struct RealPlayerView: View {
                             }
                     )
             }
-            .frame(width: 36)
-            .padding(.trailing, 3)
+            .frame(width: 56)
+            .padding(.trailing, 4)
             .padding(.vertical, 60)
-            .opacity(isRailShowing ? 1 : 0)
-            .animation(.easeInOut(duration: 0.25), value: isRailShowing)
-            // Restarted by every scroll — `task(id:)` cancels the pending hide, so the bar
-            // stays up for as long as the page keeps moving.
+            // Dimmed, never gone: a control that vanishes is one you have to make reappear
+            // before you can use it, and scrolling to find the thing that scrolls is silly.
+            .opacity(isRailShowing ? 1 : 0.4)
+            .animation(.easeInOut(duration: 0.4), value: isRailShowing)
+            // Restarted by every scroll — `task(id:)` cancels the pending dim, so the
+            // handle stays up for as long as the page keeps moving.
             .task(id: scrollTick) {
                 guard isRailShowing else { return }
-                try? await Task.sleep(nanoseconds: 1_400_000_000)
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 if railFraction == nil { isRailShowing = false }
             }
         }
+    }
+
+    /// Big enough to find and to hold: a thumb-sized disc carrying the one gesture it
+    /// takes — drag me up or down. It takes the accent colour under a finger, where the
+    /// disc itself is hidden by the hand holding it and only its colour still reads.
+    private func railHandle(isDragging: Bool) -> some View {
+        Image(systemName: "arrow.up.and.down")
+            .font(.footnote.weight(.bold))
+            .foregroundStyle(isDragging ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+            .frame(width: Self.railHandleSize, height: Self.railHandleSize)
+            .background {
+                Circle()
+                    .fill(isDragging ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Material.ultraThin))
+                    .overlay(Circle().stroke(.quaternary))
+                    .shadow(color: .black.opacity(0.18), radius: isDragging ? 6 : 3, y: 1)
+            }
+            .scaleEffect(isDragging ? 1.1 : 1)
+            .accessibilityLabel("Scroll the page")
+            .accessibilityHint("Drag up or down to move through the episode")
     }
 
     /// Where the page can actually be sent: its two ends, and every transcript line in
