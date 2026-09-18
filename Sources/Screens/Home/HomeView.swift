@@ -17,10 +17,12 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 28) {
                 if !query.isEmpty {
                     searchResults
-                } else if homeData.isEmpty {
-                    emptyLibrary
                 } else {
-                    homeShelves
+                    if homeData.isEmpty {
+                        emptyLibrary
+                    } else {
+                        homeShelves
+                    }
                     Divider().padding(.horizontal)
                     RemoteSectionView(viewModel: settings)
                     Divider().padding(.horizontal)
@@ -78,7 +80,7 @@ struct HomeView: View {
             }
             .buttonStyle(.bordered)
         }
-        .frame(minHeight: 320)
+        .frame(minHeight: 260)
     }
 
     @ViewBuilder
@@ -370,12 +372,13 @@ private struct TrackCard: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
-                ArtworkTile(track: track, symbolSize: 34)
+                ArtworkTile(track: track, album: LibraryNames.shared.album(track.albumID), symbolSize: 34)
                     .frame(width: 160, height: 90)
                 Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                 // Same reason as `TrackRow`'s: the title alone can be shared by a whole
-                // folder of files.
-                Text(TrackRow.fileName(for: track))
+                // folder of files. Which collection and whose voice says it better than a
+                // filename, and is the thing a shelf card is short of room to say twice.
+                Text(LibraryNames.shared.subtitle(for: track) ?? TrackRow.fileName(for: track))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
