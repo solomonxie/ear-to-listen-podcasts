@@ -7,7 +7,7 @@ import SwiftUI
 /// Value-only and `Equatable` on purpose: the page redraws several times a second while a
 /// window is being recognised, and SwiftUI shuts an open `Menu` whose content it rebuilds
 /// — which made this impossible to reach at exactly the moment you'd want it. Writes go
-/// straight to the shared `LiveTranscript` rather than through a binding, since a binding
+/// straight to the shared `TranscriptRunner` rather than through a binding, since a binding
 /// would defeat the equality check.
 struct TranscriptLanguageMenu: View, Equatable {
     /// This episode's own answer, not the app's — someone editing here has just heard the
@@ -65,7 +65,7 @@ struct TranscriptLanguageMenu: View, Equatable {
     }
 
     private var languageSelection: Binding<String?> {
-        Binding(get: { localeIdentifier }, set: { LiveTranscript.shared.setEpisodeLanguage($0) })
+        Binding(get: { localeIdentifier }, set: { TranscriptRunner.shared.setEpisodeLanguage($0) })
     }
 }
 
@@ -73,7 +73,7 @@ struct TranscriptLanguageMenu: View, Equatable {
 extension TranscriptLanguageMenu {
     /// The menu as the currently-playing episode needs it: the app's own record of which
     /// languages are downloaded, and whose answer this episode would inherit.
-    init(playing: LiveTranscript, languages: OnDeviceLanguages) {
+    init(playing: TranscriptRunner, languages: OnDeviceLanguages) {
         let inherited = playing.inheritedLanguage
         let label: String
         if let inherited, inherited.source != .episode {

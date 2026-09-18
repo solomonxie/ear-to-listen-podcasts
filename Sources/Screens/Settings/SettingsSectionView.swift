@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var autoBackup = AutoBackup.shared
-    @ObservedObject private var transcript = LiveTranscript.shared
+    @ObservedObject private var transcript = TranscriptRunner.shared
     @EnvironmentObject private var language: AppLanguageStore
     @State private var showingResetConfirmation = false
     @State private var showingRemoveDemoConfirmation = false
@@ -179,9 +179,9 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
                     title: "TRANSCRIPTS",
-                    info: "Transcribing spends battery on this device, or money through an AI key, so it's off unless asked for. With this on, every episode you play is transcribed as it goes; you can still stop any one episode from its own page. Transcripts already made, and any transcript file sitting beside the audio, are shown either way."
+                    info: "Transcribing spends battery on this device, or money through an AI key, so it's off unless asked for. With this on, opening an episode with no transcript starts an on-device pass over the whole of it in the background; you can stop it from that episode's own page, and the AI recogniser is always asked for by hand. Transcripts already made, and any transcript file sitting beside the audio, are shown either way."
                 )
-                Toggle("Transcribe every episode as you listen", isOn: $transcript.startsAutomatically)
+                Toggle("Transcribe every episode automatically", isOn: $transcript.startsAutomatically)
                 Text(transcript.startsAutomatically ? "On for every episode." : "Only the episodes you ask for.")
                     .sectionHint()
             }

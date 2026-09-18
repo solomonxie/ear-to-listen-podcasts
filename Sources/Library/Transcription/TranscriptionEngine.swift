@@ -16,6 +16,15 @@ enum TranscriptionEngineKind: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// How each one reads as a button: a phone for the one that runs on it, sparkles for
+    /// the one that goes off to a vendor.
+    var symbolName: String {
+        switch self {
+        case .onDevice: return "iphone"
+        case .openAIWhisper: return "sparkles"
+        }
+    }
+
     var detail: String {
         switch self {
         case .onDevice: return "Apple's built-in recognizer. Free, offline, nothing added to the app's size."

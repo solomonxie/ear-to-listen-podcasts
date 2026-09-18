@@ -138,28 +138,12 @@ struct EpisodeDetailsPane: View {
 
     @ViewBuilder
     private var episodeFields: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Room under the thumbnail for the camera badge, which hangs past its corner.
-            VStack(spacing: 8) {
-                PhotosPicker(selection: $artworkItem, matching: .images) {
-                    ArtworkThumbnail(fileName: track.artworkFileName, seed: track.id)
-                }
-                .buttonStyle(.plain)
-                // Spelled out under the picture rather than hidden in a long-press menu:
-                // a picture picked by mistake is the commonest thing to want undone, and
-                // nobody long-presses to find out what an app can do.
-                if track.artworkFileName != nil {
-                    Button("Remove", role: .destructive) { setArtwork(nil) }
-                        .font(.caption2)
-                }
-            }
-            TextField("Title", text: $title, axis: .vertical)
-                .font(.footnote.weight(.medium))
-                .lineLimit(1...3)
-                .focused($focusedField, equals: .title)
-                .submitLabel(.done)
-                .onSubmit { focusedField = nil }
-        }
+        TextField("Title", text: $title, axis: .vertical)
+            .font(.footnote.weight(.medium))
+            .lineLimit(1...3)
+            .focused($focusedField, equals: .title)
+            .submitLabel(.done)
+            .onSubmit { focusedField = nil }
 
         EditableRow("Speaker", text: $artistName, field: .speaker, focus: $focusedField, link: artist.map(EpisodeLink.speaker))
         EditableRow("Album", text: $albumName, field: .album, focus: $focusedField, link: album.map(EpisodeLink.album))
@@ -177,6 +161,22 @@ struct EpisodeDetailsPane: View {
         }
 
         Divider()
+        // Words, at the end of the list, with the other things you can do to this
+        // episode. The picture already has a full-size copy at the top of the page, and a
+        // second thumbnail of it in the middle of a list of fields read as a stray badge
+        // rather than a control.
+        HStack(spacing: 16) {
+            PhotosPicker(selection: $artworkItem, matching: .images) {
+                Label(track.artworkFileName == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
+                    .font(.footnote)
+            }
+            if track.artworkFileName != nil {
+                Button("Remove Photo", role: .destructive) { setArtwork(nil) }
+                    .font(.footnote)
+            }
+            Spacer(minLength: 0)
+        }
+
         Button {
             Task { await suggest() }
         } label: {
@@ -444,30 +444,11 @@ private struct TagRow: View {
     }
 }
 
-/// The artwork, small, with the camera badge that says it's a button.
-private struct ArtworkThumbnail: View {
-    let fileName: String?
-    let seed: String
-
-    var body: some View {
-        ArtworkTile(fileName: fileName, seed: seed, cornerRadius: 8, symbolSize: 20)
-            .frame(width: 56, height: 56)
-            .overlay(alignment: .bottomTrailing) {
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 9))
-                    .padding(4)
-                    .background(Color.accentColor, in: Circle())
-                    .foregroundStyle(.white)
-                    .offset(x: 4, y: 4)
-            }
-    }
-}
-
 /// The episode's language, with the list of what this phone can actually recognise
 /// offline. Its own view so the twice-a-second churn of a transcription run redraws one
 /// row rather than every field on the page.
 private struct EpisodeLanguageRow: View {
-    @ObservedObject private var transcript = LiveTranscript.shared
+    @ObservedObject private var transcript = TranscriptRunner.shared
     @ObservedObject private var languages = OnDeviceLanguages.shared
 
     var body: some View {
