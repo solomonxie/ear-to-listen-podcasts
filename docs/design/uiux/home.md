@@ -47,8 +47,9 @@ empty    ┌──────────────────────�
          │   appear here as they sync.           │
          │      [ Load sample library ]          │
          └───────────────────────────────────────┘
-         ← Remote and Settings are NOT drawn in this state; the page is
-           only this card until something is in the library
+         ← the shelves are replaced by this card, but Remote and Settings
+           still follow below it: a fresh install's whole point is to go
+           connect a source, so the way to do that stays on screen
 
 typing   search replaces the shelves in place — no push, no overlay
 
@@ -73,7 +74,6 @@ Six sections, fixed order: Shows · Speakers · Albums · Playlists · Topics ·
 Episodes. An empty section is not drawn. Episodes match title **or file
 path** — a folder of files often shares one embedded title tag.
 
-## Mini player
 ## Episode row — everywhere one appears  `Home/TrackRow.swift`
 
 ```
@@ -89,6 +89,7 @@ Which collection, and whose voice. A folder of files often shares one embedded
 title tag, so the second line has to tell two rows apart — and the album and
 speaker do that while being worth reading, which a file path never was.
 
+## Mini player
 
 ```
  ▁▂▃ progress hairline, 1.5pt, accent ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
