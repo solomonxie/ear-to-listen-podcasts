@@ -66,7 +66,7 @@ final class PlaybackEngine: ObservableObject {
         currentTrack = track
         hasRetriedCurrentTrack = false
         try? trackStore.touchLastPlayed(id: track.id)
-        LiveTranscript.shared.attach(track: track)
+        TranscriptRunner.shared.attach(track: track)
         Task { await loadAndPlay(track: track) }
     }
 

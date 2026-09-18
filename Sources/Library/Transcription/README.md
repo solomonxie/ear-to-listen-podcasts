@@ -1,6 +1,7 @@
 # Transcription
 
-Turns an episode's audio into timestamped lines, gap by gap, nearest the playhead first.
+Turns an episode's audio into timestamped lines: one whole-episode pass, front to back, in
+the background, with a percentage while it runs and the text all at once when it's done.
 
 ## Sidecar transcripts
 
@@ -34,10 +35,10 @@ done in the app, least of all corrections.
 
 `.vtt` (read back) plus `.lrc` (courtesy copy for lyrics-aware players), both next to the
 audio, on any provider whose `isWritable` is true. Written after a correction immediately,
-and after the fill loop settles otherwise — not per window.
+and at the end of a pass otherwise — not per window.
 
 **Why VTT is canonical.** `TranscriptCoverage` decides what still needs transcribing from
-segment *spans*, and the empty segments `LiveTranscript.padded` writes are how "this
+segment *spans*, and the empty segments `TranscriptRunner.padded` writes are how "this
 stretch was listened to and nobody spoke" is remembered. LRC has no end times and no way
 to say that, so a transcript round-tripped through LRC alone would re-transcribe its own
 silences forever. Our extras ride in `NOTE` blocks, which other players ignore:
@@ -58,16 +59,21 @@ NOTE byop edited
 I'm here with Dr Huberman.
 ```
 
-## Running the loop
+## Running a pass
 
-Windows are only *started* while the episode is playing, unless "Keep going while paused"
-is on — a window already in flight finishes either way, so pausing costs nothing. Default
-is follow-playback: a paused episode shouldn't be spending battery or Whisper credit.
+`TranscriptRunner.run(engine:)` walks the episode in `windowSeconds` chunks from 0 to the
+end, whichever recogniser was asked for, regardless of what playback is doing. Pressing the
+running recogniser's button stops it; pressing the other swaps to it.
 
-Partials are published at most once a second (`AppleSpeechTranscriber.partialInterval`).
-The recognizer revises several times a second and rewrites its whole tail each time; at
-that rate it reads as flicker, not as words arriving. A revision that makes out nothing is
-also dropped rather than blanking the pane.
+**Nothing on disk changes until the pass finishes.** Windows accumulate in memory and are
+merged into the store in one go at the end, so re-transcribing an episode that already has
+a transcript leaves the old one whole and readable until the new one is ready. The
+tradeoff is deliberate and one-sided: a pass abandoned halfway — cancelled, failed, app
+killed — is thrown away rather than half-applied.
+
+Partial results from the recognizer are ignored. Live text meant lines rewriting
+themselves under the reader while the page flickered, and the same audio recognised
+several times over as the playhead moved; a percentage says as much and costs nothing.
 
 `supportsOnDeviceRecognition` is read but not obeyed. It is a false negative often enough
 — phones with the language's dictation model installed still report `false` — that
@@ -78,8 +84,8 @@ flag across every supported locale to mark the language picker, which is advisor
 ## Layout
 
 Platform-neutral (portable as-is): `TranscriptCoverage` (gaps, windows, abandon rule),
-`TranscriptLines` (word grouping, settled/volatile split), `TranscriptFile` (parse and
-serialize), `TranscriptSidecar`, `LiveTranscript`, `TranscriptionEngine`.
+`TranscriptLines` (word grouping), `TranscriptFile` (parse and serialize),
+`TranscriptSidecar`, `TranscriptRunner`, `TranscriptionEngine`.
 
 Apple-specific: `AppleSpeechTranscriber` (`import Speech`), `OnDeviceLanguages`
 (`import Speech`), `AudioWindowFile` (`import AVFoundation`). A port replaces these.

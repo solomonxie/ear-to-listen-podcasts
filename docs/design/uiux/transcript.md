@@ -4,43 +4,53 @@
 Playing, lyric-style. Controls flat above the lines, never in a menu.
 
 ```
- TRANSCRIPT              3 edits  Transcribe again…   ← both are text buttons
- ┌────────┐ ┌────────────┐ ┌───────────┐
- │   💬   │ │     ⚡     │ │     ⌖     │   icon over caption, tint = ON
- │Subtitles│ │Whole episode│ │  Follow  │
- └────────┘ └────────────┘ └───────────┘
- [ ON-DEVICE | OpenAI Whisper ]      ← dimmed, not hidden, while off
- Listening to 12:00–13:00… · 46% done          ← status line, secondary
- ⚠ Speech recognition isn't allowed   (Try again)   ← error + inline retry
+ TRANSCRIPT                              3 edits   ← text button, only when there are edits
+ ┌───────────┐ ┌───────────┐ ┌───────────┐
+ │     📱    │ │     ✨    │ │     ⌖     │   icon over caption, tint = running
+ │ On-device │ │    AI     │ │  Follow   │
+ └───────────┘ └───────────┘ └───────────┘
+ Transcribing the whole episode · 46%          ← status line, secondary
+ ⚠ Stopped at 46% — Speech recognition isn't allowed
  ───────────────────────────────────────────────
   …so the model runs entirely locally.       ← dim
   Which matters once you pipe in personal    ← BRIGHT: the spoken line,
   data.                                        scrolls itself to centre
   12:14  ✎ edited                          ✎  ← pencil on the right edge
-  hearing…                                     ← volatile tail, one block,
-                                                 no timestamp, not tappable
 ```
 
-Each control's title *is* its state:
+One button per recogniser and nothing else. Each transcribes the **whole
+episode** in the background, front to back, regardless of what playback is
+doing; the text appears all at once when the pass is done. Which recogniser
+is the only real choice here — free and on this phone, or more accurate and
+charged for — so it is two buttons rather than a switch, a picker and a mode
+to understand first.
 
 ```
-Subtitles      off → "Subtitles"      on → "Subtitles on"
-Whole episode  idle → "Whole episode" / "Resume all" (some coverage)
-               running → "Pause"
-Follow         off → "Follow"         on → "Following"
+On-device  idle → "On-device"   running → "Stop"
+AI         idle → "AI"          running → "Stop"
+Follow     off  → "Follow"      on      → "Following"
 ```
 
-`Subtitles` disabled with no track · `Whole episode` also disabled once
-complete · `Follow` disabled while already following or with no lines.
+Pressing the running one stops it; the other is disabled while a pass runs —
+two passes over the same audio is twice the battery for one transcript.
+`Follow` is disabled while already following or with no lines.
 
-## Status line, all five readings
+**Nothing on disk changes until a pass finishes**, so pressing a recogniser on
+an episode that already has a transcript leaves the old one whole and readable
+until the new one is ready. A pass abandoned halfway is thrown away rather than
+half-applied.
+
+Live transcription was removed: text rewrote itself under the reader, the page
+flickered, and the same audio was recognised several times over as the playhead
+moved. A percentage says as much and costs nothing.
+
+## Status line, all four readings
 
 ```
- Paused with the episode · 46% transcribed
- Listening to 12:00–13:00… · 46% done
+ Transcribing the whole episode · 46%
  From a transcript file beside the episode        ← cost nothing to make
  Whole episode transcribed
- 46% transcribed
+ 46% transcribed                                  ← an earlier pass, stopped
 ```
 
 ## Empty — says which kind of nothing
@@ -49,21 +59,15 @@ complete · `Follow` disabled while already following or with no lines.
  ┌─────────────────────────────────────────────┐
  │                 💬                          │
  │        No transcript yet                    │
- │  Off for this episode — tap Subtitles above │  ← switch off
- │  to start one. Anything transcribed before, │
- │  or a transcript file sitting beside the    │
- │  episode, still shows here either way.      │
+ │  Nothing transcribed yet. On-device costs   │
+ │  battery and no money; AI is more accurate, │
+ │  needs a key, and sends the audio to the    │
+ │  vendor. Either one does the whole episode  │
+ │  in the background.                         │
  └─────────────────────────────────────────────┘
- on, no window   Listening from where you are — lines appear as they're
-                 recognised.
- window running  Working through 12:00–13:00 — … Nothing yet means no
-                 speech has been made out so far.
- waiting         Waiting for playback — transcribing follows the episode.
+ running   Working through the episode — 46% done. The whole transcript
+           appears here at once when it's finished.
 ```
-
-A window of music or silence recognises to nothing, so "working" and "nothing
-to show" are both true at once — the pane says which stretch it is on rather
-than looking broken.
 
 ## Correcting a line
 

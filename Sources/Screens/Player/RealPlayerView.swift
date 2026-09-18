@@ -39,7 +39,7 @@ struct RealPlayerView: View {
     /// and observing it here redrew the artwork, the transport and the whole details card
     /// along with the text — which is what made the page flash while transcribing. The
     /// transcript pane does its own observing, so only the text redraws.
-    private var transcript: LiveTranscript { LiveTranscript.shared }
+    private var transcript: TranscriptRunner { TranscriptRunner.shared }
     @State private var album: Album?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -371,39 +371,43 @@ struct RealPlayerView: View {
         }
     }
 
-    /// The page's own scrollbar, because the system's hairline indicator is neither
-    /// grabbable nor visible and this page runs to hundreds of lines. It shows where the
-    /// reader actually is — measured from the scroll view, not guessed from the transcript
-    /// — and dragging it moves the page. It appears while the page is moving and fades a
-    /// moment after it stops: a permanent rail down the side of a page of text is a
-    /// permanent distraction.
+    /// The page's own scrollbar: where the reader is, and a way to get somewhere else
+    /// quickly on a page that runs to hundreds of lines. Measured from the scroll view
+    /// rather than guessed from the transcript, so it means the same thing on an episode
+    /// with no text at all.
+    ///
+    /// Nothing but the bar itself — no track behind it, no ridges on it. It sits over a
+    /// page of text people are reading, and anything more decorative competes with the
+    /// words. It appears while the page is moving and fades a moment after it stops.
     @ViewBuilder
     private func scrollRail(_ proxy: ScrollViewProxy) -> some View {
-        // Nothing to drag on a page that fits, and a thumb the height of its own track is
-        // just furniture.
+        // Nothing to drag on a page that fits, and a bar as long as its own travel is just
+        // furniture.
         if contentHeight > viewportHeight + 120 {
             GeometryReader { geometry in
                 let height = geometry.size.height
-                // As long a thumb as the page is short, the way every scrollbar does it,
+                // As long a bar as the page is short, the way every scrollbar does it,
                 // with a floor so it stays catchable on a very long transcript.
-                let thumbHeight = max(48, height * min(1, viewportHeight / max(contentHeight, 1)))
+                let barHeight = max(44, height * min(1, viewportHeight / max(contentHeight, 1)))
                 let isDragging = railFraction != nil
-                Capsule()
-                    .fill(.quaternary)
-                    .frame(width: 4)
-                    .frame(maxWidth: .infinity)
+                Color.clear
                     .overlay(alignment: .top) {
-                        thumb(isDragging: isDragging, height: thumbHeight, travel: height - thumbHeight)
+                        Capsule()
+                            .fill(isDragging ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+                            .frame(width: 4, height: barHeight)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .offset(y: (height - barHeight) * (railFraction ?? scrollFraction))
+                            .animation(.easeOut(duration: 0.15), value: isDragging)
                     }
-                    // The hit area is the whole 44pt strip, not the 3pt line: a rail you
-                    // have to hit exactly is a rail nobody uses.
+                    // The hit area is the whole 36pt strip, not the 4pt bar: one you have
+                    // to hit exactly is one nobody uses.
                     .contentShape(Rectangle())
                     .highPriorityGesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
-                                // Grab the thumb by its middle wherever it's caught, so
-                                // the page doesn't jump on the first touch.
-                                let fraction = (value.location.y - thumbHeight / 2) / max(height - thumbHeight, 1)
+                                // Held by its middle wherever it's caught, so the page
+                                // doesn't jump on the first touch.
+                                let fraction = (value.location.y - barHeight / 2) / max(height - barHeight, 1)
                                 railFraction = min(max(fraction, 0), 1)
                                 isFollowingTranscript = false
                                 showRail()
@@ -415,37 +419,19 @@ struct RealPlayerView: View {
                             }
                     )
             }
-            .frame(width: 44)
+            .frame(width: 36)
+            .padding(.trailing, 3)
             .padding(.vertical, 60)
             .opacity(isRailShowing ? 1 : 0)
             .animation(.easeInOut(duration: 0.25), value: isRailShowing)
-            // Restarted by every scroll — `task(id:)` cancels the pending hide, so the
-            // rail stays up for as long as the page keeps moving.
+            // Restarted by every scroll — `task(id:)` cancels the pending hide, so the bar
+            // stays up for as long as the page keeps moving.
             .task(id: scrollTick) {
                 guard isRailShowing else { return }
                 try? await Task.sleep(nanoseconds: 1_400_000_000)
                 if railFraction == nil { isRailShowing = false }
             }
         }
-    }
-
-    private func thumb(isDragging: Bool, height: CGFloat, travel: CGFloat) -> some View {
-        Capsule()
-            // Solid enough to see against a page of text — a thumb the same weight as the
-            // track behind it is one nobody notices, let alone reaches for.
-            .fill(isDragging ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
-            .frame(width: isDragging ? 12 : 9, height: height)
-            .overlay {
-                VStack(spacing: 3) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        Capsule().fill(.background.opacity(0.8)).frame(width: 4, height: 1.5)
-                    }
-                }
-            }
-            .shadow(radius: isDragging ? 4 : 0)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .offset(y: travel * (railFraction ?? scrollFraction))
-            .animation(.easeOut(duration: 0.15), value: isDragging)
     }
 
     /// Where the page can actually be sent: its two ends, and every transcript line in

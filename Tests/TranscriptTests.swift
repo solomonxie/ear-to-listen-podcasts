@@ -90,7 +90,7 @@ final class TranscriptCoverageTests: XCTestCase {
         let window = TimeWindow(start: 60, end: 120)
         let lines = [segment(70, 80, text: "hello")]
 
-        let padded = LiveTranscript.padded(lines, toCover: window, engine: "onDevice")
+        let padded = TranscriptRunner.padded(lines, toCover: window, engine: "onDevice")
 
         // Only the window itself is filled in — everything before it is still a gap.
         XCTAssertEqual(TranscriptCoverage.gaps(in: padded, duration: 120, minimumGap: 0.5), [TimeWindow(start: 0, end: 60)])
