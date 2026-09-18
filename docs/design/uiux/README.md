@@ -1,4 +1,4 @@
-# UI/UX mockups — Bring Your Own Podcasts
+# UI/UX mockups — Ear to Listen Podcasts
 
 Every surface drawn as it is built today. `../UIUX-DESIGN.md` carries the
 reasoning and the copy rules; these files carry the pictures.

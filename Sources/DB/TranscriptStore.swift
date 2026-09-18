@@ -14,7 +14,19 @@ struct TranscriptStore {
             engine: engine,
             updatedAt: Date()
         )
-        try dbQueue.write { db in try record.save(db) }
+        let previous = try dbQueue.write { db -> Int? in
+            let previous = try TranscriptRecord.fetchOne(db, key: trackID)
+            try record.save(db)
+            return previous.map { $0.segmentsJSON.count }
+        }
+        // Counts, not the text: a transcript is tens of thousands of words, and the log is
+        // there to say what happened and when, not to hold a second copy of the library.
+        ChangeLog.record(
+            "transcripts", key: trackID,
+            old: previous.map { ["characters": $0] },
+            new: ["characters": record.segmentsJSON.count, "segments": normalized.count],
+            in: dbQueue
+        )
     }
 
     /// Folds a freshly transcribed window into what's already stored. A user-edited line
@@ -87,7 +99,12 @@ struct TranscriptStore {
     }
 
     func delete(trackID: String) throws {
-        try dbQueue.write { db in _ = try TranscriptRecord.deleteOne(db, key: trackID) }
+        let old: Int? = try dbQueue.write { db in
+            let old = try TranscriptRecord.fetchOne(db, key: trackID)?.segmentsJSON.count
+            _ = try TranscriptRecord.deleteOne(db, key: trackID)
+            return old
+        }
+        ChangeLog.record("transcripts", key: trackID, old: old.map { ["characters": $0] }, in: dbQueue)
     }
 
     // MARK: Edits
@@ -113,6 +130,12 @@ struct TranscriptStore {
             createdAt: Date()
         )
         try dbQueue.write { db in try edit.insert(db) }
+        // The one place the log holds the text itself: a correction is a line long, and
+        // it's hand-typed — the most expensive thing per byte in the whole library.
+        ChangeLog.record(
+            "transcriptEdits", key: "\(trackID)@\(segmentStart)",
+            old: ["text": originalText], new: ["text": newText], in: dbQueue
+        )
         return segments
     }
 

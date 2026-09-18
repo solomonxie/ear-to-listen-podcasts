@@ -32,6 +32,16 @@ enum TranscriptionEngineKind: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// What a minute of audio costs, where anyone is charged for it. Nil means free —
+    /// on-device recognition spends battery, which is not a number worth putting in front
+    /// of someone. `whisper-1` is $0.006/minute; if the model changes, this does too.
+    var pricePerMinuteUSD: Double? {
+        switch self {
+        case .onDevice: return nil
+        case .openAIWhisper: return 0.006
+        }
+    }
+
     /// Longest stretch of audio handed over in one request. On-device recognition degrades
     /// badly on long files; Whisper's cap is the 25MB upload limit, not time.
     var windowSeconds: Double {

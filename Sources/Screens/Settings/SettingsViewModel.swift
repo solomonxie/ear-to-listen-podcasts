@@ -95,7 +95,6 @@ final class SettingsViewModel: ObservableObject {
             // going there too — transcripts and hand edits are expensive to lose and
             // aren't rebuilt by a resync.
             AutoBackup.shared.enableForNewRemote()
-            AutoBackup.shared.markChanged()
             load()
             // Connecting a bucket to a device with nothing on it is the other half of the
             // reinstall story: the app data may be sitting in that bucket too.
@@ -239,13 +238,28 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    /// `url` comes from a `.fileImporter` picker, so it's security-scoped.
+    /// `url` comes from a `.fileImporter` picker, so it's security-scoped. The archive is
+    /// restored into a library of its own and switched to — the one that was here is kept
+    /// as a file, and `undoRestore()` puts it back.
     func importSnapshot(from url: URL) {
         let didStartAccess = url.startAccessingSecurityScopedResource()
         defer { if didStartAccess { url.stopAccessingSecurityScopedResource() } }
         do {
-            let result = try backupService.applyAndKeepWaiting(try Data(contentsOf: url))
+            let result = try DatasetRestore.restore(try Data(contentsOf: url))
             backupStatusMessage = summarize(result)
+            load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// The library the last restore replaced, while it's still on the phone to go back to.
+    var replacedLibraryAt: Date? { DatasetRestore.previousLibrary?.at }
+
+    func undoRestore() {
+        do {
+            try DatasetRestore.undo()
+            backupStatusMessage = "Put back the library from before the restore."
             load()
         } catch {
             errorMessage = error.localizedDescription

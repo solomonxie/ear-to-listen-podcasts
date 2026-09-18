@@ -35,21 +35,35 @@ struct LibraryStore {
     }
 
     func updateArtist(id: String, name: String, bio: String?, language: String? = nil) throws {
-        try dbQueue.write { db in
-            guard var artist = try Artist.fetchOne(db, key: id) else { return }
+        let old: Artist? = try dbQueue.write { db in
+            guard var artist = try Artist.fetchOne(db, key: id) else { return nil }
+            let old = artist
             artist.name = name
             artist.bio = bio
             artist.language = language
             try artist.update(db)
+            return old
         }
+        guard let old else { return }
+        ChangeLog.record(
+            "speakers", key: name, old: old,
+            new: ["name": name, "bio": bio, "language": language], in: dbQueue
+        )
     }
 
     func updateArtistPhoto(id: String, photoFileName: String?) throws {
-        try dbQueue.write { db in
-            guard var artist = try Artist.fetchOne(db, key: id) else { return }
+        let old: Artist? = try dbQueue.write { db in
+            guard var artist = try Artist.fetchOne(db, key: id) else { return nil }
+            let old = artist
             artist.photoFileName = photoFileName
             try artist.update(db)
+            return old
         }
+        guard let old else { return }
+        ChangeLog.record(
+            "speakers", key: old.name, old: ["photoFileName": old.photoFileName],
+            new: ["photoFileName": photoFileName], in: dbQueue
+        )
     }
 
     func albums(forArtist artistID: String?) throws -> [Album] {
@@ -99,12 +113,13 @@ struct LibraryStore {
         }
     }
 
-    func updateAlbum(id: String, name: String, notes: String?, artworkFileName: String?) throws {
+    func updateAlbum(id: String, name: String, notes: String?, artworkFileName: String?, year: Int? = nil) throws {
         try dbQueue.write { db in
             guard var album = try Album.fetchOne(db, key: id) else { return }
             album.name = name
             album.notes = notes
             album.artworkFileName = artworkFileName
+            album.year = year
             album.metadataEditedAt = Date()
             try album.update(db)
         }

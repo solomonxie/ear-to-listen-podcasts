@@ -1137,50 +1137,50 @@
         }
       }
     },
-    "Files / iCloud Drive / BYO Podcasts": {
+    "Files / iCloud Drive / Ear to Listen": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Files / iCloud Drive / BYO Podcasts"
+            "value": "Files / iCloud Drive / Ear to Listen"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "文件 / iCloud 云盘 / BYO Podcasts"
+            "value": "文件 / iCloud 云盘 / Ear to Listen"
           }
         }
       }
     },
-    "Files / iCloud Drive / BYO Podcasts · Last: %@": {
+    "Files / iCloud Drive / Ear to Listen · Last: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Files / iCloud Drive / BYO Podcasts · Last: %@"
+            "value": "Files / iCloud Drive / Ear to Listen · Last: %@"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "文件 / iCloud 云盘 / BYO Podcasts · 上次：%@"
+            "value": "文件 / iCloud 云盘 / Ear to Listen · 上次：%@"
           }
         }
       }
     },
-    "Files / iCloud Drive / BYO Podcasts. Switch on to keep a copy that outlives deleting the app.": {
+    "Files / iCloud Drive / Ear to Listen. Switch on to keep a copy that outlives deleting the app.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Files / iCloud Drive / BYO Podcasts. Switch on to keep a copy that outlives deleting the app."
+            "value": "Files / iCloud Drive / Ear to Listen. Switch on to keep a copy that outlives deleting the app."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "文件 / iCloud 云盘 / BYO Podcasts。开启后即使删除应用，副本依然还在。"
+            "value": "文件 / iCloud 云盘 / Ear to Listen。开启后即使删除应用，副本依然还在。"
           }
         }
       }

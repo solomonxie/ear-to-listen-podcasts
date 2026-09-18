@@ -1,6 +1,6 @@
 import GRDB
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class SyncJobStoreTests: XCTestCase {
     private func makeDatabase() throws -> DatabaseQueue {

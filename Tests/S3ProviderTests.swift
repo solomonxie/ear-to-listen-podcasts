@@ -1,5 +1,5 @@
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class S3ProviderTests: XCTestCase {
     private func config(_ settings: [String: String]) -> CloudProviderConfig {

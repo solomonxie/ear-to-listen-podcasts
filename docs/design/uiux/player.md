@@ -1,11 +1,20 @@
 # Now Playing
 
-`Sources/Screens/Player/RealPlayerView.swift` — a sheet from the mini player,
-but built as a page: a back chevron where every page has one, and a 22pt
-left-edge strip that drags the whole sheet with the finger.
+`Sources/Screens/Player/RealPlayerView.swift` — a full-screen card over the
+mini player, put down by pulling it down. It follows the finger and shrinks as
+it goes; the chevron top-left points the same way.
 
 ```
- ‹          Now Playing                       ← tap title = back to top
+ drag the artwork or titles   110pt, or a flick   ← the one that gets used
+ pull the whole page past its own top   70pt of overscroll
+```
+
+Two ways in because the page is one long scroll: below the header the drag
+belongs to the transcript, and overscroll rubber-bands, so a threshold read off
+the scroll view alone asks for a stroke longer than the screen.
+
+```
+ ⌄          Now Playing                       ← tap title = back to top
  ┌─────────────────────────────────────────┐
  │              [ artwork ]                │  220pt, deterministic colour
  └─────────────────────────────────────────┘
@@ -16,7 +25,7 @@ left-edge strip that drags the whole sheet with the finger.
  12:14                               41:02
       ♡     ⏮     ( ⏸ )     ⏭     🔖③        ← favourite | bookmark flank
                                                 the transport on purpose
-      [ ☰ Up Next (12) ]  [ ＋ Add to Playlist ]
+      [ ☰ Chapters (12) ]  [ ＋ Add to Playlist ]
       ⚠ You're offline. Connect to the        ← engine.lastError, orange
         internet to stream this track.
  ─────────── details cards → details.md ────
@@ -30,7 +39,7 @@ they are read together.
 ## Once the transport scrolls off
 
 ```
-                                      ( ↑ Back to top )   centred, thumb reach
+                        ( ↑ Back to top ) ( ⌖ Follow )   centred, thumb reach
  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂  progress, 60% height
  ⏸   12:14 / 41:02                          ⏭   docked bar, appears only
                                                 when the big transport is gone
@@ -40,24 +49,28 @@ Two thresholds, not one (`edge < 0` to show, `edge > 96` to hide): the bar
 shortens the scroller, which would otherwise push the transport back into view
 and flicker.
 
-## Fast-scroll rail
+Follow floats beside Back to top because that is where the thumb is when you
+have just scrolled off the spoken line; the copy above the transcript only
+turns it on, this one toggles. One label and one icon either way — colour
+alone says whether it's on, so the button doesn't change under the thumb.
 
-Right edge, only when the page runs past its own height. A 46pt disc, not a
-hairline — a bar down the edge of a page of text is there in principle and
-unfindable in practice. The system's own indicator is off: two things down one
-edge is what this replaces, not joins.
+## Moving through a book: by chapter, not by scrollbar
+
+There is no fast-scroll handle. Dragging a position along a whole book to find
+where you were is a control that asks the reader to aim; nobody knows what 43%
+of a book is. Two ways instead, and they are the two anyone reaching for it
+actually wanted:
 
 ```
- at rest      dragging
-              ───────
-   ( ↕ )      ( ↕ )      accent fill, white glyph, 1.1×
-              ───────     56pt hit strip either way
+ swipe ◀ / ▶ on the artwork      the next / previous chapter, with a tap of
+                                 haptic feedback — where a book's pages go
+ [ ☰ Chapters (12) ]             the list, to jump straight to one
+ ⏮ ⏭ in the transport            the same move, for a thumb already there
 ```
 
-Never hidden, only dimmed to 40% once the page has been still 3s: a control that
-vanishes has to be summoned back before it can be used, and scrolling to find
-the thing that scrolls is silly. Position is measured from the scroll view, so
-it means the same on an episode with no transcript at all.
+The header carries both drags, told apart by which way the finger went: **down**
+puts the card away, **sideways** changes chapter. Dragging *up* on the artwork
+is how you reach the transcript, and that belongs to the scroll view.
 
 ## Up Next — sheet, medium/large detents
 
@@ -80,6 +93,7 @@ it means the same on an episode with no transcript at all.
   0.5s time publishing cannot yank the thumb back.
 
 ```
-✗ Now Playing as its own tab, or a card that can only be swiped down
-  — it has a back button and an edge swipe like every other page here
+✗ Now Playing as its own tab
+✗ A pencil on every transcript line — correcting is once or twice an episode,
+  and a per-line button was a permanent target down the right edge. Hold a line.
 ```

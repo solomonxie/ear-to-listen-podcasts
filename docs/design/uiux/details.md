@@ -5,6 +5,15 @@ transport, so "who/what" never blurs into "which file". The EPISODE card *is*
 the editor: every field is live, shows even when empty, and commits when it
 loses focus.
 
+One label column, values against it. Labels left and values right put a hand's
+width of nothing between `Size` and `24.1 MB`, and a card of short values read
+as two unrelated lists rather than rows:
+
+```
+✗  Size                          24.1 MB      ✓  Size        24.1 MB
+   Format                            MP3         Format      MP3
+```
+
 ```
  ┌ EPISODE ───────────────────────────────────┐
  │ ▢  Sleep Toolkit — Part 2                  │ ← tap ▢ = photo picker
@@ -12,8 +21,8 @@ loses focus.
  │ Speaker    Andrew Huberman              ›  │ ← › pushes that page
  │ Album      Season 3                     ›  │
  │ Show       Huberman Lab                 ›  │
- │ Year       2026                            │
- │ Track no.  4                               │
+ │ Year       2026 · from album               │ ← the album's year as the
+ │ Track no.  4                               │   placeholder; type to override
  │ 🌐 Language: English ▾                     │ ← Inherit (speaker) first
  │ Duration   41 min                          │
  │ ( Sleep ) ( Focus )                        │ ← topic chips, if any

@@ -21,8 +21,16 @@ struct ArtworkTile: View {
         self.symbolSize = symbolSize
     }
 
-    init(track: Track, cornerRadius: CGFloat = 10, symbolSize: CGFloat = 24) {
-        self.init(fileName: track.artworkFileName, seed: track.id, cornerRadius: cornerRadius, symbolSize: symbolSize)
+    /// An episode with no picture of its own shows its album's, and takes the album's
+    /// seed with it — so a collection without artwork is still one colour down the list
+    /// rather than a different generated tile per row.
+    init(track: Track, album: Album? = nil, cornerRadius: CGFloat = 10, symbolSize: CGFloat = 24) {
+        let ownArtwork = track.artworkFileName?.nilIfEmpty
+        self.init(
+            fileName: ownArtwork ?? album?.artworkFileName,
+            seed: ownArtwork == nil ? (album?.id ?? track.id) : track.id,
+            cornerRadius: cornerRadius, symbolSize: symbolSize
+        )
     }
 
     init(album: Album, cornerRadius: CGFloat = 14, symbolSize: CGFloat = 48) {

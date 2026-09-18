@@ -163,7 +163,8 @@ struct BackupService {
 
     /// Bundles a snapshot with the images it references into one zip archive — the actual
     /// format shipped by Export/Backup. `snapshot.json` at the root, speaker photos under
-    /// `photos/`, episode artwork under `artwork/`.
+    /// `photos/`, episode artwork under `artwork/`, and the change log under `change-log/`
+    /// so the record of what was done outlives the phone it was done on.
     func archive(_ snapshot: LibrarySnapshot) throws -> Data {
         var entries = [ZipArchive.Entry(name: "snapshot.json", data: try encode(snapshot))]
         for artist in snapshot.artists {
@@ -180,12 +181,18 @@ struct BackupService {
             else { continue }
             entries.append(ZipArchive.Entry(name: "artwork/\(fileName)", data: data))
         }
+        // Carried, never applied: every line names row ids this device made up, and a
+        // restore remaps them. It travels to be read, not replayed.
+        for url in ChangeLog.files() {
+            guard let data = try? Data(contentsOf: url) else { continue }
+            entries.append(ZipArchive.Entry(name: "change-log/\(url.lastPathComponent)", data: data))
+        }
         return ZipArchive.write(entries)
     }
 
     /// Unpacks a zip written by `archive(_:)` — writes any bundled images to their store
     /// before returning, so `apply(_:)` can point restored speakers/episodes at them right
-    /// away.
+    /// away. Anything else in there, the change log included, is left where it is.
     func unarchive(_ data: Data) throws -> LibrarySnapshot {
         let entries = ZipArchive.read(data)
         guard let snapshotEntry = entries.first(where: { $0.name == "snapshot.json" }) else {
@@ -346,16 +353,6 @@ struct BackupService {
     /// `PendingRestore`.
     func downloadRemoteArchive() async throws -> Data? {
         try await activeS3Provider().downloadBackup()
-    }
-
-    /// Applies an archive and, if part of it named episodes this device hasn't synced
-    /// yet, keeps it so `PendingRestore` can finish the job after the next sync instead
-    /// of asking the listener to restore a second time.
-    @discardableResult
-    func applyAndKeepWaiting(_ archive: Data) throws -> BackupImportResult {
-        let result = try apply(unarchive(archive))
-        if result.awaitingSync > 0 { PendingRestore.save(archive) }
-        return result
     }
 
     private func activeS3Provider() throws -> S3Provider {

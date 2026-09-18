@@ -1,5 +1,5 @@
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class TranscriptCoverageTests: XCTestCase {
     private func segment(_ start: Double, _ end: Double, text: String = "line", isEdited: Bool = false) -> TranscriptSegment {
@@ -285,7 +285,7 @@ final class TranscriptLineTests: XCTestCase {
 
         let draft = TranscriptLines.split(untimed, startOffset: 0, engine: "onDevice")
 
-        XCTAssertEqual(draft.volatile, ["你好。", "今天 天气 很好。"])
+        XCTAssertEqual(draft.volatile, ["你好。", "今天天气很好。"])
     }
 
     func testAHypothesisThatRestartsDoesNotDiscardWhatCameBefore() {
@@ -522,5 +522,63 @@ final class TranscriptLocaleTests: XCTestCase {
             AppleSpeechTranscriber.resolvedLocale("zh_Hans_CN").language.languageCode?.identifier,
             "zh"
         )
+    }
+}
+
+/// What the on-device recognizer actually hands over on a long Chinese episode, and what
+/// has to be done with it before it reads as a transcript.
+final class RecognizerHypothesisTests: XCTestCase {
+    private func word(_ text: String, _ start: Double, _ duration: Double = 0.3) -> RecognizedWord {
+        RecognizedWord(text: text, start: start, duration: duration)
+    }
+
+    /// Chinese doesn't put spaces between words, and a recognizer hands its text over one
+    /// token at a time whatever the language.
+    func testJoinsWithoutSpacesInScriptsThatHaveNone() {
+        XCTAssertEqual(TranscriptLines.joined(["涉及到", "这", "两", "中队", "的"]), "涉及到这两中队的")
+        XCTAssertEqual(TranscriptLines.joined(["so", "the", "model", "runs"]), "so the model runs")
+        // A language name in the middle of a Chinese sentence keeps its own spacing.
+        XCTAssertEqual(TranscriptLines.joined(["用", "Swift", "写"]), "用 Swift 写")
+        XCTAssertEqual(TranscriptLines.joined(["read", "the", "文件"]), "read the 文件")
+    }
+
+    /// The hypothesis shape behind every sentence appearing twice: real durations, every
+    /// timestamp at zero, so the whole of it lands on the window's first instant.
+    func testAHypothesisWithNoTimestampsIsNotTimed() {
+        let untimed = [word("涉及到", 0), word("这", 0), word("两", 0), word("中队", 0)]
+        XCTAssertFalse(TranscriptLines.hasTimings(untimed))
+        XCTAssertTrue(TranscriptLines.hasTimings([word("涉及到", 0), word("这", 1.2)]))
+    }
+
+    func testAnUntimedHypothesisNeverLandsBesideATimedOne() {
+        let untimed = [word("涉及到", 0), word("这", 0), word("两", 0)]
+        let timed = [word("涉及到", 22), word("这", 22.4), word("两", 22.8)]
+
+        var heard = TranscriptLines.absorbing(untimed, into: [])
+        heard = TranscriptLines.absorbing(timed, into: heard)
+
+        XCTAssertEqual(heard.map(\.start), [22, 22.4, 22.8])
+    }
+
+    /// A recognizer revising words it already reported moves them; it doesn't leave a copy
+    /// behind at the old timestamp.
+    func testWordsReportedAgainAreMovedRatherThanDuplicated() {
+        let first = [word("真正", 1), word("的", 1.4), word("能够", 1.8)]
+        let revised = [word("能够", 1.9), word("透彻", 2.3)]
+
+        let heard = TranscriptLines.absorbing(revised, into: TranscriptLines.absorbing(first, into: []))
+
+        XCTAssertEqual(heard.map(\.text), ["真正", "的", "能够", "透彻"])
+    }
+
+    /// The whole point of folding hypotheses together: a later one that only describes the
+    /// tail of the window must not throw away what came before it.
+    func testALaterHypothesisKeepsWhatCameBeforeIt() {
+        let opening = [word("真正", 1), word("的", 1.4)]
+        let tail = [word("透彻", 20), word("的", 20.4), word("理解", 20.8)]
+
+        let heard = TranscriptLines.absorbing(tail, into: TranscriptLines.absorbing(opening, into: []))
+
+        XCTAssertEqual(heard.map(\.text), ["真正", "的", "透彻", "的", "理解"])
     }
 }

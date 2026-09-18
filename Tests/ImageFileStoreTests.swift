@@ -1,7 +1,7 @@
 import ImageIO
 import UIKit
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class ImageFileStoreTests: XCTestCase {
     private var store: ImageFileStore!

@@ -1,5 +1,5 @@
 import XCTest
-@testable import BringYourOwnPodcasts
+@testable import EarToListen
 
 final class S3ConnectionDraftTests: XCTestCase {
     /// A folder is the only thing a connection can point at: a bare `pod` would also match

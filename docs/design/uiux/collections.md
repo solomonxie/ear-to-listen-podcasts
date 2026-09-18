@@ -7,20 +7,25 @@ All four are `List(.plain)` pushes off Home. Same spine: a header block, then
 
 ```
  ‹ Back          Season 3                      ⋯
- ┌─────────────────────────────────────────┐
- │            [ artwork 160pt ]            │
- └─────────────────────────────────────────┘
- Andrew Huberman                  12 episodes
- ↑ tappable — embedded speaker tags are often a shared uploader name
- Set speaker                      ← secondary, when there is none
- [[ ▶ Play latest ]]
- ┌ NOTES ──────────────────────────────────┐  (only if any)
- ┌ DETAILS ────────────────────────────────┐
+              ┌─────────────┐
+              │   artwork   │      ← tap = photo picker, hold = Remove
+              │    168pt    │        Picture. No Edit sheet to fix a cover
+              └─────────────┘        that came out of a stray MP3 tag
+                 Season 3            ← title
+              Andrew Huberman        ← accent, tappable: embedded speaker
+                                       tags are often an uploader name
+           2026 · 12 episodes · 7h 41m
+              ↑ album's own year, skipped when unset
+             [[ ▶ Play latest ]]
+ What this collection is, three lines of it before it clips —
+ tap to open the rest.                        ← notes, only if any
+ Details                                  ⌄   ← one row, closed
+ ┌ Details, open ──────────────────────────┐
  │ Episodes             12                 │
  │ Total length         7h 41m             │
- │ Years                2024–2026          │
- │ Folder               bible-audio/2026   │ ← only when all share one
- │ Downloaded           3 of 12            │
+ │ Episode years        2024–2026          │ ← when they differ from the
+ │ Folder               bible-audio/2026   │   album's own year
+ │ Downloaded           3 of 12            │ ← only when all share one folder
  │ Fully transcribed    5 of 12            │ ← what AI analysis can read
  │ Size on storage      412 MB             │
  │ Details edited       Sep 16, 2026       │
@@ -32,17 +37,42 @@ All four are `List(.plain)` pushes off Home. Same spine: a header block, then
  │ ▢ Sleep Toolkit — Part 2                │  full TrackRow, album = queue
  └─────────────────────────────────────────┘
 
- ⋯ menu   ✎ Edit Album…
-          ✨ Analyze with AI…        ·  disabled with 0 transcripts
+ ⋯ menu   ✨ Analyze with AI…        ·  disabled with 0 transcripts
 ```
+
+**The header is the editor.** Name, speaker, year, language and notes are live
+fields in it; the picture is its own control. Nothing to open, nothing to save:
+
+```
+ ┌─────────────────────────────────────────┐
+ │ Speaker    Andrew Huberman           ›  │ ← › still pushes their page
+ │ Year       2026                         │
+ │ Language   English ▾                    │
+ │ Notes      What this collection is      │
+ └─────────────────────────────────────────┘
+   leave a field ─▶ save        closing the page counts too
+   a sync lands mid-edit ─▶ the field being typed in is left alone
+```
+
+The header answers the four things worth knowing before you press play —
+picture, name, voice, how much of it there is — and nothing else. The counts
+and paths are facts you look up once and never again, so they fold into one
+row rather than standing between the header and the episodes.
+
+An album carries its **own year**. Every episode in it falls back to that year, shown in the
+episode's own Year row as the placeholder `2026 · from album` — typing over it
+overrides it for that episode only.
 
 ## Speaker  `Home/SpeakerDetailView.swift`
 
 ```
  ‹ Back        Andrew Huberman             Edit
- ◯ 96pt avatar        ← auto-filled from episode artwork when unset, once,
-                        and never over a photo the listener chose
+ ◯ 96pt avatar        ← tap = Edit. Auto-filled from episode artwork when
+                        unset, once, never over a photo the listener chose
  Neuroscientist at Stanford…                    bio, secondary
+ Add a bio                                      ← accent, when there is none
+ 🌐 Set the language they speak                 ← accent, when unset: it's
+                                                  what decides transcription
  🌐 English                                     ← decides transcription
  🌐 Language not set — tap Edit to choose
  Huberman Lab                                   show names, caption
@@ -95,30 +125,21 @@ Two entry points, because they answer different questions:
  empty   🎙⃠  No episodes yet
 ```
 
-## Edit sheets
+## No edit sheets
+
+Albums and speakers are edited where they are read. Both pages used to carry an
+Edit button onto a second copy of themselves — a screen transition, a form to
+re-read and a Save to remember, for changing one word already on screen.
 
 ```
- Cancel        Edit Album             Save·     · while name empty
- ▢ artwork (tap) — long-press → Remove Artwork !
- ┌ ALBUM ──────────────────────────────────┐
- │ Name                                    │
- │ Speaker                                 │
- │ Spoken language ▾                       │
- ├ NOTES ──────────────────────────────────┤
- │ What this collection is                 │
- └─────────────────────────────────────────┘
- Changing the speaker re-points every episode in this album,
- not just the album itself.
-
- Cancel       Edit Speaker            Save·
- ◯ photo (tap)   [ ✨ Use episode artwork ]   ⟳ while searching
- ┌ DETAILS ────────────────────────────────┐
- │ Name · Bio · Language ▾ (Not set first) │
- └─────────────────────────────────────────┘
- Used to transcribe this speaker's episodes. Recognizers have to be
- told which language to expect — they can't work it out, and the wrong
- one returns confident nonsense rather than failing.
+✗  ‹ Back   Andrew Huberman   Edit  →  Cancel  Edit Speaker  Save
+✓  ‹ Back   Andrew Huberman         the page itself, fields live
 ```
+
+Two things the sheets did that the pages now do inline: changing an album's
+speaker re-points every episode in it, not just the album; and a speaker with no
+photo takes one from their own episodes' artwork on first visit, never over one
+that was chosen.
 
 ## Analyze with AI  `Home/AlbumAnalysisView.swift`
 
