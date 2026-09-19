@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Shared row for browsing real synced tracks — albums, speakers, shows, playlists,
+/// Shared row for browsing real synced tracks — albums, speakers, topics, playlists,
 /// year/topic lists.
 ///
 /// Under the title: which collection, and whose voice. Files routinely share an embedded

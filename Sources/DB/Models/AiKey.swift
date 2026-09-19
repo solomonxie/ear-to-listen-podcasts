@@ -34,6 +34,37 @@ enum AiVendor: String, Codable, CaseIterable {
         }
     }
 
+    /// What this vendor is called when no model has been picked. The cheap, fast tier in
+    /// each family: this runs per-episode during a sync, so the default has to be one
+    /// nobody minds spending.
+    var defaultModel: String {
+        switch self {
+        case .openAI: return "gpt-4o-mini"
+        case .anthropic: return "claude-haiku-4-5-20251001"
+        case .google: return "gemini-1.5-flash"
+        case .groq: return "llama-3.1-8b-instant"
+        case .mistral: return "mistral-small-latest"
+        case .deepSeek: return "deepseek-chat"
+        case .xai: return "grok-2-latest"
+        }
+    }
+
+    /// The ones worth offering without typing. Not exhaustive and not validated — vendors
+    /// add and retire models faster than an app ships, which is exactly why "Custom…"
+    /// exists beside this list rather than instead of it.
+    var presetModels: [String] {
+        switch self {
+        case .openAI: return ["gpt-4o-mini", "gpt-4o", "o4-mini"]
+        case .anthropic:
+            return ["claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-opus-5"]
+        case .google: return ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"]
+        case .groq: return ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+        case .mistral: return ["mistral-small-latest", "mistral-large-latest"]
+        case .deepSeek: return ["deepseek-chat", "deepseek-reasoner"]
+        case .xai: return ["grok-2-latest", "grok-3"]
+        }
+    }
+
     /// Where to go make one, linked from the add-key screen so adding a key doesn't
     /// require already knowing each vendor's console.
     var docsURL: URL {
@@ -69,7 +100,12 @@ struct AiKey: Codable, FetchableRecord, PersistableRecord, Identifiable {
 
     var id: String
     var vendor: AiVendor
+    /// Nil means this vendor's `defaultModel` — see the `v24_ai_key_model` migration.
+    var model: String?
     var requestCount: Int = 0
     var position: Int
     var createdAt: Date
+
+    /// What this key will actually call.
+    var resolvedModel: String { model?.nilIfEmpty ?? vendor.defaultModel }
 }

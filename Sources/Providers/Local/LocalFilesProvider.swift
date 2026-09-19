@@ -174,7 +174,7 @@ struct LocalFilesProvider: CloudProvider {
         guard case .folder(let baseURL) = source else {
             throw CloudProviderError.readOnly(type)
         }
-        let url = baseURL.appendingPathComponent(path)
+        let url = baseURL.appendingPathComponent(try CloudWrite.checked(path))
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )

@@ -85,7 +85,7 @@ final class SyncJobStoreTests: XCTestCase {
     func testAFileAlreadyBeingWorkedIsLeftAlone() throws {
         let store = SyncJobStore(dbQueue: try makeDatabase())
         let first = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
-        try store.markRunning(id: first.id)
+        _ = try store.dequeueNextPending()
 
         let again = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 2)
 
@@ -131,6 +131,23 @@ final class SyncJobStoreTests: XCTestCase {
         let counts = try store.counts()
         XCTAssertEqual(counts.total, 6)
         XCTAssertEqual(counts.active, 5)
+    }
+
+    /// What the drain loop asks before it gives up. Claimed and finished jobs must both
+    /// read as "nothing pending" — the first so the loop can exit at all, the second so a
+    /// queue of done rows doesn't keep it spinning.
+    func testHasPendingSeesOnlyUnclaimedWork() throws {
+        let store = SyncJobStore(dbQueue: try makeDatabase())
+        XCTAssertFalse(try store.hasPending())
+
+        let job = try store.enqueue(providerID: "p1", filePath: "a/ep.mp3", displayName: "ep.mp3", sizeBytes: 1)
+        XCTAssertTrue(try store.hasPending())
+
+        _ = try store.dequeueNextPending()
+        XCTAssertFalse(try store.hasPending(), "a claimed job is being worked, not waiting")
+
+        try store.markDone(id: job.id)
+        XCTAssertFalse(try store.hasPending())
     }
 
     /// A job left `.running` by a killed app is worked by nobody, yet still counts as

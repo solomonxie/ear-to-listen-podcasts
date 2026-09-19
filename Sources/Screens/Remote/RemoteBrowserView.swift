@@ -75,8 +75,8 @@ struct RemoteBrowserView: View {
                             Label(name, systemImage: "folder.fill")
                         }
                     }
-                    ForEach(files) { file in
-                        fileRow(file)
+                    ForEach(fileGroups) { group in
+                        fileRow(group)
                     }
                     if folders.isEmpty, files.isEmpty {
                         Text(isShowingSyncedFallback
@@ -164,38 +164,94 @@ struct RemoteBrowserView: View {
         }
     }
 
+    /// Sidecars fold into a caption under the episode they belong to rather than standing
+    /// as rows of their own — a folder of 37 episodes lists 37 rows instead of ~150,
+    /// and the caption turns what was noise into an answer: which episodes have a
+    /// transcript and which don't.
     @ViewBuilder
-    private func fileRow(_ file: CloudFile) -> some View {
+    private func fileRow(_ group: RemoteFileGroup) -> some View {
+        let file = group.file
         let kind = FileKind(path: file.path)
-        HStack {
-            Button {
-                open(file, kind: kind)
-            } label: {
-                HStack {
-                    Label(file.name, systemImage: kind.symbol)
-                        // Only an episode reads as the main event; everything else is
-                        // context, not something the user came here to tap.
-                        .foregroundStyle(kind.isPlayable ? .primary : .secondary)
-                    Spacer()
-                    if loadingFileID == file.id {
-                        ProgressView().controlSize(.small)
-                    } else if let sizeBytes = file.sizeBytes {
-                        Text(Self.formattedSize(sizeBytes))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Button {
+                    open(file, kind: kind)
+                } label: {
+                    HStack {
+                        Label(file.name, systemImage: kind.symbol)
+                            // Only an episode reads as the main event; everything else is
+                            // context, not something the user came here to tap.
+                            .foregroundStyle(kind.isPlayable ? .primary : .secondary)
+                        Spacer()
+                        if loadingFileID == file.id {
+                            ProgressView().controlSize(.small)
+                        } else if let sizeBytes = file.sizeBytes {
+                            Text(Self.formattedSize(sizeBytes))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-            }
-            .buttonStyle(.plain)
-            .disabled(loadingFileID != nil)
+                .buttonStyle(.plain)
+                .disabled(loadingFileID != nil)
 
-            Button {
-                showingFileInfo = file
-            } label: {
-                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                Button {
+                    showingFileInfo = file
+                } label: {
+                    Image(systemName: "info.circle").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            sidecarCaption(group)
         }
+    }
+
+    /// Each extension is its own small button, so opening a transcript still works — that
+    /// was a tap on its own row before this folded them in.
+    @ViewBuilder
+    private func sidecarCaption(_ group: RemoteFileGroup) -> some View {
+        if !group.sidecars.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(Array(group.sidecars.enumerated()), id: \.element.id) { index, sidecar in
+                    if index > 0 { Text("·").font(.caption2).foregroundStyle(.tertiary) }
+                    Button {
+                        open(sidecar, kind: FileKind(path: sidecar.path))
+                    } label: {
+                        Text(Self.sidecarLabel(sidecar))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(loadingFileID != nil)
+                }
+            }
+            .padding(.leading, 28)
+        } else if showsMissingTranscripts, FileKind(path: group.file.path).isPlayable {
+            // Only worth saying where some episodes here do have one. In a folder with no
+            // transcripts at all, the absence is already obvious and this would just be
+            // the same line under every row.
+            Text("no transcript")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 28)
+        }
+    }
+
+    /// What distinguishes one sidecar from another is its extension — and, when the
+    /// basename carries more than the episode's, the bit in between: `ep-01.zh-CN.vtt`
+    /// reads as `zh-CN.vtt`, which is the thing worth knowing when there are two.
+    private static func sidecarLabel(_ file: CloudFile) -> String {
+        let name = (file.name as NSString).deletingPathExtension
+        let ext = (file.name as NSString).pathExtension.lowercased()
+        let qualifier = (name as NSString).pathExtension
+        return qualifier.isEmpty ? ext : "\(qualifier).\(ext)"
+    }
+
+    private var fileGroups: [RemoteFileGroup] { RemoteFileGroup.group(files) }
+
+    /// True once at least one episode in this folder has a transcript beside it.
+    private var showsMissingTranscripts: Bool {
+        fileGroups.contains { $0.hasTranscript }
     }
 
     /// Whether this connection has any not-yet-finished sync queue job — covers both a
@@ -213,7 +269,15 @@ struct RemoteBrowserView: View {
         var parts: [String] = []
         if !files.isEmpty {
             let bytes = files.compactMap(\.sizeBytes).reduce(Int64(0), +)
-            var here = "\(files.count) file\(files.count == 1 ? "" : "s") here"
+            // Counted the way the list above reads: one per episode, with the sidecars
+            // folded in as a qualifier. "148 files" in a 37-episode folder was true and
+            // useless.
+            let episodes = files.filter { FileKind(path: $0.path).isPlayable }.count
+            let sidecars = files.count - episodes
+            var here = episodes > 0
+                ? "\(episodes) episode\(episodes == 1 ? "" : "s") here"
+                : "\(files.count) file\(files.count == 1 ? "" : "s") here"
+            if episodes > 0, sidecars > 0 { here += " · \(sidecars) sidecar\(sidecars == 1 ? "" : "s")" }
             if bytes > 0 { here += " · \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))" }
             parts.append(here)
         }
@@ -286,12 +350,8 @@ struct RemoteBrowserView: View {
         isSyncing = true
         defer { isSyncing = false }
         do {
-            let result = try await SyncEngine().sync(providerRecord: record)
-            syncMessage = "Added \(result.added), \(result.lost) missing, \(result.totalFiles) files found."
+            syncMessage = try await SyncQueueManager.shared.sync(providerRecord: record).summary
             record.lastSyncedAt = Date()
-            if result.stoppedAtQueueLimit {
-                syncMessage = (syncMessage ?? "") + " Stopped at the queue limit — sync again to carry on."
-            }
             // Anything new the sync just pulled in is now local, so redraw this level.
             await load()
             loadStats()

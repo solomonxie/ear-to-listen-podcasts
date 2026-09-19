@@ -385,6 +385,74 @@ enum Migrations {
             }
         }
 
+        // A speaker page that only holds a name and one line of bio says almost nothing
+        // about whose voice this is. These three are what a listener actually wants to
+        // know — the themes, the career behind them, and the longer read — kept as
+        // separate columns rather than one blob so a wrong fact can be corrected on its
+        // own, and so `knownFor` can stay short enough to sit in a row.
+        migrator.registerMigration("v22_speaker_profile") { db in
+            try db.alter(table: "artists") { t in
+                t.add(column: "knownFor", .text)
+                t.add(column: "background", .text)
+                t.add(column: "profile", .text)
+            }
+            // The album equivalent: `notes` stays the sentence or two about what the
+            // collection is, and this is the longer write-up under it.
+            try db.alter(table: "albums") { t in
+                t.add(column: "profile", .text)
+            }
+        }
+
+        // Shows were a second grouping concept beside `Album`, meant for an ongoing series
+        // with its own hosts and subject tags. Nothing in a bucket of audio files ever
+        // populated one: a synced library has folders, which become albums. The table sat
+        // empty, its screen was unreachable in practice, and the Topics it carried were
+        // stranded behind it — a topic could only reach an episode via a show.
+        //
+        // So topics move onto albums, which is where the real grouping was all along, and
+        // the show tables go. Existing links are carried across first: whatever albums a
+        // show's episodes belong to inherit that show's topics.
+        migrator.registerMigration("v23_topics_on_albums_drop_shows") { db in
+            try db.create(table: "albumTopics") { t in
+                t.column("albumID", .text).notNull().indexed()
+                    .references("albums", onDelete: .cascade)
+                t.column("topicID", .text).notNull().indexed()
+                    .references("topics", onDelete: .cascade)
+                t.primaryKey(["albumID", "topicID"])
+            }
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO albumTopics (albumID, topicID)
+                SELECT DISTINCT tracks.albumID, showTopics.topicID
+                FROM showTopics
+                JOIN tracks ON tracks.showID = showTopics.showID
+                WHERE tracks.albumID IS NOT NULL
+                """)
+
+            try db.execute(sql: "DROP INDEX IF EXISTS idx_tracks_show")
+            try db.alter(table: "tracks") { $0.drop(column: "showID") }
+            try db.drop(table: "showTopics")
+            try db.drop(table: "showArtists")
+            try db.drop(table: "shows")
+        }
+
+        // Which model a key should call. Nil means "whatever this vendor's default is",
+        // so an existing key keeps behaving exactly as it did — and a new fast/cheap model
+        // shipping in a later build reaches every key that never chose one.
+        migrator.registerMigration("v24_ai_key_model") { db in
+            try db.alter(table: "aiKeys") { t in
+                t.add(column: "model", .text)
+            }
+        }
+
+        // Where to read more about a speaker who has a public page. Stored rather than
+        // re-derived, because the AI pass that finds it costs a call and is the one part
+        // of a profile that can be checked against the outside world.
+        migrator.registerMigration("v25_speaker_link") { db in
+            try db.alter(table: "artists") { t in
+                t.add(column: "link", .text)
+            }
+        }
+
         return migrator
     }
 }

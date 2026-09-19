@@ -94,7 +94,6 @@ struct BackupService {
                 title: track.title,
                 artistName: (track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name,
                 albumName: (track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil)?.name,
-                showName: (track.showID.flatMap { try? libraryStore.show(id: $0) } ?? nil)?.name,
                 year: track.year,
                 trackNumber: track.trackNumber,
                 notes: track.notes,
@@ -249,11 +248,9 @@ struct BackupService {
             }
             let artist = try entry.artistName.map { try libraryStore.upsertArtist(name: $0) }
             let album = try entry.albumName.map { try libraryStore.upsertAlbum(name: $0, artistID: artist?.id) }
-            let show = try entry.showName.map { try libraryStore.upsertShow(name: $0) }
             track.title = entry.title
             track.artistID = artist?.id
             track.albumID = album?.id
-            track.showID = show?.id
             track.year = entry.year
             track.trackNumber = entry.trackNumber
             track.notes = entry.notes

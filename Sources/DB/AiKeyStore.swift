@@ -13,14 +13,26 @@ struct AiKeyStore {
     }
 
     @discardableResult
-    func add(vendor: AiVendor, secret: String) throws -> AiKey {
+    func add(vendor: AiVendor, model: String? = nil, secret: String) throws -> AiKey {
         let nextPosition = try dbQueue.read { db in
             try Int.fetchOne(db, sql: "SELECT COALESCE(MAX(position), -1) + 1 FROM aiKeys") ?? 0
         }
-        let key = AiKey(id: UUID().uuidString, vendor: vendor, position: nextPosition, createdAt: Date())
+        let key = AiKey(
+            id: UUID().uuidString, vendor: vendor, model: model?.nilIfEmpty,
+            position: nextPosition, createdAt: Date()
+        )
         try credentials.set(secret, forKey: Self.secretKey(id: key.id))
         try dbQueue.write { db in try key.insert(db) }
         return key
+    }
+
+    /// Changes which model a key calls. Nil puts it back on the vendor default.
+    func setModel(id: String, model: String?) throws {
+        try dbQueue.write { db in
+            guard var key = try AiKey.fetchOne(db, key: id) else { return }
+            key.model = model?.nilIfEmpty
+            try key.update(db)
+        }
     }
 
     func remove(id: String) throws {

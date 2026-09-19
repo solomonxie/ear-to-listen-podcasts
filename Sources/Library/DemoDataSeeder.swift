@@ -14,15 +14,15 @@ extension Notification.Name {
     /// of them owns the others.
     static let bookmarksDidChange = Notification.Name("bookmarksDidChange")
 
-    /// Posted by `SyncEngine.sync(providerRecord:)` around each per-file job it runs
-    /// inline (not through `SyncQueueManager`'s own drain loop), so the queue's
-    /// `@Published` state — and anything showing it — stays live during a whole-bucket
-    /// sync too, not just during queued imports.
+    /// Posted once by `SyncEngine.sync(providerRecord:)` when a listing pass has queued
+    /// its files. It's the wake-up as well as the refresh: `SyncQueueManager` both
+    /// republishes its state and starts draining on it, so a pass running off the main
+    /// actor doesn't need to know whether the loop is already alive.
     static let syncQueueDidChange = Notification.Name("syncQueueDidChange")
 }
 
 /// Populates the real DB (not a parallel mock store) with a small sample library — a
-/// few speakers, shows, topics, albums, playlists, and the three bundled demo clips as
+/// few speakers, topics, albums, playlists, and the three bundled demo clips as
 /// actual synced-look `Track`s — for someone who wants to look around before connecting
 /// anything. Everything it writes is tagged `isDemo = true` (the provider row is
 /// `DemoProvider.providerType`), so it can be wiped and reseeded without touching
@@ -61,9 +61,7 @@ enum DemoDataSeeder {
 
             try db.execute(sql: "DELETE FROM playlistTracks WHERE playlistID IN (SELECT id FROM playlists WHERE isDemo = 1)")
             try Playlist.filter(Column("isDemo") == true).deleteAll(db)
-            try db.execute(sql: "DELETE FROM showArtists WHERE showID IN (SELECT id FROM shows WHERE isDemo = 1)")
-            try db.execute(sql: "DELETE FROM showTopics WHERE showID IN (SELECT id FROM shows WHERE isDemo = 1)")
-            try Show.filter(Column("isDemo") == true).deleteAll(db)
+            try db.execute(sql: "DELETE FROM albumTopics WHERE albumID IN (SELECT id FROM albums WHERE isDemo = 1)")
             try Topic.filter(Column("isDemo") == true).deleteAll(db)
             try Album.filter(Column("isDemo") == true).deleteAll(db)
             try Artist.filter(Column("isDemo") == true).deleteAll(db)
@@ -88,38 +86,22 @@ enum DemoDataSeeder {
         let history = Topic(id: UUID().uuidString, name: "History", isDemo: true)
         let news = Topic(id: UUID().uuidString, name: "News", isDemo: true)
 
-        let deepDive = Show(
-            id: UUID().uuidString, name: "Deep Dive",
-            summary: "Weekly conversations about on-device AI and developer tools.",
-            isDemo: true, createdAt: Date()
-        )
-        let retrospective = Show(
-            id: UUID().uuidString, name: "Retrospective",
-            summary: "A weekly look back at the history behind everyday things.",
-            isSaved: true, isDemo: true, createdAt: Date()
-        )
-        let dailyBrief = Show(
-            id: UUID().uuidString, name: "Daily Brief",
-            summary: "A short daily rundown of local-first and independent tech news.",
-            isDemo: true, createdAt: Date()
-        )
-
         let bestOf = Album(id: UUID().uuidString, artistID: nil, name: "Best of Demo", isDemo: true)
         let origins = Album(id: UUID().uuidString, artistID: jordan.id, name: "Origins", isDemo: true)
 
         let techTrack = Track(
             id: UUID().uuidString, providerID: provider.id, artistID: alex.id, albumID: bestOf.id,
-            showID: deepDive.id, filePath: "ep-tech-1", title: "On-Device AI, For Real This Time",
+            filePath: "ep-tech-1", title: "On-Device AI, For Real This Time",
             trackNumber: nil, durationMs: nil, year: 2024, updatedAt: Date()
         )
         let historyTrack = Track(
             id: UUID().uuidString, providerID: provider.id, artistID: jordan.id, albumID: origins.id,
-            showID: retrospective.id, filePath: "ep-history-1", title: "A Short History of the Podcast",
+            filePath: "ep-history-1", title: "A Short History of the Podcast",
             trackNumber: nil, durationMs: nil, year: 2023, updatedAt: Date()
         )
         let newsTrack = Track(
             id: UUID().uuidString, providerID: provider.id, artistID: casey.id, albumID: bestOf.id,
-            showID: dailyBrief.id, filePath: "ep-news-1", title: "Local-First Is Having a Moment",
+            filePath: "ep-news-1", title: "Local-First Is Having a Moment",
             trackNumber: nil, durationMs: nil, year: 2024, updatedAt: Date()
         )
 
@@ -130,16 +112,12 @@ enum DemoDataSeeder {
             try provider.insert(db)
             for artist in [alex, priya, jordan, casey] { try artist.insert(db) }
             for topic in [technology, ai, history, news] { try topic.insert(db) }
-            for show in [deepDive, retrospective, dailyBrief] { try show.insert(db) }
-            try ShowArtist(showID: deepDive.id, artistID: alex.id).insert(db)
-            try ShowArtist(showID: deepDive.id, artistID: priya.id).insert(db)
-            try ShowArtist(showID: retrospective.id, artistID: jordan.id).insert(db)
-            try ShowArtist(showID: dailyBrief.id, artistID: casey.id).insert(db)
-            try ShowTopic(showID: deepDive.id, topicID: technology.id).insert(db)
-            try ShowTopic(showID: deepDive.id, topicID: ai.id).insert(db)
-            try ShowTopic(showID: retrospective.id, topicID: history.id).insert(db)
-            try ShowTopic(showID: dailyBrief.id, topicID: news.id).insert(db)
             for album in [bestOf, origins] { try album.insert(db) }
+            // Topics tag collections now, so the demo library shows them doing that.
+            try AlbumTopic(albumID: bestOf.id, topicID: technology.id).insert(db)
+            try AlbumTopic(albumID: bestOf.id, topicID: ai.id).insert(db)
+            try AlbumTopic(albumID: bestOf.id, topicID: news.id).insert(db)
+            try AlbumTopic(albumID: origins.id, topicID: history.id).insert(db)
             for track in [techTrack, historyTrack, newsTrack] { try track.insert(db) }
             for playlist in [commuteMix, weekendLongform] { try playlist.insert(db) }
             try PlaylistTrack(playlistID: commuteMix.id, trackID: techTrack.id, position: 0).insert(db)

@@ -48,12 +48,30 @@ enum SyncFrequency: Int, CaseIterable, Identifiable {
 }
 
 struct SyncResult {
-    var added: Int
+    /// Files this pass put in the queue — not files imported. The importing happens after
+    /// it returns, in `SyncQueueManager.drain()`, so `queued == 12` means twelve files
+    /// *starting*, not twelve episodes in the library.
+    var queued: Int
     var lost: Int
     var totalFiles: Int
     /// The pass stopped early because the queue hit `SyncQueuePolicy.capacity`. What's
-    /// left isn't missing, just not queued yet — the next sync carries on from there.
+    /// left isn't missing, just not queued yet — the drain tops it back up once there's room.
     var stoppedAtQueueLimit: Bool = false
+
+    /// Both "Sync Now" buttons say the same thing, so they say it from here.
+    var summary: String {
+        var text: String
+        if queued > 0 {
+            text = "Queued \(queued) of \(totalFiles) files — importing in the background."
+            if lost > 0 { text += " \(lost) missing." }
+        } else if lost > 0 {
+            text = "Nothing new. \(lost) no longer in the bucket."
+        } else {
+            text = "Up to date — \(totalFiles) files, nothing new."
+        }
+        if stoppedAtQueueLimit { text += " Stopped at the queue limit — syncing on as room frees up." }
+        return text
+    }
 }
 
 enum SyncEngineError: Error, LocalizedError {
@@ -81,25 +99,14 @@ struct SyncEngine {
         self.dbQueue = dbQueue
     }
 
-    /// Syncs every active provider's file listing into the local library.
-    @discardableResult
-    func syncActiveProviders() async throws -> Int {
-        var total = 0
-        for record in try providerStore.active() {
-            total += try await sync(providerRecord: record).added
-        }
-        return total
-    }
-
-    /// Recursively lists the provider's files, adds any not yet in local metadata (reading
-    /// embedded audio metadata, then optionally refining it via `ContentAnalyzer` if an
-    /// OpenAI key is set), and marks any previously-known file no longer in the listing as lost.
+    /// Recursively lists the provider's files and queues every one that needs fetching —
+    /// new, changed, or previously lost; unchanged files are skipped untouched. Then marks
+    /// anything no longer in the listing as lost, and returns.
     ///
-    /// Runs sequentially rather than through `SyncQueueManager`'s drain loop — this is one
-    /// whole-bucket pass, not something to parallelize — but every file that actually needs
-    /// fetching (new, changed, or previously lost; unchanged files are skipped untouched)
-    /// still gets a `SyncJob` row around it, so it shows up live in the sync queue exactly
-    /// like a queued per-file import would.
+    /// It imports nothing itself: `SyncQueueManager.drain()` is the only thing that does,
+    /// at whatever pace the queue is set to. This is why a bucket with thousands of files
+    /// no longer holds a "Sync Now" button hostage for minutes, and why the queue's speed
+    /// control applies to a whole-bucket pass the same as to anything else.
     func sync(providerRecord record: ProviderRecord) async throws -> SyncResult {
         // Pause means pause: a scheduled or manual pass mustn't quietly keep importing
         // while the queue it reports into is stopped.
@@ -114,7 +121,7 @@ struct SyncEngine {
         // stop early (paused, or the queue filled up). Building it as it went would mark
         // everything past the stopping point as lost.
         let seenPaths = Set(files.map(\.path))
-        var added = 0
+        var queued = 0
         var stoppedAtQueueLimit = false
         for file in files {
             // Pausing mid-pass stops it where it stands rather than letting the rest of a
@@ -122,45 +129,51 @@ struct SyncEngine {
             if SyncQueuePolicy.isPaused { break }
             let existing = try? trackStore.find(providerID: record.id, filePath: file.path)
             guard existing == nil || existing!.isLost || hasChanged(existing!, file) else { continue }
-            // Already queued (adding a connection queues the whole listing) — let the
-            // drain loop have it rather than importing the same file twice at once.
+            // Already waiting or being worked — leave it where it is in the queue.
             if (try? jobStore.hasUnfinished(providerID: record.id, filePath: file.path)) == true { continue }
 
-            let job: SyncJob
             do {
-                job = try jobStore.enqueue(
+                _ = try jobStore.enqueue(
                     providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
                     contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt
                 )
+                queued += 1
             } catch {
                 // The queue ceiling. Stop here instead of hammering it with every remaining
-                // file — the rest come in on the next sync.
+                // file — the drain tops up from this point once it's made room.
                 stoppedAtQueueLimit = true
                 break
             }
-            try? jobStore.markRunning(id: job.id)
-            NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
-            do {
-                if try await importFileIfNeeded(file, providerRecord: record, provider: provider, jobID: job.id) {
-                    added += 1
-                }
-                try? jobStore.markDone(id: job.id)
-            } catch {
-                try? jobStore.markFailed(id: job.id, error: error.localizedDescription)
-            }
-            NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
         }
 
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
         try providerStore.updateLastSynced(id: record.id, at: Date())
 
-        // A restore that arrived before these files did has been waiting for them: its
-        // playlist order, hand edits and transcripts can only attach to tracks that exist.
-        PendingRestore.reapplyAfterSync(dbQueue: dbQueue)
+        // Once, not per file: this is the hop out of here into the main-actor queue
+        // manager, and it both refreshes the list and wakes the drain loop.
+        NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
 
         return SyncResult(
-            added: added, lost: lost, totalFiles: files.count, stoppedAtQueueLimit: stoppedAtQueueLimit
+            queued: queued, lost: lost, totalFiles: files.count, stoppedAtQueueLimit: stoppedAtQueueLimit
         )
+    }
+
+    /// Works one already-claimed job: rebuilds the `CloudFile` the listing pass recorded,
+    /// imports it, and closes the row either way. It lives here rather than on the
+    /// main-actor queue manager because nothing about it needs the main actor — and
+    /// because it's the only way a test can drive an import without one.
+    func perform(_ job: SyncJob, providerRecord record: ProviderRecord) async {
+        do {
+            let provider = try ProviderManager.shared.provider(for: record)
+            let file = CloudFile(
+                id: job.filePath, name: job.displayName, path: job.filePath, sizeBytes: job.sizeBytes,
+                mimeType: nil, modifiedAt: job.remoteModifiedAt, contentHash: job.contentHash
+            )
+            try await importFileIfNeeded(file, providerRecord: record, provider: provider, jobID: job.id)
+            try? jobStore.markDone(id: job.id)
+        } catch {
+            try? jobStore.markFailed(id: job.id, error: error.localizedDescription)
+        }
     }
 
     /// Imports one already-listed file if not yet known locally (or refreshes its

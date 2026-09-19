@@ -4,9 +4,8 @@ import Foundation
 /// (like Anthropic's), and the key rides as a query parameter rather than a header, so
 /// this can't share `OpenAICompatibleChatClient`.
 enum GoogleChatClient {
-    private static let model = "gemini-1.5-flash"
 
-    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(apiKey: String, model: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         let systemInstruction = messages
             .filter { $0.role == .system }
             .map(\.content)

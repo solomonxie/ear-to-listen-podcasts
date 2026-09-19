@@ -39,12 +39,24 @@ final class SettingsViewModel: ObservableObject {
     /// Tests the key with one real, cheap request before persisting it, same flow as
     /// adding an S3 connection tests the bucket first. Throws (rather than going
     /// through `errorMessage`) so the add-key sheet can show the failure inline.
-    func addAiKey(vendor: AiVendor, secret: String) async throws {
-        _ = try await AiRouter.runChatCompletion(vendor: vendor, apiKey: secret, messages: [
-            ChatMessage(role: .user, content: "Reply with \"ok\"."),
-        ])
-        try aiKeyStore.add(vendor: vendor, secret: secret)
+    /// The test call goes through the *chosen* model, so a mistyped custom name fails
+    /// here rather than silently on every sync afterwards.
+    func addAiKey(vendor: AiVendor, model: String?, secret: String) async throws {
+        _ = try await AiRouter.runChatCompletion(
+            vendor: vendor, apiKey: secret, model: model,
+            messages: [ChatMessage(role: .user, content: "Reply with \"ok\".")]
+        )
+        try aiKeyStore.add(vendor: vendor, model: model, secret: secret)
         aiKeys = try aiKeyStore.all()
+    }
+
+    func setAiKeyModel(_ key: AiKey, model: String?) {
+        do {
+            try aiKeyStore.setModel(id: key.id, model: model)
+            aiKeys = try aiKeyStore.all()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func removeAiKey(_ key: AiKey) {

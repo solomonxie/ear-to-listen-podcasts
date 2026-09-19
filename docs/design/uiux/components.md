@@ -87,3 +87,83 @@ without it every `Label` falls back to `.body` and dwarfs its own heading.
 - A track missing from the last listing is badged **Missing**, never deleted.
 - A stats footer is withheld until its list resolves, so numbers never float
   above an empty list.
+
+## Pickers unfold, they don't float
+
+`Sources/App/UnfoldingPicker.swift`. A form field's options open **in the
+field's own row**, pushing the rest of the form down. A menu or sheet covers
+exactly the context the choice is made from: the row's label, the fields
+already filled, the value being replaced.
+
+```
+ Language        English  ›        Language        English  ⌄
+ Notes                        →    ┌───────────────────────────┐
+ Topics                            │   Inherit (automatic)     │
+                                   │ ✓ English                 │
+                                   │   中文                     │
+                                   └───────────────────────────┘
+                                   Notes
+                                   Topics     ← pushed down, not covered
+```
+
+- The row doesn't move; everything below it does. No backdrop, no transition,
+  nothing to dismiss.
+- **One open at a time** — every picker in a form shares one `open` binding.
+- The chevron turns `›` → `⌄`.
+- **No Cancel / Done.** Picking folds it; tapping the row again folds it
+  unchanged.
+
+`UnfoldingTextField` is the same bargain for naming something — a `⊕ New
+Playlist` row that unfolds into a field, rather than an alert over the list
+you're adding to.
+
+**Still a sheet or menu, not this:** a list's filter, a toolbar `⋯`, a
+destructive confirm, or a system picker that needs the screen (photos).
+
+Converted: spoken language (album/speaker/episode), AI vendor, AI model, app
+language, sync frequency, both "New Playlist" prompts.
+
+## Rows you can actually hit
+
+`DetailLayout.rowHeight` is 44pt — Apple's minimum target. The player's episode
+card is a column of fields used one-handed while something plays; `.footnote`
+text with no padding gave a ~22pt row, which is a target you aim at.
+
+**A link row is a link, whole.** Speaker and Album on the episode card go
+somewhere, so the entire row is the target and the value is in the accent
+colour. **No chevron** — the colour already says it goes somewhere, and an
+arrow at the far edge is a second thing to look at that points back at what you
+already decided to tap.
+
+```
+✗  Speaker    华贤                    ›     ← only the › worked, far from the name
+✓  Speaker    华贤                          ← whole row, accent value, no arrow
+```
+
+Editing those two moved to `EpisodeEditView`: from the player you go to the
+speaker, you don't rename them.
+
+## Numbers come off a wheel, not a keypad
+
+`UnfoldingWheel`. A year and a track number are picked from a short, ordered,
+known range. A keypad covers half the screen, offers every number including the
+wrong ones, and needs a Done to dismiss.
+
+```
+ Year            2026  ›        Year            2026  ⌄
+ Track no.        —    ›   →    ┌────────────────────────┐
+                                │         2027           │
+                                │      ▸  2026  ◂        │
+                                │         2025           │
+                                └────────────────────────┘
+                                Track no.        —    ›
+```
+
+A continuous control **commits as it moves** — no Done, the row updates under
+your thumb. `—` is on the wheel itself, since there's no keyboard to delete
+from and "unset" is a real answer for both.
+
+Converted: episode year and track no. (player card and editor), album year.
+
+Left as a keypad: nothing. Left as text: names, notes, bio, background,
+profile, topics, playlist names — free text, where a list would be wrong.

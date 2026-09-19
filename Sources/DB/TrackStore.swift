@@ -121,14 +121,6 @@ struct TrackStore {
         }
     }
 
-    func tracks(forShow showID: String) throws -> [Track] {
-        try dbQueue.read { db in
-            try Track
-                .filter(Column("showID") == showID && Column("isLost") == false)
-                .order(Column("title"))
-                .fetchAll(db)
-        }
-    }
 
     func tracks(forYear year: Int) throws -> [Track] {
         try dbQueue.read { db in

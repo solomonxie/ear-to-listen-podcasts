@@ -23,13 +23,17 @@ enum TranscriptFile {
     static let companionExtension = "lrc"
 
     /// `podcast/ep1.mp3` → `podcast/ep1.vtt`. Matching on basename is the whole convention.
-    static func sidecarPath(forAudioPath path: String, extension ext: String) -> String {
+    ///
+    /// A path with nothing left once its extension is off has no sidecar name to give, and
+    /// the answer to that is nothing — the old fallback returned the audio path itself,
+    /// which is the one string this must never hand to a writer.
+    static func sidecarPath(forAudioPath path: String, extension ext: String) -> String? {
         let base = (path as NSString).deletingPathExtension
-        return base.isEmpty ? path : "\(base).\(ext)"
+        return base.isEmpty ? nil : "\(base).\(ext)"
     }
 
     static func candidatePaths(forAudioPath path: String) -> [String] {
-        readableExtensions.map { sidecarPath(forAudioPath: path, extension: $0) }
+        readableExtensions.compactMap { sidecarPath(forAudioPath: path, extension: $0) }
     }
 
     // MARK: Reading

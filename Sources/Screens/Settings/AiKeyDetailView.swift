@@ -13,8 +13,23 @@ struct AiKeyDetailView: View {
     @State private var queries: [AiQuery] = []
     @State private var expanded: Set<String> = []
     @State private var showingClearConfirmation = false
+    @State private var model: String?
+    @State private var openPicker: String?
 
     private let store = AiQueryStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let keyStore = AiKeyStore(dbQueue: DatabaseManager.shared.dbQueue)
+
+    /// Saves as it changes — there's no Done button on this screen, and a model picked
+    /// and then navigated away from should be the model that gets called.
+    private var modelBinding: Binding<String?> {
+        Binding(
+            get: { model },
+            set: { newValue in
+                model = newValue
+                try? keyStore.setModel(id: key.id, model: newValue)
+            }
+        )
+    }
 
     private var totalTokens: Int {
         queries.compactMap(\.totalTokens).reduce(0, +)
@@ -27,6 +42,14 @@ struct AiKeyDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                AiModelPicker(vendor: key.vendor, model: modelBinding, id: "model", open: $openPicker)
+            } header: {
+                Text("Model")
+            } footer: {
+                Text("Used for every call made with this key. Leave it on Default unless you want a bigger model for better titles, or a cheaper one to spend less per sync.")
+            }
+
             Section {
                 LabeledContent("Requests", value: "\(key.requestCount)")
                 LabeledContent("Tokens (last \(AiQueryStore.historyLimit))", value: totalTokens.formatted())
@@ -62,7 +85,10 @@ struct AiKeyDetailView: View {
         } message: {
             Text("Only the record of what was sent — the key itself stays.")
         }
-        .onAppear { queries = (try? store.recent(keyID: key.id)) ?? [] }
+        .onAppear {
+            queries = (try? store.recent(keyID: key.id)) ?? []
+            model = key.model
+        }
     }
 
     /// Tap to open rather than push: the point of a row is comparing calls, and the
