@@ -16,16 +16,28 @@ enum TranscriptSidecar {
     /// Reads the sidecar the last sync recorded beside this episode. Nothing to read is
     /// the normal case, not an error — most episodes won't have one.
     ///
-    /// The path comes from `Track.transcriptPath`, learned from the listing rather than
-    /// guessed: probing five candidate extensions per episode was five requests to be
-    /// told "no" four or five times, every time.
+    /// Prefers `Track.transcriptPath`, learned from the sync listing — one request rather
+    /// than probing five extensions to be told "no" four times.
+    ///
+    /// Falls back to probing when there's no recorded path. Knowing it is an optimisation;
+    /// *not* knowing it must never be read as "there is no transcript" — a track synced by
+    /// a build before the column existed, or added between listings, has a nil path and a
+    /// perfectly good `.vtt` sitting beside it.
+    /// The recorded path if there is one, every conventional candidate if there isn't.
+    static func pathsToTry(for track: Track) -> [String] {
+        if let known = track.transcriptPath?.nilIfEmpty { return [known] }
+        return TranscriptFile.candidatePaths(forAudioPath: track.filePath)
+    }
+
     static func load(track: Track, provider: CloudProvider, duration: Double?) async -> [TranscriptSegment]? {
-        guard let path = track.transcriptPath?.nilIfEmpty else { return nil }
-        guard let text = await contents(at: path, provider: provider) else { return nil }
-        let segments = TranscriptFile.parse(
-            text, extension: (path as NSString).pathExtension, duration: duration
-        )
-        return segments.isEmpty ? nil : segments
+        for path in pathsToTry(for: track) {
+            guard let text = await contents(at: path, provider: provider) else { continue }
+            let segments = TranscriptFile.parse(
+                text, extension: (path as NSString).pathExtension, duration: duration
+            )
+            if !segments.isEmpty { return segments }
+        }
+        return nil
     }
 
     /// Writes both files. Throws only on a write that was attempted and failed — a
