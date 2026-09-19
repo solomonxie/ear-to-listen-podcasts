@@ -39,6 +39,8 @@ struct SyncJob: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// hash rather than falling back to size alone.
     var contentHash: String?
     var remoteModifiedAt: Date?
+    /// The transcript sitting beside this file in the listing, if there was one.
+    var transcriptPath: String?
     var status: SyncJobStatus
     var stage: SyncJobStage?
     var errorMessage: String?

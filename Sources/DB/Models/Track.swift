@@ -17,7 +17,10 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var sizeBytes: Int64? = nil
     /// Provider-supplied content fingerprint as of the last sync (e.g. S3's ETag) — lets
     /// a same-path, same-size overwrite still be detected without downloading the file.
-    var contentHash: String? = nil
+    var contentHash: String?
+    /// The transcript file beside this episode in its bucket, as of the last sync. Nil
+    /// means the last listing had none — not "not looked at yet".
+    var transcriptPath: String? = nil
     var remoteModifiedAt: Date? = nil
     /// True when the last sync no longer found this file in the bucket listing.
     var isLost: Bool = false

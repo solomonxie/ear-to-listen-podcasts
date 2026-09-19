@@ -87,3 +87,42 @@ rows, and a merge problem as soon as the two disagree.
 
 The split: **the snapshot owns app data; sidecars own only what's worth another
 tool being able to read.** Today that's the transcript.
+
+## When transcripts move, in each direction
+
+**Up, automatically.** A finished pass writes `ep-01.vtt` (and `.lrc`) beside
+the audio. A hand correction goes up immediately rather than waiting for a pass
+to end — it's the one thing that can't be regenerated. Read-only buckets skip it
+silently; a failed upload is reported but never interrupts playback, since the
+text is safe locally and in the backup.
+
+**Down, on two occasions only.** The sync listing already sees both `ep-01.mp3`
+and `ep-01.vtt`, so it records the pairing on the track
+(`Track.transcriptPath`, carried through the queue on `SyncJob.transcriptPath`).
+That path is then read:
+
+1. when you open an episode that has no transcript stored locally;
+2. when you press a transcribe button — it asks the bucket before spending
+   battery or an API call, since a file someone dropped there is both better and
+   free compared to recognising two hours of speech again.
+
+Nothing else pulls. An episode whose text is already here doesn't re-fetch on
+every open — that would be a request per episode for a file that rarely changes.
+
+```
+ sync listing ──▶ ep-01.mp3 ✚ ep-01.vtt ──▶ Track.transcriptPath
+                                                   │
+ open episode, nothing stored ─────────────────────┤
+ press transcribe ─────────────────────────────────┤──▶ fetch, merge
+                                                   │
+ nothing stored, no sidecar ──────────────────────▶ recognise on device
+```
+
+**A hand edit ends the conversation.** Once you've corrected a line, the episode's
+text is yours: remote is never read again and the next export writes over it.
+That does lose an edit made to the bucket afterwards — accepted deliberately,
+because the correction on the phone is the thing that can't be reproduced.
+
+Knowing the path also removes the probing: matching on basename meant asking for
+`.vtt`, `.srt`, `.lrc`, `.json` and `.txt` in turn and being told "no" four or
+five times per episode.
