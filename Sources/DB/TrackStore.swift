@@ -239,6 +239,32 @@ struct TrackStore {
         }
     }
 
+    /// Numbers apart episodes that share a title, one album at a time. Returns how many
+    /// were renamed.
+    ///
+    /// Album by album on purpose: two collections may each hold an `Introduction`, and
+    /// they aren't duplicates of each other. Tracks with no album are left alone — there's
+    /// no collection to be ambiguous within.
+    @discardableResult
+    func numberDuplicateTitles() throws -> Int {
+        try dbQueue.write { db in
+            let byAlbum = Dictionary(grouping: try Track.fetchAll(db)) { $0.albumID }
+            var renamed = 0
+            for (albumID, tracks) in byAlbum where albumID != nil {
+                for (trackID, title) in DuplicateTitles.renumbered(tracks) {
+                    guard var track = try Track.fetchOne(db, key: trackID) else { continue }
+                    track.title = title
+                    // Deliberately not `metadataEditedAt` — nobody edited this, and
+                    // marking it would make the next pass leave the run alone forever.
+                    track.updatedAt = Date()
+                    try track.update(db)
+                    renamed += 1
+                }
+            }
+            return renamed
+        }
+    }
+
     func markLost(providerID: String, keepingPaths paths: Set<String>) throws -> Int {
         try dbQueue.write { db in
             let candidates = try Track

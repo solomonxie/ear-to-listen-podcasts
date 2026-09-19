@@ -41,6 +41,7 @@ final class SyncQueueManager: ObservableObject {
 
     private let jobStore = SyncJobStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let syncEngine = SyncEngine()
     private var isDraining = false
 
@@ -174,7 +175,13 @@ final class SyncQueueManager: ObservableObject {
             }
             guard await topUp() else { break }
         }
-        if didWork { await reapplyPendingRestore() }
+        if didWork {
+            // Once the batch has settled, not per file: numbering needs to see all the
+            // siblings, and an episode imported halfway through a folder has none yet.
+            let renamed = (try? trackStore.numberDuplicateTitles()) ?? 0
+            if renamed > 0 { NotificationCenter.default.post(name: .libraryDidChange, object: nil) }
+            await reapplyPendingRestore()
+        }
     }
 
     /// Re-lists the connections that stopped at the ceiling. A pass that queues nothing is
