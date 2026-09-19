@@ -227,12 +227,15 @@ struct SettingsSectionView: View {
                     title: "LANGUAGE",
                     info: "Applies right away, without a relaunch. \u{201C}Same as device\u{201D} follows your phone's own language setting. Each option is written in its own language, so it stays readable while the app is still showing the other one."
                 )
-                // Unfolds in place rather than dropping a menu over the settings it sits
-                // among — see `UnfoldingPicker`.
+                // No label on the row: the heading two lines up already says "LANGUAGE",
+                // and repeating it left the word and the answer at opposite edges of the
+                // screen with a hand's width of nothing between them. The current choice
+                // is the row.
                 UnfoldingPicker(
-                    title: "Language", id: "appLanguage", open: $openPicker,
+                    title: "", id: "appLanguage", open: $openPicker,
                     selection: $language.language,
-                    options: AppLanguage.allCases.map { UnfoldingPicker.Option($0, $0.displayName) }
+                    options: AppLanguage.allCases.map { UnfoldingPicker.Option($0, $0.displayName) },
+                    valueAlignment: .leading
                 )
             }
             .padding(.horizontal)

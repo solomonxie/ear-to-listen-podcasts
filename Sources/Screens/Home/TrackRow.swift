@@ -49,6 +49,11 @@ struct TrackRow: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
+        // The row is as wide as the list, and all of it is the target. A `Spacer` fills
+        // the gap but isn't hit-testable, so tapping to the right of a short title used
+        // to land on nothing — which reads as a dead row rather than a narrow one.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .contextMenu {
             Button("Edit Details", systemImage: "pencil") { showingEdit = true }
         }

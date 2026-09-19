@@ -52,6 +52,10 @@ struct UnfoldingPicker<Value: Hashable>: View {
     @Binding var open: String?
     @Binding var selection: Value
     let options: [Option]
+    /// `.trailing` in a form, where the label holds the left edge. `.leading` when the row
+    /// *is* the value — a labelless row with its answer pushed to the far right reads as
+    /// two unrelated things.
+    var valueAlignment: HorizontalAlignment = .trailing
 
     private var isOpen: Bool { open == id }
 
@@ -62,12 +66,14 @@ struct UnfoldingPicker<Value: Hashable>: View {
     var body: some View {
         Button(action: toggle) {
             HStack {
-                Text(title)
-                    .foregroundStyle(.primary)
-                Spacer()
+                if valueAlignment == .trailing {
+                    Text(title).foregroundStyle(.primary)
+                    Spacer()
+                }
                 Text(currentLabel)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(valueAlignment == .trailing ? .secondary : .primary)
                     .lineLimit(1)
+                if valueAlignment == .leading { Spacer() }
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
