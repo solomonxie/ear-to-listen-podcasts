@@ -42,7 +42,15 @@ struct RemoteBrowserView: View {
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
 
-    init(record: ProviderRecord, folder: String? = nil, title: String? = nil, viewModel: SettingsViewModel) {
+    /// A file to scroll to and mark on arrival — set when the browser was opened *at* a
+    /// particular episode rather than to browse.
+    var highlight: String?
+
+    init(
+        record: ProviderRecord, folder: String? = nil, title: String? = nil,
+        highlight: String? = nil, viewModel: SettingsViewModel
+    ) {
+        self.highlight = highlight
         _record = State(initialValue: record)
         self.folder = folder
         self.title = title
@@ -108,10 +116,17 @@ struct RemoteBrowserView: View {
                             .foregroundStyle(Color.accentColor)
                         }
                     }
+
                 }
             }
         }
         .listStyle(.plain)
+        // Room to scroll the stats line clear of the docked now-playing bar. As scroll
+        // content rather than row padding: padding the footer stretched the *row*, and a
+        // list draws a separator at the bottom of a row — which put a hairline across
+        // empty space below the last folder.
+        .contentMargins(.bottom, 72, for: .scrollContent)
+        .listSectionSeparator(.hidden, edges: .bottom)
         .navigationTitle(title ?? record.label)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -182,6 +197,7 @@ struct RemoteBrowserView: View {
                             // Only an episode reads as the main event; everything else is
                             // context, not something the user came here to tap.
                             .foregroundStyle(kind.isPlayable ? .primary : .secondary)
+                            .fontWeight(file.path == highlight ? .semibold : .regular)
                         Spacer()
                         if loadingFileID == file.id {
                             ProgressView().controlSize(.small)
@@ -204,6 +220,12 @@ struct RemoteBrowserView: View {
             }
             sidecarCaption(group)
         }
+        // Tinted, not selected: the row the File card sent you to, so you can see which
+        // of forty near-identical filenames was meant without it looking tappable-er.
+        .listRowBackground(
+            file.path == highlight ? Color.accentColor.opacity(0.12) : Color.clear
+        )
+        .id(file.path)
     }
 
     /// Each extension is its own small button, so opening a transcript still works — that
@@ -211,21 +233,28 @@ struct RemoteBrowserView: View {
     @ViewBuilder
     private func sidecarCaption(_ group: RemoteFileGroup) -> some View {
         if !group.sidecars.isEmpty {
-            HStack(spacing: 4) {
-                ForEach(Array(group.sidecars.enumerated()), id: \.element.id) { index, sidecar in
-                    if index > 0 { Text("·").font(.caption2).foregroundStyle(.tertiary) }
+            HStack(spacing: 6) {
+                ForEach(group.sidecars) { sidecar in
                     Button {
                         open(sidecar, kind: FileKind(path: sidecar.path))
                     } label: {
                         Text(Self.sidecarLabel(sidecar))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .overlay {
+                                Capsule().strokeBorder(Color.accentColor.opacity(0.4), lineWidth: 1)
+                            }
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(loadingFileID != nil)
                 }
+                Spacer(minLength: 0)
             }
             .padding(.leading, 28)
+            .padding(.vertical, 2)
         } else if showsMissingTranscripts, FileKind(path: group.file.path).isPlayable {
             // Only worth saying where some episodes here do have one. In a folder with no
             // transcripts at all, the absence is already obvious and this would just be

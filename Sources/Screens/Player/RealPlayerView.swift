@@ -48,10 +48,15 @@ struct RealPlayerView: View {
     @State private var album: Album?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     var body: some View {
+        // The inset sits on the stack rather than on each destination: pages pushed from
+        // a pushed page — the browser walking into a subfolder — use plain links of their
+        // own, and only a stack-level inset reaches those too. Empty at the root, which
+        // has its own rule: no bar while the real transport is still on screen.
         NavigationStack(path: $path) {
             // One reader around the whole page, so the title in the bar can scroll it too.
             ScrollViewReader { proxy in
@@ -83,12 +88,6 @@ struct RealPlayerView: View {
                             .animation(.easeInOut(duration: 0.2), value: isTransportOffscreen)
                             .navigationDestination(for: PlayerRoute.self) { route in
                                 destination(route)
-                                    // The bar follows onto pushed pages. Attached here
-                                    // rather than on the stack so the root page keeps its
-                                    // own rule — it hides the bar while the real transport
-                                    // is still on screen, and a pushed page has no
-                                    // transport to defer to.
-                                    .safeAreaInset(edge: .bottom) { pushedPageBar }
                             }
                             .task(id: track.id) {
                                 artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
@@ -134,6 +133,10 @@ struct RealPlayerView: View {
                 }
             }
         }
+        // On the stack, so it reaches pages pushed from pushed pages too — the browser
+        // walks into subfolders with plain links of its own, and a per-destination inset
+        // never saw those.
+        .safeAreaInset(edge: .bottom) { pushedPageBar }
         // Put the card down by pulling it down — either by dragging its top, or by pulling
         // the whole page past its own top, which the scroll view reports as overscroll. It
         // follows the finger and shrinks as it goes, so the pull is answered before the
@@ -355,6 +358,10 @@ struct RealPlayerView: View {
         .font(.footnote)
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
+        // Inset to the same margin as the Episode card below it. Left full-bleed, three
+        // capsules ran wider than every other component on the page and read as a
+        // different screen's worth of controls sitting on top of this one.
+        .padding(.horizontal)
     }
 
     private func toggleFavorite(_ track: Track) {
@@ -482,29 +489,40 @@ struct RealPlayerView: View {
             if let album = (try? libraryStore.album(id: id)) ?? nil {
                 AlbumDetailView(album: album)
             }
+        case .browse(let providerID, let folder, let highlight):
+            if let record = (try? providerStore.all())?.first(where: { $0.id == providerID }) {
+                RemoteBrowserView(
+                    record: record, folder: folder,
+                    title: folder.map { ($0 as NSString).lastPathComponent },
+                    highlight: highlight, viewModel: SettingsViewModel()
+                )
+            }
         }
     }
 
     /// The same bar, on a page pushed from the player. Tapping it goes back to what's
     /// playing — there's no transport on this page to scroll up to.
+    @ViewBuilder
     private var pushedPageBar: some View {
-        VStack(spacing: 0) {
-            ProgressView(value: engine.duration > 0 ? min(engine.currentTime / engine.duration, 1) : 0)
-                .progressViewStyle(.linear)
-                .tint(.accentColor)
-                .scaleEffect(x: 1, y: 0.6, anchor: .center)
+        if !path.isEmpty {
+            VStack(spacing: 0) {
+                ProgressView(value: engine.duration > 0 ? min(engine.currentTime / engine.duration, 1) : 0)
+                    .progressViewStyle(.linear)
+                    .tint(.accentColor)
+                    .scaleEffect(x: 1, y: 0.6, anchor: .center)
 
-            NowPlayingBarContent(
-                track: engine.currentTrack,
-                artistName: artist?.name,
-                albumName: album?.name,
-                subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
-                isPlaying: engine.isPlaying,
-                onTogglePlay: { engine.togglePlayPause() },
-                onTapBar: { path.removeAll() }
-            )
+                NowPlayingBarContent(
+                    track: engine.currentTrack,
+                    artistName: artist?.name,
+                    albumName: album?.name,
+                    subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
+                    isPlaying: engine.isPlaying,
+                    onTogglePlay: { engine.togglePlayPause() },
+                    onTapBar: { path.removeAll() }
+                )
+            }
+            .background(.ultraThinMaterial)
         }
-        .background(.ultraThinMaterial)
     }
 
     private func bottomBar(_ proxy: ScrollViewProxy) -> some View {
@@ -714,4 +732,7 @@ private extension View {
 enum PlayerRoute: Hashable {
     case speaker(String)
     case album(String)
+    /// The bucket browser, opened at the folder this episode sits in. `highlight` is the
+    /// file to scroll to and mark once it's there.
+    case browse(providerID: String, folder: String?, highlight: String?)
 }
