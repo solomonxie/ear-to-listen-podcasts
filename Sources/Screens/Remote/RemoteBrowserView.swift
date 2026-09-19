@@ -59,6 +59,20 @@ struct RemoteBrowserView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list.scrollHandle(
+                ids: folders.map(AnyHashable.init) + fileGroups.map { AnyHashable($0.file.path) },
+                proxy: proxy,
+                label: { index in
+                    let names = folders.map { ($0 as NSString).lastPathComponent }
+                        + fileGroups.map(\.file.name)
+                    return index < names.count ? names[index] : ""
+                }
+            )
+        }
+    }
+
+    private var list: some View {
         List {
             if let errorMessage {
                 Text(errorMessage).foregroundStyle(.orange)

@@ -77,6 +77,18 @@ struct RealPlayerView: View {
                                 }
                             )
                             .overlay(alignment: .bottom) { floatingControls(proxy) }
+                            // The transcript is the long part — forty minutes of speech
+                            // is hundreds of lines, and the system indicator gives it a
+                            // few points of travel.
+                            .scrollHandle(
+                                ids: transcript.lines.map { AnyHashable($0.start) },
+                                proxy: proxy,
+                                label: { index in
+                                    let lines = transcript.lines
+                                    guard index < lines.count else { return "" }
+                                    return Scrubber.formatted(lines[index].start)
+                                }
+                            )
                             // Pinned: the page is now arbitrarily long, and the transport
                             // shouldn't be a scroll away at the bottom of a 40-minute
                             // transcript.
