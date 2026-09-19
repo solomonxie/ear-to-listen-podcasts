@@ -1414,13 +1414,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Good listening"
+            "value": "Ear to Listen"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "云端的聆听"
+            "value": "云端的声音"
           }
         }
       }
