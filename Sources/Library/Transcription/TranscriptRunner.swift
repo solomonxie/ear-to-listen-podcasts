@@ -178,6 +178,12 @@ final class TranscriptRunner: ObservableObject {
             startAutomaticallyIfAsked()
             return
         }
+        // Only when the last sync actually saw one beside the audio — otherwise there's
+        // nothing to fetch and the episode goes straight to whatever it's set to do.
+        guard newTrack.transcriptPath?.nilIfEmpty != nil else {
+            startAutomaticallyIfAsked()
+            return
+        }
         sidecarTask = Task { [weak self] in
             await self?.importSidecar(track: newTrack)
             guard let self, track?.id == newTrack.id else { return }
@@ -192,15 +198,27 @@ final class TranscriptRunner: ObservableObject {
         run(engine: .onDevice)
     }
 
-    /// Only ever when nothing is stored — a file beside the audio must never overwrite
-    /// work done here, least of all the user's corrections.
-    private func importSidecar(track: Track) async {
+    /// Pulls the transcript the bucket holds for this episode.
+    ///
+    /// On opening an episode this runs only when nothing is stored locally — the remote
+    /// file is the cheapest transcript there is, but once there's one here, re-reading it
+    /// on every open would be a request per episode for a file that rarely changes.
+    /// `force` is the transcript button asking again on purpose.
+    ///
+    /// **A hand edit ends it.** Once the listener has corrected a line, this episode's
+    /// text is theirs: the remote copy is never read again and `exportSidecar` writes over
+    /// it. That's the trade — remote edits to an episode you've corrected are lost — and
+    /// it's the right way round, because the correction is the thing that can't be
+    /// regenerated.
+    private func importSidecar(track: Track, force: Bool = false) async {
+        guard edits.isEmpty else { return }
         guard let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
               let provider = try? ProviderManager.shared.provider(for: record) else { return }
         let found = await TranscriptSidecar.load(
             track: track, provider: provider, duration: duration > 0 ? duration : nil
         )
-        guard let found, !found.isEmpty, self.track?.id == track.id, segments.isEmpty else { return }
+        guard let found, !found.isEmpty, self.track?.id == track.id else { return }
+        guard force || segments.isEmpty else { return }
         segments = (try? transcriptStore.merge(
             trackID: track.id, incoming: found, engine: Self.sidecarEngine
         )) ?? found
@@ -233,6 +251,12 @@ final class TranscriptRunner: ObservableObject {
 
     /// Transcribes the whole episode with one recogniser. Pressing the one already running
     /// stops it; pressing the other swaps to it.
+    ///
+    /// **Asks the bucket first.** The button means "get me this episode's text", and a
+    /// file someone dropped beside the audio — or a corrected copy written by another
+    /// device — is both better and free compared to recognising two hours of speech again.
+    /// Only when there's nothing there does it spend the battery or the API call.
+    /// Skipped once this episode has hand edits, which are never overwritten from remote.
     func run(engine: TranscriptionEngineKind) {
         guard let track else { return }
         guard runningEngine != engine else {
@@ -240,6 +264,20 @@ final class TranscriptRunner: ObservableObject {
             return
         }
         cancel()
+        if track.transcriptPath?.nilIfEmpty != nil, edits.isEmpty {
+            sidecarTask = Task { [weak self] in
+                guard let self else { return }
+                await importSidecar(track: track, force: true)
+                guard self.track?.id == track.id else { return }
+                // Still nothing usable — fall through to actually recognising it.
+                if segments.isEmpty { startPass(track: track, engine: engine) }
+            }
+            return
+        }
+        startPass(track: track, engine: engine)
+    }
+
+    private func startPass(track: Track, engine: TranscriptionEngineKind) {
         lastError = nil
         progress = 0
         runningEngine = engine
