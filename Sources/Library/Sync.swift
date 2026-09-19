@@ -113,8 +113,11 @@ struct SyncEngine {
         guard !SyncQueuePolicy.isPaused else { throw SyncEngineError.queuePaused }
         guard NetworkMonitor.shared.isConnected else { throw SyncEngineError.offline }
         let provider = try ProviderManager.shared.provider(for: record)
-        let files = try await provider.listFiles(inFolder: nil)
-            .filter { FileKind(path: $0.path).isPlayable }
+        // Listed whole, filtered after: the non-audio entries are what say which
+        // episodes have a transcript sitting beside them.
+        let listing = try await provider.listFiles(inFolder: nil)
+        let sidecars = TranscriptFile.sidecarsByAudioPath(in: listing)
+        let files = listing.filter { FileKind(path: $0.path).isPlayable }
 
         // Taken from the listing rather than accumulated as the loop goes: what exists
         // remotely is what was listed, not how far the import got, and this pass can now
@@ -135,7 +138,8 @@ struct SyncEngine {
             do {
                 _ = try jobStore.enqueue(
                     providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
-                    contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt
+                    contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt,
+                    transcriptPath: sidecars[file.path]
                 )
                 queued += 1
             } catch {
@@ -145,6 +149,10 @@ struct SyncEngine {
                 break
             }
         }
+
+        // A transcript added to the bucket later doesn't change the audio, so it never
+        // queues anything — this is what notices it.
+        try trackStore.updateTranscriptPaths(providerID: record.id, sidecars: sidecars)
 
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
         try providerStore.updateLastSynced(id: record.id, at: Date())
@@ -169,7 +177,10 @@ struct SyncEngine {
                 id: job.filePath, name: job.displayName, path: job.filePath, sizeBytes: job.sizeBytes,
                 mimeType: nil, modifiedAt: job.remoteModifiedAt, contentHash: job.contentHash
             )
-            try await importFileIfNeeded(file, providerRecord: record, provider: provider, jobID: job.id)
+            try await importFileIfNeeded(
+                file, providerRecord: record, provider: provider, jobID: job.id,
+                transcriptPath: job.transcriptPath
+            )
             try? jobStore.markDone(id: job.id)
         } catch {
             try? jobStore.markFailed(id: job.id, error: error.localizedDescription)
@@ -181,7 +192,8 @@ struct SyncEngine {
     /// above and the per-file sync queue. Returns whether a new track was added.
     @discardableResult
     func importFileIfNeeded(
-        _ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider, jobID: String? = nil
+        _ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider,
+        jobID: String? = nil, transcriptPath: String? = nil
     ) async throws -> Bool {
         /// Reported per stage rather than per file, so the queue can say what's slow —
         /// reading tags off a remote file and waiting on an AI call take very different
@@ -233,6 +245,7 @@ struct SyncEngine {
             year: metadata.year,
             sizeBytes: file.sizeBytes,
             contentHash: file.contentHash,
+            transcriptPath: transcriptPath,
             remoteModifiedAt: file.modifiedAt,
             isLost: false,
             updatedAt: Date()

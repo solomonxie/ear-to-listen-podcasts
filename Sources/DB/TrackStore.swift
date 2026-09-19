@@ -224,6 +224,21 @@ struct TrackStore {
 
     /// Marks tracks for this provider as lost if their file path wasn't in the latest listing.
     /// Returns the number newly marked lost.
+    /// Points each track at the transcript now sitting beside it, and un-points the ones
+    /// whose sidecar has gone. A transcript added to a bucket later never changes the
+    /// audio, so nothing else in a sync pass would ever notice it.
+    func updateTranscriptPaths(providerID: String, sidecars: [String: String]) throws {
+        try dbQueue.write { db in
+            let tracks = try Track.filter(Column("providerID") == providerID).fetchAll(db)
+            for var track in tracks {
+                let found = sidecars[track.filePath]
+                guard found != track.transcriptPath else { continue }
+                track.transcriptPath = found
+                try track.update(db)
+            }
+        }
+    }
+
     func markLost(providerID: String, keepingPaths paths: Set<String>) throws -> Int {
         try dbQueue.write { db in
             let candidates = try Track

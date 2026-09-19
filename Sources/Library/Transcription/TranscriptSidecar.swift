@@ -13,14 +13,19 @@ import Foundation
 enum TranscriptSidecar {
     /// The first sidecar that parses into something usable. Missing files are the normal
     /// case, not an error — most episodes won't have one.
+    /// Reads the sidecar the last sync recorded beside this episode. Nothing to read is
+    /// the normal case, not an error — most episodes won't have one.
+    ///
+    /// The path comes from `Track.transcriptPath`, learned from the listing rather than
+    /// guessed: probing five candidate extensions per episode was five requests to be
+    /// told "no" four or five times, every time.
     static func load(track: Track, provider: CloudProvider, duration: Double?) async -> [TranscriptSegment]? {
-        for path in TranscriptFile.candidatePaths(forAudioPath: track.filePath) {
-            guard let text = await contents(at: path, provider: provider) else { continue }
-            let ext = (path as NSString).pathExtension
-            let segments = TranscriptFile.parse(text, extension: ext, duration: duration)
-            if !segments.isEmpty { return segments }
-        }
-        return nil
+        guard let path = track.transcriptPath?.nilIfEmpty else { return nil }
+        guard let text = await contents(at: path, provider: provider) else { return nil }
+        let segments = TranscriptFile.parse(
+            text, extension: (path as NSString).pathExtension, duration: duration
+        )
+        return segments.isEmpty ? nil : segments
     }
 
     /// Writes both files. Throws only on a write that was attempted and failed — a

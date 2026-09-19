@@ -453,6 +453,20 @@ enum Migrations {
             }
         }
 
+        // Where an episode's transcript sits beside it in the bucket, learned from the
+        // listing that syncs it rather than by probing five candidate extensions the
+        // first time someone opens it. Null means the last sync saw no sidecar.
+        migrator.registerMigration("v26_transcript_sidecar_path") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "transcriptPath", .text)
+            }
+            // Carried through the queue so a file imported later still arrives knowing
+            // where its transcript is — the listing that saw both is long gone by then.
+            try db.alter(table: "syncJobs") { t in
+                t.add(column: "transcriptPath", .text)
+            }
+        }
+
         return migrator
     }
 }

@@ -32,6 +32,33 @@ enum TranscriptFile {
         return base.isEmpty ? nil : "\(base).\(ext)"
     }
 
+    /// Pairs each audio path in a listing with the transcript beside it, matched on
+    /// basename. Built once per sync from the listing we already have, so opening an
+    /// episode costs no probing — and so "there is no transcript" is a fact we know
+    /// rather than five failed requests.
+    ///
+    /// `readableExtensions` is in preference order, so a folder holding both `.vtt` and
+    /// `.txt` for one episode yields the `.vtt`.
+    static func sidecarsByAudioPath(in files: [CloudFile]) -> [String: String] {
+        var byStem: [String: String] = [:]
+        for file in files {
+            let ext = (file.path as NSString).pathExtension.lowercased()
+            guard readableExtensions.contains(ext) else { continue }
+            let stem = (file.path as NSString).deletingPathExtension
+            let existing = byStem[stem].map { ($0 as NSString).pathExtension.lowercased() }
+            let rank = readableExtensions.firstIndex(of: ext) ?? .max
+            let existingRank = existing.flatMap { readableExtensions.firstIndex(of: $0) } ?? .max
+            if rank < existingRank { byStem[stem] = file.path }
+        }
+
+        var byAudio: [String: String] = [:]
+        for file in files where FileKind(path: file.path).isPlayable {
+            let stem = (file.path as NSString).deletingPathExtension
+            if let sidecar = byStem[stem] { byAudio[file.path] = sidecar }
+        }
+        return byAudio
+    }
+
     static func candidatePaths(forAudioPath path: String) -> [String] {
         readableExtensions.compactMap { sidecarPath(forAudioPath: path, extension: $0) }
     }

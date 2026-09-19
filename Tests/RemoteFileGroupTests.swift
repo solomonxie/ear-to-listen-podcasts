@@ -63,3 +63,52 @@ final class RemoteFileGroupTests: XCTestCase {
         XCTAssertFalse(withArtOnly[0].hasTranscript)
     }
 }
+
+/// The sync listing is where the app learns an episode has a transcript beside it —
+/// opening one must cost no probing, and "there is none" has to be a fact rather than
+/// five failed requests.
+final class TranscriptSidecarIndexTests: XCTestCase {
+    private func file(_ path: String) -> CloudFile {
+        CloudFile(
+            id: path, name: (path as NSString).lastPathComponent, path: path,
+            sizeBytes: 1, mimeType: nil, modifiedAt: nil
+        )
+    }
+
+    func testAnEpisodeIsPairedWithTheTranscriptBesideIt() {
+        let found = TranscriptFile.sidecarsByAudioPath(in: [
+            file("show/ep-01.mp3"), file("show/ep-01.vtt"),
+            file("show/ep-02.mp3"),
+        ])
+
+        XCTAssertEqual(found["show/ep-01.mp3"], "show/ep-01.vtt")
+        XCTAssertNil(found["show/ep-02.mp3"], "no sidecar is a fact, not a maybe")
+    }
+
+    /// `.vtt` is the one written back and the richest to parse, so it wins a folder that
+    /// holds several for the same episode.
+    func testTheBestFormatWinsWhenThereAreSeveral() {
+        let found = TranscriptFile.sidecarsByAudioPath(in: [
+            file("show/ep-01.mp3"), file("show/ep-01.txt"),
+            file("show/ep-01.vtt"), file("show/ep-01.lrc"),
+        ])
+
+        XCTAssertEqual(found["show/ep-01.mp3"], "show/ep-01.vtt")
+    }
+
+    func testATranscriptForNoEpisodeIsIgnored() {
+        let found = TranscriptFile.sidecarsByAudioPath(in: [file("show/orphan.vtt")])
+
+        XCTAssertTrue(found.isEmpty)
+    }
+
+    /// Basename matching is per-folder — two folders can both hold `ep-01`.
+    func testSameNamesInDifferentFoldersDontCrossOver() {
+        let found = TranscriptFile.sidecarsByAudioPath(in: [
+            file("2025/ep-01.mp3"), file("2026/ep-01.mp3"), file("2026/ep-01.vtt"),
+        ])
+
+        XCTAssertNil(found["2025/ep-01.mp3"])
+        XCTAssertEqual(found["2026/ep-01.mp3"], "2026/ep-01.vtt")
+    }
+}

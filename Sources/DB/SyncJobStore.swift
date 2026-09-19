@@ -20,7 +20,7 @@ struct SyncJobStore {
     @discardableResult
     func enqueue(
         providerID: String, filePath: String, displayName: String, sizeBytes: Int64?,
-        contentHash: String? = nil, remoteModifiedAt: Date? = nil,
+        contentHash: String? = nil, remoteModifiedAt: Date? = nil, transcriptPath: String? = nil,
         capacity: Int = SyncQueuePolicy.capacity
     ) throws -> SyncJob {
         try dbQueue.write { db in
@@ -32,7 +32,7 @@ struct SyncJobStore {
             let job = SyncJob(
                 id: UUID().uuidString, providerID: providerID, filePath: filePath, displayName: displayName,
                 sizeBytes: sizeBytes, contentHash: contentHash, remoteModifiedAt: remoteModifiedAt,
-                status: .pending, stage: .queued, errorMessage: nil, createdAt: Date(), updatedAt: Date()
+                transcriptPath: transcriptPath, status: .pending, stage: .queued, errorMessage: nil, createdAt: Date(), updatedAt: Date()
             )
             try job.save(db)
             return job
