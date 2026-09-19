@@ -112,3 +112,34 @@ final class TranscriptSidecarIndexTests: XCTestCase {
         XCTAssertEqual(found["2026/ep-01.mp3"], "2026/ep-01.vtt")
     }
 }
+
+/// Knowing where a transcript is makes the fetch one request instead of five. Not knowing
+/// must never be read as "there is none" — that's what made an episode with both a `.lrc`
+/// and a `.vtt` beside it report no transcript available.
+final class TranscriptSidecarFallbackTests: XCTestCase {
+    private func track(transcriptPath: String?) -> Track {
+        Track(
+            id: "t1", providerID: "p1", artistID: nil, albumID: nil,
+            filePath: "show/ep-01.mp3", title: "Episode", trackNumber: nil, durationMs: nil,
+            transcriptPath: transcriptPath, updatedAt: Date()
+        )
+    }
+
+    func testAKnownPathIsTheOnlyOneAskedFor() {
+        let paths = TranscriptSidecar.pathsToTry(for: track(transcriptPath: "show/ep-01.vtt"))
+
+        XCTAssertEqual(paths, ["show/ep-01.vtt"])
+    }
+
+    func testNoKnownPathFallsBackToEveryReadableExtension() {
+        let paths = TranscriptSidecar.pathsToTry(for: track(transcriptPath: nil))
+
+        XCTAssertTrue(paths.contains("show/ep-01.vtt"), "got \(paths)")
+        XCTAssertTrue(paths.contains("show/ep-01.lrc"), "got \(paths)")
+        XCTAssertGreaterThan(paths.count, 1)
+    }
+
+    func testABlankStoredPathCountsAsUnknownRatherThanAsAPath() {
+        XCTAssertGreaterThan(TranscriptSidecar.pathsToTry(for: track(transcriptPath: "")).count, 1)
+    }
+}

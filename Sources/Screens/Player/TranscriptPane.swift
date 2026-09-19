@@ -47,20 +47,24 @@ struct TranscriptPane: View {
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
         }
-        // Asked before a penny is spent, with the number in it. On-device never asks —
-        // there's nothing to agree to.
+        // Asked before a penny is spent, and before an existing transcript is written
+        // over — the second one matters more, because it's the one that can't be undone
+        // once the replacement has gone up to the bucket.
         .confirmationDialog(
-            "Transcribe with AI?",
+            transcript.wouldReplaceExisting ? "Replace this transcript?" : "Transcribe with AI?",
             isPresented: Binding(get: { confirmingEngine != nil }, set: { if !$0 { confirmingEngine = nil } }),
             presenting: confirmingEngine
         ) { engine in
-            Button("Transcribe") {
+            Button(
+                transcript.wouldReplaceExisting ? "Replace" : "Transcribe",
+                role: transcript.wouldReplaceExisting ? .destructive : nil
+            ) {
                 confirmingEngine = nil
                 transcript.run(engine: engine)
             }
             Button("Cancel", role: .cancel) { confirmingEngine = nil }
         } message: { engine in
-            Text(estimate(for: engine))
+            Text(confirmMessage(for: engine))
         }
     }
 
@@ -80,7 +84,29 @@ struct TranscriptPane: View {
                 }
             }
 
+            // Offered only until the next pass or a change of episode — it restores from a
+            // copy held in memory for exactly that long.
+            if transcript.canRejectLastPass {
+                HStack(spacing: 8) {
+                    Text("New transcript").font(.caption).foregroundStyle(.secondary)
+                    Button("Reject") { transcript.rejectLastPass() }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                    Spacer(minLength: 0)
+                }
+            }
+
             HStack(spacing: 10) {
+                // First, because it's the cheapest and most likely to be what you want:
+                // a transcript someone already made beats recognising the audio again.
+                TranscriptControlButton(
+                    title: transcript.isFetchingRemote ? "Fetching…" : "Remote",
+                    systemImage: transcript.isFetchingRemote ? "arrow.down.circle.dotted" : "arrow.down.circle",
+                    isOn: transcript.isFetchingRemote
+                ) { transcript.loadRemoteTranscript() }
+                    .disabled(transcript.track == nil || transcript.isRunning || transcript.isFetchingRemote)
+
                 ForEach(TranscriptionEngineKind.allCases, id: \.self) { engine in
                     engineButton(engine)
                 }
@@ -98,6 +124,18 @@ struct TranscriptPane: View {
         .padding(.horizontal)
     }
 
+    /// Says the thing that can't be taken back first. The price, where there is one,
+    /// comes after — money spent is recoverable in a way an overwritten transcript isn't.
+    private func confirmMessage(for engine: TranscriptionEngineKind) -> String {
+        guard transcript.wouldReplaceExisting else { return estimate(for: engine) }
+        var text = """
+        This replaces the transcript you already have and uploads the new one over the \
+        copy beside the audio in your storage. Lines you corrected by hand are kept.
+        """
+        if engine.pricePerMinuteUSD != nil { text += "\n\n" + estimate(for: engine) }
+        return text
+    }
+
     private func engineButton(_ engine: TranscriptionEngineKind) -> some View {
         let isRunningThis = transcript.runningEngine == engine
         return TranscriptControlButton(
@@ -105,8 +143,11 @@ struct TranscriptPane: View {
             systemImage: isRunningThis ? "stop.fill" : engine.symbolName,
             isOn: isRunningThis
         ) {
-            // Stopping never asks; starting something billed always does.
-            guard !isRunningThis, engine.pricePerMinuteUSD != nil else {
+            // Stopping never asks. Starting asks when it costs money, and asks when it
+            // would write over a transcript that's already here — on-device is free but
+            // replacing is still replacing.
+            guard !isRunningThis else { return transcript.run(engine: engine) }
+            guard engine.pricePerMinuteUSD != nil || transcript.wouldReplaceExisting else {
                 return transcript.run(engine: engine)
             }
             confirmingEngine = engine

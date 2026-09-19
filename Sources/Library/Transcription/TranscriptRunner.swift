@@ -84,6 +84,13 @@ final class TranscriptRunner: ObservableObject {
     /// Set when the stored transcript has moved on from what's beside the audio, so the
     /// sidecar is rewritten once rather than after every pass.
     private var needsSidecarExport = false
+    @Published private(set) var isFetchingRemote = false
+    /// The transcript as it stood before the last pass replaced it, kept only while a
+    /// reject is still on offer. This is what makes "Reject" possible at all — a pass
+    /// merges over the stored text, and without a copy there is nothing to go back to.
+    private var replacedSegments: [TranscriptSegment]?
+    /// True while the last finished pass can still be undone.
+    @Published private(set) var canRejectLastPass = false
     /// Bumped on every stop/start so a cancelled pass can't clear the state of the one
     /// that replaced it.
     private var runGeneration = 0
@@ -165,6 +172,8 @@ final class TranscriptRunner: ObservableObject {
         track = newTrack
         segments = []
         edits = []
+        replacedSegments = nil
+        canRejectLastPass = false
         lastError = nil
         duration = newTrack?.durationMs.map { Double($0) / 1000 } ?? 0
         guard let newTrack else { return }
@@ -178,16 +187,36 @@ final class TranscriptRunner: ObservableObject {
             startAutomaticallyIfAsked()
             return
         }
-        // Only when the last sync actually saw one beside the audio — otherwise there's
-        // nothing to fetch and the episode goes straight to whatever it's set to do.
-        guard newTrack.transcriptPath?.nilIfEmpty != nil else {
-            startAutomaticallyIfAsked()
-            return
-        }
+        // Always, whenever nothing is stored — a recorded path makes it one request
+        // instead of a few, but its absence is not evidence there's no transcript.
         sidecarTask = Task { [weak self] in
             await self?.importSidecar(track: newTrack)
             guard let self, track?.id == newTrack.id else { return }
             startAutomaticallyIfAsked()
+        }
+    }
+
+    /// The "Remote" button: fetch whatever is beside the audio right now, on purpose.
+    ///
+    /// Everything else that pulls does so only when there's nothing stored. This is the
+    /// one way to say "the bucket's copy changed, go and get it" — for a transcript
+    /// written by another device, or one you edited in the bucket by hand.
+    func loadRemoteTranscript() {
+        guard let track, !isFetchingRemote else { return }
+        cancel()
+        lastError = nil
+        isFetchingRemote = true
+        sidecarTask = Task { [weak self] in
+            guard let self else { return }
+            let before = segments.count
+            await importSidecar(track: track, force: true)
+            guard self.track?.id == track.id else { return }
+            isFetchingRemote = false
+            if segments.isEmpty {
+                lastError = "No transcript found beside this episode in your storage."
+            } else if segments.count == before, !edits.isEmpty {
+                lastError = "Kept your edited transcript — remote copies never overwrite corrections."
+            }
         }
     }
 
@@ -264,7 +293,7 @@ final class TranscriptRunner: ObservableObject {
             return
         }
         cancel()
-        if track.transcriptPath?.nilIfEmpty != nil, edits.isEmpty {
+        if edits.isEmpty {
             sidecarTask = Task { [weak self] in
                 guard let self else { return }
                 await importSidecar(track: track, force: true)
@@ -277,7 +306,29 @@ final class TranscriptRunner: ObservableObject {
         startPass(track: track, engine: engine)
     }
 
+    /// Whether starting a pass would write over text that's already here — which makes it
+    /// the difference between "transcribe this" and "replace what I have and upload it".
+    var wouldReplaceExisting: Bool { !segments.isEmpty }
+
+    /// Puts back what the last pass replaced, and writes that back out. Available only
+    /// until the next pass or a change of episode, because the copy it restores from is
+    /// only held that long.
+    func rejectLastPass() {
+        guard let track, let previous = replacedSegments else { return }
+        replacedSegments = nil
+        canRejectLastPass = false
+        try? transcriptStore.save(trackID: track.id, segments: previous)
+        segments = previous
+        // Straight back out: the rejected one was uploaded when the pass finished, so
+        // leaving the bucket holding it would make "reject" a local-only lie.
+        needsSidecarExport = true
+        exportSidecar()
+    }
+
     private func startPass(track: Track, engine: TranscriptionEngineKind) {
+        // Snapshotted before anything merges over it.
+        replacedSegments = segments.isEmpty ? nil : segments
+        canRejectLastPass = false
         lastError = nil
         progress = 0
         runningEngine = engine
@@ -295,6 +346,8 @@ final class TranscriptRunner: ObservableObject {
             thaw()
             endBackgroundAssertion()
             exportSidecar()
+            // Only worth offering when there was something to go back to.
+            canRejectLastPass = replacedSegments != nil && !segments.isEmpty
         }
     }
 
