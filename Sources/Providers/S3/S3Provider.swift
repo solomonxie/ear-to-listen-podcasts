@@ -1,23 +1,10 @@
-import AWSClientRuntime
-import AWSS3
-import AWSSDKIdentity
-import ClientRuntime
 import Foundation
 
-/// `error.localizedDescription` on AWS SDK errors bridges to a generic NSError
-/// string ("The operation couldn't be completed...") that drops the actual AWS
-/// error code/message/status, so unwrap those explicitly for anything useful to show.
+/// The code S3 actually returned — `AccessDenied`, `SignatureDoesNotMatch`, `NoSuchKey` —
+/// rather than a generic "the operation couldn't be completed". Which of those it is, is
+/// the whole content of the message for someone whose bucket won't connect.
 func describeAWSError(_ error: Error) -> String {
-    if let serviceError = error as? AWSServiceError {
-        var parts: [String] = []
-        if let code = serviceError.errorCode { parts.append(code) }
-        if let message = serviceError.message { parts.append(message) }
-        if let httpError = error as? HTTPError {
-            parts.append("(HTTP \(httpError.httpResponse.statusCode.rawValue))")
-        }
-        if !parts.isEmpty { return parts.joined(separator: ": ") }
-    }
-    return error.localizedDescription
+    error.localizedDescription
 }
 
 enum S3ProviderError: Error, LocalizedError {
@@ -40,7 +27,7 @@ struct S3Provider: CloudProvider {
 
     private let bucket: String
     private let keyPrefix: String?
-    private let client: S3Client
+    private let client: S3RestClient
 
     init(config: CloudProviderConfig) throws {
         func setting(_ key: String) throws -> String {
@@ -58,13 +45,12 @@ struct S3Provider: CloudProvider {
         // required (a prefix with no trailing slash) start behaving like folders too.
         keyPrefix = S3FolderPath.normalized(config.settings["keyPrefix"])
 
-        let identity = AWSCredentialIdentity(accessKey: accessKeyId, secret: secretAccessKey)
-        let resolver = StaticAWSCredentialIdentityResolver(identity)
-        let clientConfig = try S3Client.S3ClientConfig(
-            awsCredentialIdentityResolver: resolver,
-            region: region
+        client = S3RestClient(
+            bucket: bucket,
+            credentials: SigV4.Credentials(
+                accessKeyID: accessKeyId, secretAccessKey: secretAccessKey, region: region
+            )
         )
-        client = S3Client(config: clientConfig)
     }
 
     /// Looks up which region a bucket lives in, so the add-provider flow doesn't require typing it
@@ -85,24 +71,21 @@ struct S3Provider: CloudProvider {
         var files: [CloudFile] = []
         var continuationToken: String?
         repeat {
-            let output = try await client.listObjectsV2(input: ListObjectsV2Input(
-                bucket: bucket,
-                continuationToken: continuationToken,
-                prefix: folderID ?? keyPrefix
-            ))
-            for object in output.contents ?? [] {
-                guard let key = object.key else { continue }
+            let output = try await client.listObjects(
+                prefix: folderID ?? keyPrefix, continuationToken: continuationToken
+            )
+            for object in output.objects {
                 files.append(CloudFile(
-                    id: key,
-                    name: key.split(separator: "/").last.map(String.init) ?? key,
-                    path: key,
-                    sizeBytes: object.size.map(Int64.init),
+                    id: object.key,
+                    name: object.key.split(separator: "/").last.map(String.init) ?? object.key,
+                    path: object.key,
+                    sizeBytes: object.size,
                     mimeType: nil,
                     modifiedAt: object.lastModified,
-                    contentHash: unquoted(object.eTag)
+                    contentHash: object.eTag
                 ))
             }
-            continuationToken = (output.isTruncated ?? false) ? output.nextContinuationToken : nil
+            continuationToken = output.nextContinuationToken
         } while continuationToken != nil
         return files
     }
@@ -117,66 +100,55 @@ struct S3Provider: CloudProvider {
         var files: [CloudFile] = []
         var continuationToken: String?
         repeat {
-            let output = try await client.listObjectsV2(input: ListObjectsV2Input(
-                bucket: bucket,
-                continuationToken: continuationToken,
-                delimiter: "/",
-                prefix: prefix
-            ))
-            for common in output.commonPrefixes ?? [] {
-                guard let path = common.prefix, path != prefix else { continue }
+            let output = try await client.listObjects(
+                prefix: prefix, delimiter: "/", continuationToken: continuationToken
+            )
+            for path in output.commonPrefixes where path != prefix {
                 // Whole key, minus the trailing slash: that's what gets passed back in to
                 // list the next level down.
                 folders.append(String(path.dropLast(path.hasSuffix("/") ? 1 : 0)))
             }
-            for object in output.contents ?? [] {
+            for object in output.objects {
                 // A folder created through the console is a zero-byte key ending in "/" —
                 // that's the folder itself, not a file in it.
-                guard let key = object.key, key != prefix, !key.hasSuffix("/") else { continue }
+                guard object.key != prefix, !object.key.hasSuffix("/") else { continue }
                 files.append(CloudFile(
-                    id: key,
-                    name: (key as NSString).lastPathComponent,
-                    path: key,
-                    sizeBytes: object.size.map(Int64.init),
+                    id: object.key,
+                    name: (object.key as NSString).lastPathComponent,
+                    path: object.key,
+                    sizeBytes: object.size,
                     mimeType: nil,
                     modifiedAt: object.lastModified,
-                    contentHash: unquoted(object.eTag)
+                    contentHash: object.eTag
                 ))
             }
-            continuationToken = (output.isTruncated ?? false) ? output.nextContinuationToken : nil
+            continuationToken = output.nextContinuationToken
         } while continuationToken != nil
         return (folders.sorted(), files.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
     }
 
     func metadata(forFileID fileID: String) async throws -> CloudFile {
-        let output = try await client.headObject(input: HeadObjectInput(bucket: bucket, key: fileID))
+        let output = try await client.headObject(key: fileID)
         return CloudFile(
             id: fileID,
             name: fileID.split(separator: "/").last.map(String.init) ?? fileID,
             path: fileID,
-            sizeBytes: output.contentLength.map(Int64.init),
+            sizeBytes: output.size,
             mimeType: output.contentType,
             modifiedAt: output.lastModified,
-            contentHash: unquoted(output.eTag)
+            // S3 wraps ETags in literal double quotes; stored as a plain comparable hash.
+            contentHash: output.eTag?.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
         )
-    }
-
-    /// S3 wraps ETags in literal double quotes (`"\"abc123\""`); strip them so the stored
-    /// value is a plain comparable hash.
-    private func unquoted(_ etag: String?) -> String? {
-        etag?.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
     }
 
     func streamURL(forFileID fileID: String) async throws -> URL {
-        try await client.presignedURLForGetObject(
-            input: GetObjectInput(bucket: bucket, key: fileID),
-            expiration: 3600
-        )
+        guard let url = client.presignedGetURL(key: fileID) else { throw S3Error.malformedResponse }
+        return url
     }
 
     func testConnection() async -> ConnectionTestResult {
         do {
-            _ = try await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, maxKeys: 1, prefix: keyPrefix))
+            _ = try await client.listObjects(prefix: keyPrefix, maxKeys: 1)
             return ConnectionTestResult(isSuccess: true, message: nil)
         } catch {
             return ConnectionTestResult(isSuccess: false, message: describeAWSError(error))
@@ -216,15 +188,11 @@ struct S3Provider: CloudProvider {
     /// `path` is a whole key, as `listFiles` hands them out — not relative to `keyPrefix`.
     func upload(_ data: Data, toPath path: String, contentType: String) async throws {
         let key = try CloudWrite.checked(path)
-        _ = try await client.putObject(input: PutObjectInput(
-            body: .data(data), bucket: bucket, contentType: contentType, key: key
-        ))
+        try await client.putObject(key: key, data: data, contentType: contentType)
     }
 
     func uploadBackup(_ data: Data) async throws {
-        _ = try await client.putObject(input: PutObjectInput(
-            body: .data(data), bucket: bucket, contentType: "application/zip", key: backupKey
-        ))
+        try await client.putObject(key: backupKey, data: data, contentType: "application/zip")
     }
 
     /// `nil` means no backup has been made yet, not an error. Reads the newest month in
@@ -235,9 +203,8 @@ struct S3Provider: CloudProvider {
         let newest = (try? await newestBackupKey()) ?? nil
         for key in (newest.map { [$0] } ?? []) + legacyBackupKeys {
             do {
-                let output = try await client.getObject(input: GetObjectInput(bucket: bucket, key: key))
-                if let data = try await output.body?.readData() { return data }
-            } catch let error as AWSServiceError where error.errorCode == "NoSuchKey" {
+                return try await client.getObject(key: key)
+            } catch let error as S3Error where error.code == "NoSuchKey" || error.code == "NoSuchBucket" {
                 continue
             }
         }
@@ -250,8 +217,8 @@ struct S3Provider: CloudProvider {
     private func newestBackupKey() async throws -> String? {
         var keys: [String] = []
         for prefix in [backupFolder, legacyBackupFolder] {
-            let output = try? await client.listObjectsV2(input: ListObjectsV2Input(bucket: bucket, prefix: prefix))
-            keys += (output?.contents ?? []).compactMap(\.key)
+            let output = try? await client.listObjects(prefix: prefix)
+            keys += (output?.objects ?? []).map(\.key)
         }
         return BackupArchiveName.newest(among: keys)
     }
