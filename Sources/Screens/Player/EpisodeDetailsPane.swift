@@ -81,12 +81,26 @@ struct EpisodeDetailsPane: View {
             }
 
             DetailCard("File") {
-                DetailRow("Connection", connectionLabel)
-                DetailRow("Folder", folder)
-                DetailRow("File", (track.filePath as NSString).lastPathComponent)
+                LinkRow(
+                    "Connection", value: connectionLabel ?? "—",
+                    route: connectionLabel == nil ? nil
+                        : .browse(providerID: track.providerID, folder: nil, highlight: nil)
+                )
+                // Both open the bucket browser — the folder to look around it, the file
+                // to land on this episode in it. Seeing where something actually lives is
+                // most of why anyone reads this card.
+                LinkRow(
+                    "Folder", value: folder ?? "—",
+                    route: .browse(providerID: track.providerID, folder: folder, highlight: nil)
+                )
+                LinkRow(
+                    "File", value: (track.filePath as NSString).lastPathComponent,
+                    route: .browse(
+                        providerID: track.providerID, folder: folder, highlight: track.filePath
+                    )
+                )
                 DetailRow("Format", fileExtension)
                 DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
-                DetailRow("Downloaded", downloadedBytes.map { $0.formatted(.byteCount(style: .file)) } ?? "Not downloaded")
             }
 
             DetailCard("Dates") {
