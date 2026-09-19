@@ -49,7 +49,9 @@ enum AiRouter {
             guard let secret = try? store.secret(forKeyID: key.id), !secret.isEmpty else { continue }
             try? store.bumpRequestCount(id: key.id)
             do {
-                let result = try await runChatCompletion(vendor: key.vendor, apiKey: secret, messages: messages)
+                let result = try await runChatCompletion(
+                    vendor: key.vendor, apiKey: secret, model: key.resolvedModel, messages: messages
+                )
                 try? queryStore.record(keyID: key.id, vendor: key.vendor, prompt: prompt, result: result)
                 return result.text
             } catch {
@@ -72,19 +74,22 @@ enum AiRouter {
     }
 
     /// Used both by the router above and by "test then save" when adding a key.
-    static func runChatCompletion(vendor: AiVendor, apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(
+        vendor: AiVendor, apiKey: String, model: String? = nil, messages: [ChatMessage]
+    ) async throws -> ChatCompletionResult {
+        let model = model?.nilIfEmpty ?? vendor.defaultModel
         switch vendor {
-        case .openAI: return try await OpenAIChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
-        case .anthropic: return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
-        case .google: return try await GoogleChatClient.runChatCompletion(apiKey: apiKey, messages: messages)
+        case .openAI: return try await OpenAIChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages)
+        case .anthropic: return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages)
+        case .google: return try await GoogleChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages)
         case .groq:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .groq, apiKey: apiKey, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .groq, apiKey: apiKey, model: model, messages: messages)
         case .mistral:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .mistral, apiKey: apiKey, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .mistral, apiKey: apiKey, model: model, messages: messages)
         case .deepSeek:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .deepSeek, apiKey: apiKey, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .deepSeek, apiKey: apiKey, model: model, messages: messages)
         case .xai:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .xai, apiKey: apiKey, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .xai, apiKey: apiKey, model: model, messages: messages)
         }
     }
 }

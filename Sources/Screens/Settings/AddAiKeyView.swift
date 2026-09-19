@@ -9,6 +9,8 @@ struct AddAiKeyView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var vendor: AiVendor = .openAI
+    @State private var model: String?
+    @State private var openPicker: String?
     @State private var secret = ""
     @State private var isTesting = false
     @State private var validationError: String?
@@ -17,11 +19,11 @@ struct AddAiKeyView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Vendor", selection: $vendor) {
-                        ForEach(AiVendor.allCases, id: \.self) { vendor in
-                            Text(vendor.displayName).tag(vendor)
-                        }
-                    }
+                    UnfoldingPicker(
+                        title: "Vendor", id: "vendor", open: $openPicker, selection: $vendor,
+                        options: AiVendor.allCases.map { UnfoldingPicker.Option($0, $0.displayName) }
+                    )
+                    AiModelPicker(vendor: vendor, model: $model, id: "model", open: $openPicker)
                     SecureField(vendor.keyHint, text: $secret)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -71,7 +73,9 @@ struct AddAiKeyView: View {
         validationError = nil
         defer { isTesting = false }
         do {
-            try await viewModel.addAiKey(vendor: vendor, secret: secret.trimmingCharacters(in: .whitespaces))
+            try await viewModel.addAiKey(
+                vendor: vendor, model: model, secret: secret.trimmingCharacters(in: .whitespaces)
+            )
             dismiss()
         } catch {
             validationError = "Could not connect: \(error.localizedDescription)"

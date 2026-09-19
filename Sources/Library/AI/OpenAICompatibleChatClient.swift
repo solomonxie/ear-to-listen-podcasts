@@ -12,13 +12,13 @@ enum OpenAICompatibleChatClient {
         var model: String
     }
 
-    static func runChatCompletion(config: Config, apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(config: Config, apiKey: String, model: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         var request = URLRequest(url: config.endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "model": config.model,
+            "model": model,
             "max_tokens": 300,
             "messages": messages.map { ["role": $0.role.rawValue, "content": $0.content] },
         ])
@@ -63,7 +63,7 @@ enum OpenAICompatibleChatClient {
         }
         // The model the vendor says it used, not the one asked for — they substitute.
         return ChatCompletionResult(
-            text: text, model: chat.model ?? config.model,
+            text: text, model: chat.model ?? model,
             promptTokens: chat.usage?.prompt_tokens, completionTokens: chat.usage?.completion_tokens
         )
     }

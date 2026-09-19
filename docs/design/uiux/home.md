@@ -14,13 +14,24 @@ page. Reached at launch; nothing pushes back to it but Back.
  Sleep Toolkit   Focus & Flow    Deep Work
  Season 3 · An…  Season 3 · An…  Deep Work…   ← album · speaker
  ████████░░░░    ██░░░░░░░░░░                 ← only if part-played
- Favorites            (hidden when none)
- Bookmarks            (hidden when none)
  Albums      ▢ 120×120 tiles, name under
  Speakers    ◯ 90pt avatars, name under
  Playlists                               ⊕   ← trailing button: new playlist
+ ┌──────┐ ┌──────┐ ┌──────┐
+ │  ♥   │ │  ⤓   │ │  ▦   │    ← the two fixed ones first, always, even at 0
+ └──────┘ └──────┘ └──────┘
+ Favorites Downloaded Night li…
+ 12        128        9         ← count under the name
+ Bookmarks                  14 in 5 episodes
+ ┌─────────────────────────────────────────┐
+ │ 第 3 集 — 人物志                        │  ← episode, once, not per mark
+ │ ① 12:14  "…pipe in personal data"    ✎  │
+ │ ② 27:40  Saved moment                ✎  │  ← numbered by time within it
+ │ ③ 41:02  a note                      ✎  │
+ │ 另一集                                  │
+ │ ① 05:11  …                           ✎  │
+ └─────────────────────────────────────────┘
  Saved Shows
- Downloaded                            More   ← ( More ) → Downloads sheet
  Browse by Year   ( 2026 ) ( 2025 ) ( 2024 )  ← capsule chips
  Topics           ( Sleep ) ( Focus ) ( AI )
  ─────────────────────────────────────────── ← Divider
@@ -32,24 +43,34 @@ page. Reached at launch; nothing pushes back to it but Back.
 ```
 
 Shelves are data, never recommendation: Continue Listening is playback
-history, Downloaded is what `AudioCache` holds. Favorites and Bookmarks sit
-near the top — hand-made marks outrank derived shelves — and vanish entirely
-when empty.
+history.
+
+**Favorites and Downloaded are fixed playlists, not shelves** — pinned first
+in the Playlists row, always present, never deletable. They're computed
+(`FixedPlaylist`): favourites from the flag on the track, downloads from what
+`AudioCache` actually holds, so there's no row to delete and nothing to keep in
+sync. Both show at zero on purpose: a listener who has favourited nothing still
+needs telling where favourites will appear, and a shelf that only materialises
+once you've found the feature teaches nobody.
+
+**Bookmarks sit below Playlists**, because they're marks made *inside* episodes
+rather than a collection of episodes. They're grouped by episode and numbered by
+time within it, so "the second mark in that one" is something you can say and
+then find. The old version was a horizontal row of one box per mark, each
+repeating its episode title, with marks from the same episode scattered along
+the row and no count anywhere.
+
+Everything else still hides itself when empty.
 
 ## States
 
 ```
-empty    ┌───────────────────────────────────────┐
-         │        ⌧ (square.stack.3d.up.slash)   │
-         │   Nothing in your library yet         │
-         │   Connect an S3 bucket, or import     │
-         │   episodes from Files below, and they │
-         │   appear here as they sync.           │
-         │      [ Load sample library ]          │
-         └───────────────────────────────────────┘
-         ← the shelves are replaced by this card, but Remote and Settings
-           still follow below it: a fresh install's whole point is to go
-           connect a source, so the way to do that stays on screen
+empty    search bar → Remote → Settings, with no shelves between them
+         ← every shelf hides itself while it has nothing in it, so a fresh
+           install reads as the normal page minus its content rather than a
+           placeholder card. A fresh install's whole point is to go connect a
+           source, and Remote is then the first thing under the search bar.
+           The sample library stays on offer in Settings.
 
 typing   search replaces the shelves in place — no push, no overlay
 

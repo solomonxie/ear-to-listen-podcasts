@@ -8,7 +8,6 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var providerID: String
     var artistID: String?
     var albumID: String?
-    var showID: String? = nil
     var filePath: String
     var title: String
     var trackNumber: Int?

@@ -19,7 +19,7 @@ from already-synced rows (`TrackStore.directoryListing` /
 The provider is only listed:
 
 - once, when the connection is added — `enqueueConnection` walks the whole
-  bucket and queues every audio file;
+  bucket and queues every audio file that needs fetching;
 - on an explicit "Sync Now";
 - on a schedule, when that connection's `syncFrequencyMinutes` is set.
 
@@ -38,6 +38,14 @@ to queue the whole bucket (recursively) rather than running one opaque
 background sync — so the new source's progress (and any per-file errors)
 shows up in the sync queue right away instead of only once everything's done.
 
+## Bucket layout
+
+Transcripts and artwork sit flat beside the audio, matched on basename
+(`ep-01.mp3` / `ep-01.vtt`), never embedded in the audio and never in a folder
+per episode — `docs/design/bucket-layout.md` has the reasoning and the two
+rejected alternatives. `RemoteFileGroup` folds the sidecars into a caption under
+their episode, so a 37-episode folder lists 37 rows instead of ~150.
+
 ## Queue
 
 Per-file jobs (`SyncJob`, in `syncJobs`) persist across launches.
@@ -47,18 +55,22 @@ write transaction — that atomicity matters, since two concurrent drain slots
 racing a plain fetch-then-mark-running could otherwise both grab the same
 pending job and both try to insert the same track, tripping the
 `idx_tracks_provider_path` unique constraint. Each claimed job runs
-`SyncEngine.importFileIfNeeded` — the same import path the whole-bucket
-`SyncEngine.sync(providerRecord:)` uses. Failed jobs can be retried individually
+`SyncEngine.perform(_:providerRecord:)`, which wraps `importFileIfNeeded` and
+closes the row either way. Failed jobs can be retried individually
 (`SyncJobStore.retry`) rather than requiring a queue clear.
 
-`sync(providerRecord:)` (manual "Sync Now", and the periodic background sync)
-runs its own sequential pass rather than going through `drain()` — but for
-every file that actually needs fetching (new, changed, or previously lost;
-already-synced unchanged files are skipped with no row at all) it still opens
-and closes a `SyncJob` row inline, posting `.syncQueueDidChange` so
-`SyncQueueManager` refreshes. That's what puts a whole-bucket sync's files in
-the same queue UI as a queued per-file import, instead of only the latter
-being visible while it runs.
+**Listing and importing are separate.** Every entry point — add-connection,
+"Sync Now", the schedule, a local folder import — goes through
+`SyncQueueManager.sync(providerRecord:)`, which lists, queues what needs
+fetching (new, changed, or previously lost; unchanged files get no row at all),
+and returns. `drain()` is the only thing that imports, so a bucket of thousands
+no longer holds a button hostage for minutes and the queue's speed control
+applies to a whole-bucket pass like anything else.
+
+A pass that hits the 100-job ceiling stops there and is remembered. When the
+queue drains empty, those connections are re-listed and the next batch queued,
+repeating until the bucket is done — so a large bucket finishes on its own
+rather than needing a Sync Now per hundred files. Pausing stops both halves.
 
 The queue is global across every source, not per-bucket. `RemoteSectionView`
 shows a "Queue (N)" pill below the
@@ -88,7 +100,8 @@ RemoteBrowserView.swift (pushes itself per subfolder, same UI at every level)
 │ One-line stats footer (this folder)      │──→ TrackStore.stats(forProvider:pathPrefix:)
 │ "More" toolbar menu:                     │
 │   frequency, last synced, sync now,      │──→ ProviderStore.updateSyncFrequency /
-│   sync queue, delete                     │     SyncEngine.sync(providerRecord:) /
+│   sync queue, delete                     │     SyncQueueManager.sync(…) (queues,
+│                                          │     doesn't import) /
 │                                          │     SettingsViewModel.delete(_:)
 └─────────────────────────────────────────┘
 ```

@@ -44,7 +44,7 @@ final class SyncScheduler: ObservableObject {
             guard let minutes = record.syncFrequencyMinutes, minutes > 0 else { continue }
             let due = record.lastSyncedAt.map { now.timeIntervalSince($0) >= Double(minutes * 60) } ?? true
             guard due else { continue }
-            _ = try? await SyncEngine().sync(providerRecord: record)
+            _ = try? await SyncQueueManager.shared.sync(providerRecord: record)
         }
     }
 }

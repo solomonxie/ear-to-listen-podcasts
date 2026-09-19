@@ -7,7 +7,7 @@ struct AddToPlaylistSheet: View {
     let track: Track
     @Environment(\.dismiss) private var dismiss
     @State private var playlists: [Playlist] = []
-    @State private var showingCreate = false
+    @State private var openRow: String?
     @State private var newPlaylistName = ""
 
     private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -15,10 +15,18 @@ struct AddToPlaylistSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Button {
-                    showingCreate = true
-                } label: {
-                    Label("New Playlist", systemImage: "plus.circle")
+                // Unfolds into a name field right here, rather than stacking an alert on
+                // top of a sheet — the list you're adding to stays visible while you name
+                // the thing you're adding it to.
+                UnfoldingTextField(
+                    prompt: "New Playlist", actionLabel: "Create",
+                    id: "newPlaylist", open: $openRow
+                ) { name in
+                    let playlist = Playlist(
+                        id: UUID().uuidString, name: name, source: "local", createdAt: Date()
+                    )
+                    try? playlistStore.create(playlist)
+                    add(to: playlist)
                 }
                 if !playlists.isEmpty {
                     Section("Playlists") {
@@ -40,18 +48,6 @@ struct AddToPlaylistSheet: View {
                 }
             }
             .task { playlists = (try? playlistStore.all()) ?? [] }
-            .alert("New Playlist", isPresented: $showingCreate) {
-                TextField("Name", text: $newPlaylistName)
-                Button("Create") {
-                    let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
-                    guard !name.isEmpty else { return }
-                    let playlist = Playlist(id: UUID().uuidString, name: name, source: "local", createdAt: Date())
-                    try? playlistStore.create(playlist)
-                    newPlaylistName = ""
-                    add(to: playlist)
-                }
-                Button("Cancel", role: .cancel) {}
-            }
         }
         .presentationDetents([.medium, .large])
     }

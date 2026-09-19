@@ -7,8 +7,12 @@ struct Album: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var id: String
     var artistID: String?
     var name: String
-    /// Free text about the collection — hand-written or an accepted AI suggestion.
+    /// Free text about the collection — hand-written or an accepted AI suggestion. A
+    /// sentence or two; the longer read is `profile`.
     var notes: String? = nil
+    /// The long read — what this collection is, who it's by, what it covers. Written by
+    /// `AlbumProfileSuggester` from what the library already knows, and editable after.
+    var profile: String? = nil
     /// Filename under `ImageFileStore.artwork`, not a full path.
     var artworkFileName: String? = nil
     /// When the collection is from. Episodes with no year of their own read this one —

@@ -17,15 +17,15 @@ struct EpisodeDetailsPane: View {
     @State private var latest: Track?
     @State private var artist: Artist?
     @State private var album: Album?
-    @State private var show: Show?
     @State private var topics: [Topic] = []
     @State private var connectionLabel: String?
     @State private var downloadedBytes: Int64?
 
     @State private var title = ""
+    /// Which unfolding control is open — one at a time, across the whole card.
+    @State private var openPicker: String?
     @State private var artistName = ""
     @State private var albumName = ""
-    @State private var showName = ""
     @State private var year = ""
     @State private var trackNumber = ""
     @State private var notes = ""
@@ -97,11 +97,6 @@ struct EpisodeDetailsPane: View {
                 DetailRow("Stopped at", track.positionMs.map { Scrubber.formatted(Double($0) / 1000) })
             }
 
-            if let summary = show?.summary, !summary.isEmpty {
-                DetailCard("About the show") {
-                    Text(summary).font(.footnote).foregroundStyle(.secondary)
-                }
-            }
         }
         .padding(.horizontal)
         .task(id: playingTrack.id) { await load() }
@@ -138,30 +133,53 @@ struct EpisodeDetailsPane: View {
 
     @ViewBuilder
     private var episodeFields: some View {
-        TextField("Title", text: $title, axis: .vertical)
-            .font(.footnote.weight(.medium))
-            .lineLimit(1...3)
+        // One line, and deliberately not `axis: .vertical`: a vertical field treats
+        // Return as "new paragraph", so Done added a blank row to the title instead of
+        // putting the keyboard away.
+        TextField("Title", text: $title)
+            .font(.subheadline.weight(.medium))
+            .lineLimit(1)
             .focused($focusedField, equals: .title)
             .submitLabel(.done)
             .onSubmit { focusedField = nil }
 
-        EditableRow("Speaker", text: $artistName, field: .speaker, focus: $focusedField, link: artist.map(EpisodeLink.speaker))
-        EditableRow("Album", text: $albumName, field: .album, focus: $focusedField, link: album.map(EpisodeLink.album))
-        EditableRow("Show", text: $showName, field: .show, focus: $focusedField, link: show.map(EpisodeLink.show))
-        EditableRow(
-            "Year", text: $year, field: .year, focus: $focusedField, keyboard: .numberPad,
+        // Whole-row links rather than a text field with a chevron pinned to the far
+        // edge. Going to the speaker's page is what anyone does from here; renaming the
+        // speaker of one episode is what `EpisodeEditView` is for. One target per row,
+        // and the target is the row.
+        LinkRow("Speaker", value: artistName, route: artist.map { PlayerRoute.speaker($0.id) })
+        LinkRow("Album", value: albumName, route: album.map { PlayerRoute.album($0.id) })
+
+        // Up with who and what, not down among the numbers: language is inherited from
+        // the speaker or the album above it, so it reads as the third answer to "what is
+        // this", and it's what decides how the episode gets transcribed.
+        EpisodeLanguageRow(open: $openPicker)
+
+        UnfoldingWheel(
+            title: "Year", id: "year", open: $openPicker, value: yearValue,
+            choices: NumberChoices.years,
             placeholder: album?.year.map { "\($0) · from album" } ?? "—"
         )
-        EditableRow("Track no.", text: $trackNumber, field: .trackNumber, focus: $focusedField, keyboard: .numberPad)
-
-        // The one field that isn't the listener's own text: it's asked for here, where
-        // the rest of the episode is described, and the transcript pane no longer asks.
-        EpisodeLanguageRow()
+        UnfoldingWheel(
+            title: "Track no.", id: "trackNumber", open: $openPicker, value: trackNumberValue,
+            choices: NumberChoices.trackNumbers
+        )
 
         DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
-        if !topics.isEmpty {
-            TagRow(names: topics.map(\.name))
-        }
+        // Shown even when empty now that it can be added to — an editable row that only
+        // appears once it has something in it can't be used to put the first thing in.
+        TagField(
+            names: topics.map(\.name),
+            ownerName: album?.name,
+            labelWidth: DetailLayout.labelWidth,
+            open: $openPicker,
+            onChange: { names in
+                guard let albumID = track.albumID else { return }
+                try? libraryStore.setTopics(names, forAlbum: albumID)
+                topics = (try? libraryStore.topics(forAlbum: albumID)) ?? []
+                NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+            }
+        )
 
         Divider()
         // Words, at the end of the list, with the other things you can do to this
@@ -212,12 +230,22 @@ struct EpisodeDetailsPane: View {
         date.map { $0.formatted(date: .abbreviated, time: .shortened) }
     }
 
+    /// The wheels speak `Int?`; the fields behind them are still the strings the save
+    /// path parses, so nothing downstream has to change.
+    private var yearValue: Binding<Int?> {
+        Binding(get: { Int(year) }, set: { year = $0.map(String.init) ?? "" })
+    }
+
+    private var trackNumberValue: Binding<Int?> {
+        Binding(get: { Int(trackNumber) }, set: { trackNumber = $0.map(String.init) ?? "" })
+    }
+
     private func load() async {
         latest = (try? trackStore.find(id: playingTrack.id)) ?? nil
         artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
         album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
-        show = track.showID.flatMap { try? libraryStore.show(id: $0) } ?? nil
-        topics = show.flatMap { try? libraryStore.topics(forShow: $0.id) } ?? []
+        // Topics tag the collection an episode belongs to.
+        topics = track.albumID.flatMap { try? libraryStore.topics(forAlbum: $0) } ?? []
         connectionLabel = (try? providerStore.all())?.first { $0.id == track.providerID }?.label
         downloadedBytes = await AudioCache.shared.cachedSize(providerID: track.providerID, filePath: track.filePath)
         bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
@@ -233,7 +261,6 @@ struct EpisodeDetailsPane: View {
         title = track.title
         artistName = artist?.name ?? ""
         albumName = album?.name ?? ""
-        showName = show?.name ?? ""
         year = track.year.map(String.init) ?? ""
         trackNumber = track.trackNumber.map(String.init) ?? ""
         notes = track.notes ?? ""
@@ -242,20 +269,18 @@ struct EpisodeDetailsPane: View {
     }
 
     private var snapshot: String {
-        [title, artistName, albumName, showName, year, trackNumber, notes].joined(separator: "\u{1}")
+        [title, artistName, albumName, year, trackNumber, notes].joined(separator: "\u{1}")
     }
 
     private func save() {
         guard draftTrackID == track.id, snapshot != savedSnapshot else { return }
         let artist = trimmed(artistName).flatMap { try? libraryStore.upsertArtist(name: $0) }
         let album = trimmed(albumName).flatMap { name in try? libraryStore.upsertAlbum(name: name, artistID: artist?.id) }
-        let show = trimmed(showName).flatMap { try? libraryStore.upsertShow(name: $0) }
 
         var updated = track
         updated.title = trimmed(title) ?? TrackRow.fileName(for: track)
         updated.artistID = artist?.id
         updated.albumID = album?.id
-        updated.showID = show?.id
         updated.year = trimmed(year).flatMap { Int($0) }
         updated.trackNumber = trimmed(trackNumber).flatMap { Int($0) }
         updated.notes = trimmed(notes)
@@ -291,14 +316,13 @@ struct EpisodeDetailsPane: View {
         suggestionError = nil
         do {
             let suggestion = try await EpisodeMetadataSuggester().suggest(
-                track: track, title: title, artist: artistName, album: albumName, show: showName, notes: notes
+                track: track, title: title, artist: artistName, album: albumName, notes: notes
             )
             // Only fills what the model actually improved on — a null field leaves
             // whatever's in the form alone rather than blanking it.
             if let suggested = suggestion.title { title = suggested }
             if let suggested = suggestion.artist { artistName = suggested }
             if let suggested = suggestion.album { albumName = suggested }
-            if let suggested = suggestion.show { showName = suggested }
             if let suggested = suggestion.year { year = String(suggested) }
             if let suggested = suggestion.notes { notes = suggested }
             save()
@@ -336,13 +360,7 @@ private struct DetailCard<Content: View>: View {
 /// Where a field's value is also a page of its own — the chevron stays, so a speaker is
 /// still one tap from their episodes even though the name is now editable in place.
 private enum EpisodeField: Hashable {
-    case title, speaker, album, show, year, trackNumber, notes
-}
-
-private enum EpisodeLink {
-    case speaker(Artist)
-    case album(Album)
-    case show(Show)
+    case title, speaker, album, year, trackNumber, notes
 }
 
 /// How wide the label column is. Fixed, so every value in a card starts at the same
@@ -351,6 +369,10 @@ private enum EpisodeLink {
 /// values read as two unrelated lists.
 private enum DetailLayout {
     static let labelWidth: CGFloat = 104
+    /// Apple's minimum touch target. These rows are a column of fields on a page you're
+    /// using one-handed while something plays — `.footnote` text with no padding gave a
+    /// ~22pt row, which is a target you aim at rather than hit.
+    static let rowHeight: CGFloat = 44
 }
 
 /// Skips itself when there's no value, so an episode with thin metadata shows a short
@@ -366,15 +388,16 @@ private struct DetailRow: View {
 
     var body: some View {
         if let value, !value.isEmpty {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(spacing: 8) {
                 Text(label)
                     .sectionRowSecondary()
                     .frame(width: DetailLayout.labelWidth, alignment: .leading)
                 Text(value)
-                    .font(.footnote)
+                    .font(.subheadline)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(minHeight: DetailLayout.rowHeight)
         }
     }
 }
@@ -389,25 +412,23 @@ private struct EditableRow: View {
     let field: EpisodeField
     var focus: FocusState<EpisodeField?>.Binding
     var keyboard: UIKeyboardType = .default
-    var link: EpisodeLink?
     var placeholder: String = "—"
 
     init(
         _ label: String, text: Binding<String>, field: EpisodeField,
         focus: FocusState<EpisodeField?>.Binding, keyboard: UIKeyboardType = .default,
-        link: EpisodeLink? = nil, placeholder: String = "—"
+        placeholder: String = "—"
     ) {
         self.label = label
         self._text = text
         self.field = field
         self.focus = focus
         self.keyboard = keyboard
-        self.link = link
         self.placeholder = placeholder
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(spacing: 8) {
             Text(label)
                 .sectionRowSecondary()
                 .frame(width: DetailLayout.labelWidth, alignment: .leading)
@@ -415,70 +436,80 @@ private struct EditableRow: View {
             // album's year, say — rather than the field's own name, which the label to the
             // left already says.
             TextField(placeholder, text: $text)
-                .font(.footnote)
+                .font(.subheadline)
                 .keyboardType(keyboard)
                 .focused(focus, equals: field)
                 .submitLabel(.done)
                 .onSubmit { focus.wrappedValue = nil }
-            if let link {
-                NavigationLink {
-                    destination(link)
-                } label: {
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-            }
         }
-    }
-
-    @ViewBuilder
-    private func destination(_ link: EpisodeLink) -> some View {
-        switch link {
-        case .speaker(let artist): SpeakerDetailView(speaker: artist)
-        case .album(let album): AlbumDetailView(album: album)
-        case .show(let show): ShowDetailView(show: show)
-        }
+        .frame(minHeight: DetailLayout.rowHeight)
+        .contentShape(Rectangle())
     }
 }
 
-private struct TagRow: View {
-    let names: [String]
+/// A row whose whole width goes somewhere — the speaker's page, the album's.
+///
+/// The value is in the accent colour and the chevron sits where iOS puts it, but neither
+/// is the target: the row is. A chevron alone, at the far edge, is both invisible as an
+/// affordance and a long reach from the text you were reading when you decided to tap.
+private struct LinkRow: View {
+    let label: String
+    let value: String
+    /// A route, not a view: the player's stack routes these so the now-playing bar can
+    /// follow onto the pushed page and pop back from it.
+    let route: PlayerRoute?
+
+    init(_ label: String, value: String, route: PlayerRoute?) {
+        self.label = label
+        self.value = value
+        self.route = route
+    }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Topics")
-                .sectionRowSecondary()
-                .frame(width: DetailLayout.labelWidth, alignment: .leading)
-            HStack(spacing: 6) {
-                ForEach(names, id: \.self) { name in
-                    Text(name)
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.quaternary, in: Capsule())
-                }
+        if let route {
+            NavigationLink(value: route) {
+                row(isLink: true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
+        } else if !value.isEmpty {
+            row(isLink: false)
         }
     }
+
+    private func row(isLink: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .sectionRowSecondary()
+                .frame(width: DetailLayout.labelWidth, alignment: .leading)
+            // No chevron. The accent colour already says "this goes somewhere", and the
+            // whole row is the target — an arrow at the far edge added a second thing to
+            // look at that pointed back at what you'd already decided to tap.
+            Text(value.isEmpty ? "—" : value)
+                .font(.subheadline)
+                .foregroundStyle(isLink ? Color.accentColor : .primary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: DetailLayout.rowHeight)
+        .contentShape(Rectangle())
+    }
+
 }
 
 /// The episode's language, with the list of what this phone can actually recognise
 /// offline. Its own view so the twice-a-second churn of a transcription run redraws one
 /// row rather than every field on the page.
 private struct EpisodeLanguageRow: View {
+    @Binding var open: String?
     @ObservedObject private var transcript = TranscriptRunner.shared
     @ObservedObject private var languages = OnDeviceLanguages.shared
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Language")
-                .sectionRowSecondary()
-                .frame(width: DetailLayout.labelWidth, alignment: .leading)
-            TranscriptLanguageMenu(playing: transcript, languages: languages)
-                .equatable()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
+        // No label column here — the field draws its own row, like the wheels beside it.
+        EpisodeLanguageField(
+            playing: transcript, languages: languages, id: "language", open: $open
+        )
+        .equatable()
         .task { await languages.refreshIfNeeded() }
     }
 }

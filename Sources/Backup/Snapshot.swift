@@ -60,7 +60,7 @@ struct LibrarySnapshot: Codable {
     }
 
     /// One hand-edited episode, keyed by (providerID, filePath) like `TrackRef` — the
-    /// local id is a fresh UUID per install. Speaker/album/show travel by name so they
+    /// local id is a fresh UUID per install. Speaker and album travel by name so they
     /// re-link against whatever those rows are called on the restoring device. Only
     /// episodes someone actually edited are included; the rest is synced metadata
     /// `SyncEngine` rebuilds by itself.
@@ -80,7 +80,6 @@ struct LibrarySnapshot: Codable {
         var title: String
         var artistName: String?
         var albumName: String?
-        var showName: String?
         var year: Int?
         var trackNumber: Int?
         var notes: String?
@@ -102,7 +101,6 @@ struct LibrarySnapshot: Codable {
             title = try container.decode(String.self, forKey: .title)
             artistName = try container.decodeIfPresent(String.self, forKey: .artistName)
             albumName = try container.decodeIfPresent(String.self, forKey: .albumName)
-            showName = try container.decodeIfPresent(String.self, forKey: .showName)
             year = try container.decodeIfPresent(Int.self, forKey: .year)
             trackNumber = try container.decodeIfPresent(Int.self, forKey: .trackNumber)
             notes = try container.decodeIfPresent(String.self, forKey: .notes)
@@ -114,7 +112,7 @@ struct LibrarySnapshot: Codable {
 
         init(
             providerID: String, filePath: String, title: String, artistName: String?, albumName: String?,
-            showName: String?, year: Int?, trackNumber: Int?, notes: String?, artworkFileName: String?,
+            year: Int?, trackNumber: Int?, notes: String?, artworkFileName: String?,
             isFavorite: Bool = false, bookmarks: [BookmarkEntry] = [], editedAt: Date?
         ) {
             self.providerID = providerID
@@ -122,7 +120,6 @@ struct LibrarySnapshot: Codable {
             self.title = title
             self.artistName = artistName
             self.albumName = albumName
-            self.showName = showName
             self.year = year
             self.trackNumber = trackNumber
             self.notes = notes

@@ -22,21 +22,41 @@ the vocabulary hint handed to the next transcription pass
 
 The one real workflow that touches every store here — a scheduled tick,
 manual "Sync Now" (`RemoteBrowserView`), or right after adding a
-source (`AddS3ProviderView`/`SettingsSectionView`):
+source (`AddS3ProviderView`/`SettingsSectionView`). It runs in two phases:
+listing queues the work and returns; draining does it.
+
+**Phase 1 — list and queue** (returns in seconds, imports nothing):
 
 ```
 SyncScheduler.start() (foreground poll loop)  /  manual "Sync Now"  /  add-source
-        │ due ProviderRecord
+        │ ProviderRecord
+        ▼
+SyncQueueManager.sync(providerRecord:)   ← the one way in
         ▼
 Sources/Library/Sync.swift:SyncEngine.sync(providerRecord:)
         │ provider.listFiles(inFolder: nil)   (S3Provider / LocalFilesProvider)
         ▼
-   for each file already known (TrackStore.swift:find(providerID:filePath:))
+   for each listed file (TrackStore.swift:find(providerID:filePath:))
         │
-        ├─ unchanged ─────────────────────────────────────────► skip
-        └─ size changed / was lost ──► TrackStore.swift:refresh(id:sizeBytes:isLost:)
-        │
-   for each new file
+        ├─ unchanged ──────────────────────────────────────────► skip
+        ├─ already queued (SyncJobStore.hasUnfinished) ─────────► skip
+        └─ new / changed / was lost ──► SyncJobStore.enqueue(…) ──► `syncJobs`
+                                        stops at 100 unfinished
+        ▼
+TrackStore.swift:markLost(providerID:keepingPaths:)
+   any previously-known file missing from this listing ──► isLost = true
+        ▼
+ProviderStore.swift:updateLastSynced(id:at:) ──► `providers.lastSyncedAt`
+        ▼
+post .syncQueueDidChange ──► wakes SyncQueueManager.drain()
+```
+
+**Phase 2 — drain** (`SyncQueueManager.drain()`, N files at a time):
+
+```
+SyncJobStore.dequeueNextPending()  (claims + marks .running in one transaction)
+        ▼
+SyncEngine.perform(_:providerRecord:) ──► importFileIfNeeded(…)
         │ AVURLAsset metadata (title/artist/album/duration)
         ▼
    Sources/Library/ContentAnalyzer.swift:analyze(filePath:title:artist:album:)
@@ -47,8 +67,10 @@ Sources/Library/Sync.swift:SyncEngine.sync(providerRecord:)
         ▼
    TrackStore.swift:upsert(track:artistName:albumName:) ──► `tracks`
         ▼
-TrackStore.swift:markLost(providerID:keepingPaths:)
-   any previously-known file missing from this listing ──► isLost = true
+   SyncJobStore.markDone / markFailed
         ▼
-ProviderStore.swift:updateLastSynced(id:at:) ──► `providers.lastSyncedAt`
+queue empty? ──► connections that stopped at the ceiling are re-listed (phase 1
+                 again) until the bucket is done
+        ▼
+PendingRestore.reapplyAfterSync(dbQueue:)   ← a restore waiting on these tracks
 ```

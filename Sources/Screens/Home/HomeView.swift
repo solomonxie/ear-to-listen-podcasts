@@ -7,22 +7,23 @@ struct HomeView: View {
     @StateObject private var settings = SettingsViewModel()
 
     @State private var query = ""
-    @State private var showingCreatePlaylist = false
+    /// Naming a new playlist happens in a row under the shelf rather than in an alert —
+    /// an alert covers the shelf you're adding to, and costs a Cancel and a Create to
+    /// type one word.
+    @State private var isNamingPlaylist = false
     @State private var newPlaylistName = ""
-    @State private var showingDownloads = false
     @State private var editingBookmark: Bookmark?
+    @State private var results = LibrarySearch.Results()
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            // Lazy, not eager: a search that matches a few hundred episodes used to build
+            // and lay out every row before the first one appeared on screen.
+            LazyVStack(alignment: .leading, spacing: 28) {
                 if !query.isEmpty {
                     searchResults
                 } else {
-                    if homeData.isEmpty {
-                        emptyLibrary
-                    } else {
-                        homeShelves
-                    }
+                    homeShelves
                     Divider().padding(.horizontal)
                     RemoteSectionView(viewModel: settings)
                     Divider().padding(.horizontal)
@@ -35,12 +36,23 @@ struct HomeView: View {
         .navigationTitle("Good listening")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
         .onAppear { settings.load() }
+        // Debounced: `.task(id:)` cancels the previous run on the next keystroke, so
+        // holding a key down searches once at the end rather than once per character.
+        .task(id: query) {
+            guard !query.isEmpty else {
+                results = LibrarySearch.Results()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            results = await LibrarySearch.run(query, in: homeData.searchIndex)
+        }
         .task { await homeData.refresh() }
         .onChange(of: PlaybackEngine.shared.isPresentingPlayer) { _, isShowing in
             if !isShowing { Task { await homeData.refresh() } }
         }
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
-            Task { await homeData.refresh() }
+            homeData.refreshSoon()
         }
         .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
             homeData.refreshBookmarks()
@@ -48,95 +60,69 @@ struct HomeView: View {
         .sheet(item: $editingBookmark) { bookmark in
             BookmarkEditorView(bookmark: bookmark, episodeTitle: homeData.track(id: bookmark.trackID)?.title)
         }
-        .sheet(isPresented: $showingDownloads) {
-            NavigationStack { DownloadsView() }
-        }
-        .alert("New Playlist", isPresented: $showingCreatePlaylist) {
-            TextField("Name", text: $newPlaylistName)
-            Button("Create") {
-                guard !newPlaylistName.isEmpty else { return }
-                homeData.createPlaylist(name: newPlaylistName)
-                newPlaylistName = ""
-            }
-            Button("Cancel", role: .cancel) {}
-        }
+    }
+
+    private func createPlaylist() {
+        let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        homeData.createPlaylist(name: name)
+        newPlaylistName = ""
+        withAnimation(.easeOut(duration: 0.18)) { isNamingPlaylist = false }
     }
 
     private func play(_ track: Track, queue: [Track]) {
         PlaybackEngine.shared.open(track: track, queue: queue)
     }
 
-    /// A fresh install starts empty on purpose: sample content sitting in the same
-    /// shelves as synced content is indistinguishable from it, so it's offered rather
-    /// than assumed.
-    private var emptyLibrary: some View {
-        ContentUnavailableView {
-            Label("Nothing in your library yet", systemImage: "square.stack.3d.up.slash")
-        } description: {
-            Text("Connect an S3 bucket, or import episodes from Files below, and they appear here as they sync.")
-        } actions: {
-            Button("Load sample library") {
-                try? DemoDataSeeder.load()
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(minHeight: 260)
-    }
-
     @ViewBuilder
     private var homeShelves: some View {
-        shelf("Continue Listening") {
-            ForEach(homeData.recentTracks) { track in
-                TrackCard(track: track) { play(track, queue: homeData.recentTracks) }
-            }
-        }
-
-        // Both shelves are hand-made marks rather than anything derived, so they sit
-        // near the top where what you chose is what you see first.
-        if !homeData.favoriteTracks.isEmpty {
-            shelf("Favorites") {
-                ForEach(homeData.favoriteTracks) { track in
-                    TrackCard(track: track) { play(track, queue: homeData.favoriteTracks) }
+        if !homeData.recentTracks.isEmpty {
+            shelf("Continue Listening") {
+                ForEach(homeData.recentTracks) { track in
+                    TrackCard(track: track) { play(track, queue: homeData.recentTracks) }
                 }
             }
         }
 
-        if !homeData.bookmarks.isEmpty {
-            shelf("Bookmarks") {
-                ForEach(homeData.bookmarks) { bookmark in
-                    if let track = homeData.track(id: bookmark.trackID) {
-                        BookmarkCard(bookmark: bookmark, episodeTitle: track.title) {
-                            PlaybackEngine.shared.open(track: track, queue: [track], startingAt: bookmark.position)
-                        }
-                        .contextMenu {
-                            Button("Edit Bookmark…", systemImage: "square.and.pencil") { editingBookmark = bookmark }
-                        }
+        if !homeData.albums.isEmpty {
+            shelf("Albums") {
+                ForEach(homeData.albums) { album in
+                    NavigationLink { AlbumDetailView(album: album) } label: {
+                        AlbumCard(album: album)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
 
-        shelf("Albums") {
-            ForEach(homeData.albums) { album in
-                NavigationLink { AlbumDetailView(album: album) } label: {
-                    AlbumCard(album: album)
+        if !homeData.artists.isEmpty {
+            shelf("Speakers") {
+                ForEach(homeData.artists) { artist in
+                    NavigationLink { SpeakerDetailView(speaker: artist) } label: {
+                        SpeakerCard(artist: artist)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
 
-        shelf("Speakers") {
-            ForEach(homeData.artists) { artist in
-                NavigationLink { SpeakerDetailView(speaker: artist) } label: {
-                    SpeakerCard(artist: artist)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-
+        // Always shown — the two fixed playlists are always in it, and a listener with
+        // nothing favourited still needs to be told where favourites will turn up.
         shelf("Playlists", trailing: {
-            Button { showingCreatePlaylist = true } label: { Image(systemName: "plus.circle.fill") }
+            Button {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    isNamingPlaylist.toggle()
+                }
+            } label: {
+                Image(systemName: isNamingPlaylist ? "xmark.circle.fill" : "plus.circle.fill")
+            }
         }) {
+            ForEach(FixedPlaylist.allCases) { kind in
+                NavigationLink { FixedPlaylistView(kind: kind) } label: {
+                    FixedPlaylistCard(kind: kind, count: homeData.count(of: kind))
+                }
+                .buttonStyle(.plain)
+            }
             ForEach(homeData.playlists) { playlist in
                 NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
                     PlaylistCard(playlist: playlist)
@@ -145,105 +131,101 @@ struct HomeView: View {
             }
         }
 
-        shelf("Saved Shows") {
-            ForEach(homeData.favoriteShows()) { show in
-                NavigationLink { ShowDetailView(show: show) } label: {
-                    ShowCard(show: show)
+        // The name field unfolds under the shelf it adds to, rather than an alert over it.
+        if isNamingPlaylist {
+            HStack {
+                TextField("Playlist name", text: $newPlaylistName)
+                    .textFieldStyle(.roundedBorder)
+                    .submitLabel(.done)
+                    .onSubmit(createPlaylist)
+                Button("Create", action: createPlaylist)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(newPlaylistName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal)
+        }
+
+        // Below the playlists, as the marks you made inside episodes rather than a
+        // collection of episodes in their own right.
+        if !homeData.bookmarkGroups.isEmpty {
+            BookmarksSection(
+                groups: homeData.bookmarkGroups,
+                onPlay: { track, bookmark in
+                    PlaybackEngine.shared.open(track: track, queue: [track], startingAt: bookmark.position)
+                },
+                onEdit: { editingBookmark = $0 }
+            )
+        }
+
+        if !homeData.years.isEmpty {
+            shelf("Browse by Year") {
+                ForEach(homeData.years, id: \.self) { year in
+                    NavigationLink {
+                        EpisodeListView(title: "\(year)", tracks: homeData.tracks(forYear: year))
+                    } label: {
+                        ChipCard(title: "\(year)", color: .gray)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
 
-        // The shelf shows what's downloaded; "More" is where you manage it — the full
-        // list, with the sizes and the way to free the space up again.
-        shelf("Downloaded", trailing: {
-            Button("More") { showingDownloads = true }
-                .font(.subheadline)
-        }) {
-            ForEach(homeData.downloadedTracks) { track in
-                TrackCard(track: track) { play(track, queue: homeData.downloadedTracks) }
-            }
-        }
-
-        shelf("Browse by Year") {
-            ForEach(homeData.years, id: \.self) { year in
-                NavigationLink {
-                    EpisodeListView(title: "\(year)", tracks: homeData.tracks(forYear: year))
-                } label: {
-                    ChipCard(title: "\(year)", color: .gray)
+        if !homeData.topics.isEmpty {
+            shelf("Topics") {
+                ForEach(homeData.topics) { topic in
+                    NavigationLink {
+                        EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
+                    } label: {
+                        ChipCard(title: topic.name, color: LibraryArt.color(for: topic.id))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
-
-        shelf("Topics") {
-            ForEach(homeData.topics) { topic in
-                NavigationLink {
-                    EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
-                } label: {
-                    ChipCard(title: topic.name, color: LibraryArt.color(for: topic.id))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var matchedShows: [Show] { homeData.shows.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedSpeakers: [Artist] { homeData.artists.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedAlbums: [Album] { homeData.albums.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedPlaylists: [Playlist] { homeData.playlists.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    private var matchedTopics: [Topic] { homeData.topics.filter { $0.name.localizedCaseInsensitiveContains(query) } }
-    /// Path as well as title: with a folder of files sharing one embedded title tag, the
-    /// filename is often the only thing the listener can actually search for.
-    private var matchedTracks: [Track] {
-        homeData.tracks.filter {
-            $0.title.localizedCaseInsensitiveContains(query) || $0.filePath.localizedCaseInsensitiveContains(query)
-        }
-    }
-    private var hasResults: Bool {
-        !(matchedShows.isEmpty && matchedSpeakers.isEmpty && matchedAlbums.isEmpty && matchedPlaylists.isEmpty && matchedTracks.isEmpty && matchedTopics.isEmpty)
     }
 
     @ViewBuilder
     private var searchResults: some View {
-        if !hasResults {
+        if results.isEmpty {
             ContentUnavailableView.search(text: query)
                 .padding(.top, 40)
         } else {
-            resultSection("Shows", matchedShows) { show in
-                NavigationLink { ShowDetailView(show: show) } label: {
-                    resultRow(symbol: "mic.fill", color: LibraryArt.color(for: show.id), title: show.name, subtitle: nil)
-                }
-            }
-            resultSection("Speakers", matchedSpeakers) { speaker in
+            resultSection("Speakers", results.speakers) { speaker in
                 NavigationLink { SpeakerDetailView(speaker: speaker) } label: {
                     resultRow(symbol: "person.fill", color: .gray, title: speaker.name, subtitle: nil)
                 }
             }
-            resultSection("Albums", matchedAlbums) { album in
+            resultSection("Albums", results.albums) { album in
                 NavigationLink { AlbumDetailView(album: album) } label: {
                     resultRow(symbol: "square.stack.fill", color: LibraryArt.color(for: album.id), title: album.name, subtitle: nil)
                 }
             }
-            resultSection("Playlists", matchedPlaylists) { playlist in
+            resultSection("Playlists", results.playlists) { playlist in
                 NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
                     resultRow(symbol: "square.stack.fill", color: LibraryArt.color(for: playlist.id), title: playlist.name, subtitle: nil)
                 }
             }
-            resultSection("Topics", matchedTopics) { topic in
+            resultSection("Topics", results.topics) { topic in
                 NavigationLink {
                     EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
                 } label: {
                     resultRow(symbol: "number", color: LibraryArt.color(for: topic.id), title: topic.name, subtitle: nil)
                 }
             }
-            resultSection("Episodes", matchedTracks) { track in
-                Button { play(track, queue: matchedTracks) } label: {
+            resultSection(episodesTitle, results.tracks) { track in
+                Button { play(track, queue: results.tracks) } label: {
                     TrackRow(track: track)
                 }
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    /// Says so when the list is capped, rather than silently showing part of the answer.
+    private var episodesTitle: LocalizedStringKey {
+        results.totalTrackMatches > results.tracks.count
+            ? "Episodes (first \(results.tracks.count) of \(results.totalTrackMatches))"
+            : "Episodes"
     }
 
     @ViewBuilder
@@ -253,7 +235,7 @@ struct HomeView: View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title).font(.headline).padding(.horizontal)
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(items) { item in
                         row(item)
                         if item.id != items.last?.id {
@@ -336,20 +318,6 @@ private struct AlbumCard: View {
                 .frame(width: 120, height: 120)
                 .overlay { Image(systemName: "square.stack.fill").font(.largeTitle).foregroundStyle(.white) }
             Text(album.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-        }
-        .frame(width: 120)
-    }
-}
-
-private struct ShowCard: View {
-    let show: Show
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(LibraryArt.color(for: show.id).gradient)
-                .frame(width: 120, height: 120)
-                .overlay { Image(systemName: "mic.fill").font(.largeTitle).foregroundStyle(.white) }
-            Text(show.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 120)
     }
