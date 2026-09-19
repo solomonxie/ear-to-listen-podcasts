@@ -12,11 +12,10 @@ struct EpisodeMetadataSuggester {
         var title: String?
         var artist: String?
         var album: String?
-        var show: String?
         var year: Int?
         var notes: String?
 
-        enum CodingKeys: String, CodingKey { case title, artist, album, show, year, notes }
+        enum CodingKeys: String, CodingKey { case title, artist, album, year, notes }
 
         /// Hand-rolled so one odd field (a year sent back as `"2019"`, a null where a
         /// string was asked for) doesn't throw the whole suggestion away.
@@ -29,7 +28,6 @@ struct EpisodeMetadataSuggester {
             title = string(.title)
             artist = string(.artist)
             album = string(.album)
-            show = string(.show)
             notes = string(.notes)
             year = (try? container.decode(Int.self, forKey: .year)) ?? string(.year).flatMap { Int($0.prefix(4)) }
         }
@@ -92,7 +90,7 @@ struct EpisodeMetadataSuggester {
     }
 
     func suggest(
-        track: Track, title: String, artist: String, album: String, show: String, notes: String
+        track: Track, title: String, artist: String, album: String, notes: String
     ) async throws -> Suggestion {
         let state = readiness(track: track)
         guard state.isReady else { throw NotReadyError(readiness: state) }
@@ -104,18 +102,17 @@ struct EpisodeMetadataSuggester {
         Current title: \(title.nilIfEmpty ?? "none")
         Current speaker: \(artist.nilIfEmpty ?? "none")
         Current album: \(album.nilIfEmpty ?? "none")
-        Current show: \(show.nilIfEmpty ?? "none")
         Current notes: \(notes.nilIfEmpty ?? "none")
         Duration: \(track.durationMs.map { "\($0 / 60000) minutes" } ?? "unknown")
         Transcript\(excerpt.isSampled ? " (whole episode, sampled evenly — \"…\" marks what was left out)" : " (whole episode)"): \(excerpt.text)
 
         Many files in this library share one generic embedded title, so a title that
         merely repeats a generic tag is worse than one drawn from what's actually said.
-        Give a specific title, the speaker/host, the album and show it belongs to, the
+        Give a specific title, the speaker/host, the album it belongs to, the
         release year, and notes of at most three sentences. Strict JSON only, no other
         text, null for anything you can't improve on:
         {"title": string|null, "artist": string|null, "album": string|null,
-         "show": string|null, "year": number|null, "notes": string|null}
+         "year": number|null, "notes": string|null}
         """
 
         let content = try await AiRouter.runChatCompletion(

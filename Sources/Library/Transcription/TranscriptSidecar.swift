@@ -32,19 +32,19 @@ enum TranscriptSidecar {
         let lines = segments.filter { !$0.text.isEmpty }
         guard !lines.isEmpty else { return }
 
-        let vtt = TranscriptFile.vtt(from: segments)
-        try await provider.upload(
-            Data(vtt.utf8),
-            toPath: TranscriptFile.sidecarPath(forAudioPath: track.filePath, extension: TranscriptFile.canonicalExtension),
-            contentType: "text/vtt"
-        )
+        if let path = TranscriptFile.sidecarPath(
+            forAudioPath: track.filePath, extension: TranscriptFile.canonicalExtension
+        ) {
+            let vtt = TranscriptFile.vtt(from: segments)
+            try await provider.upload(Data(vtt.utf8), toPath: path, contentType: "text/vtt")
+        }
 
-        let lrc = TranscriptFile.lrc(from: segments, title: title, artist: artist)
-        try await provider.upload(
-            Data(lrc.utf8),
-            toPath: TranscriptFile.sidecarPath(forAudioPath: track.filePath, extension: TranscriptFile.companionExtension),
-            contentType: "text/plain"
-        )
+        if let path = TranscriptFile.sidecarPath(
+            forAudioPath: track.filePath, extension: TranscriptFile.companionExtension
+        ) {
+            let lrc = TranscriptFile.lrc(from: segments, title: title, artist: artist)
+            try await provider.upload(Data(lrc.utf8), toPath: path, contentType: "text/plain")
+        }
     }
 
     /// Sidecars are small text files, so they're fetched whole through the provider's

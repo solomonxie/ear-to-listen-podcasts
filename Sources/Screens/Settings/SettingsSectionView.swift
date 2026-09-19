@@ -11,6 +11,7 @@ struct SettingsSectionView: View {
     @State private var showingResetConfirmation = false
     @State private var showingRemoveDemoConfirmation = false
     @State private var hasDemoData = DemoDataSeeder.isLoaded
+    @State private var openPicker: String?
     @State private var showingFilePicker = false
     @State private var isScanning = false
     @State private var importMessage: String?
@@ -226,19 +227,13 @@ struct SettingsSectionView: View {
                     title: "LANGUAGE",
                     info: "Applies right away, without a relaunch. \u{201C}Same as device\u{201D} follows your phone's own language setting. Each option is written in its own language, so it stays readable while the app is still showing the other one."
                 )
-                // A menu `Picker` outside a `Form` drops its own label and indents what's
-                // left, so the row read as a stray "System" sitting off the margin. The
-                // heading names it, and the choice is written into the button.
-                Menu {
-                    Picker("Language", selection: $language.language) {
-                        ForEach(AppLanguage.allCases) { option in
-                            Text(option.displayName).tag(option)
-                        }
-                    }
-                } label: {
-                    Text("\(language.language.displayName) ▾")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                // Unfolds in place rather than dropping a menu over the settings it sits
+                // among — see `UnfoldingPicker`.
+                UnfoldingPicker(
+                    title: "Language", id: "appLanguage", open: $openPicker,
+                    selection: $language.language,
+                    options: AppLanguage.allCases.map { UnfoldingPicker.Option($0, $0.displayName) }
+                )
             }
             .padding(.horizontal)
 
@@ -370,8 +365,8 @@ struct SettingsSectionView: View {
 
         var found = 0
         for record in records {
-            found += (try? await SyncEngine().sync(providerRecord: record))?.totalFiles ?? 0
+            found += (try? await SyncQueueManager.shared.sync(providerRecord: record))?.totalFiles ?? 0
         }
-        importMessage = "Found \(found) file\(found == 1 ? "" : "s")."
+        importMessage = "Found \(found) file\(found == 1 ? "" : "s") — importing in the background."
     }
 }

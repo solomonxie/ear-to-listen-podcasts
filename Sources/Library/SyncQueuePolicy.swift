@@ -7,7 +7,8 @@ enum SyncQueuePolicy {
     /// Most unfinished (pending + running) jobs the queue will hold. A bucket with
     /// thousands of files otherwise queues every one of them the moment it's added — hours
     /// of work nobody asked for, in a list nobody can read. Nothing is lost by stopping:
-    /// the next sync picks up from wherever this one had to stop.
+    /// the drain re-lists the connection once it's made room and queues the next batch,
+    /// so this caps what's *waiting*, not what gets imported.
     static let capacity = 100
 
     private static let pausedKey = "syncQueue.isPaused"
@@ -20,13 +21,9 @@ enum SyncQueuePolicy {
         set { UserDefaults.standard.set(newValue, forKey: pausedKey) }
     }
 
-    struct PausedError: Error, LocalizedError {
-        var errorDescription: String? { "The sync queue is paused. Resume it to sync." }
-    }
-
     struct FullError: Error, LocalizedError {
         var errorDescription: String? {
-            "The sync queue is full (\(SyncQueuePolicy.capacity) files waiting). Let it drain, then sync again to carry on where it stopped."
+            "The sync queue is full (\(SyncQueuePolicy.capacity) files waiting). The rest come in as it drains."
         }
     }
 }

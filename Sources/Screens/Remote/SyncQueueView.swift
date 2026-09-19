@@ -19,7 +19,7 @@ struct SyncQueueView: View {
                         .foregroundStyle(.secondary)
                     } else if manager.isFull {
                         Label(
-                            "Queue full (\(manager.capacity)). Files past this point wait for the next sync.",
+                            "Queue full (\(manager.capacity)). Files past this point come in as room frees up.",
                             systemImage: "exclamationmark.circle.fill"
                         )
                         .font(.footnote)

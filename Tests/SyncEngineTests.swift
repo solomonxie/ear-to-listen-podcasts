@@ -60,7 +60,18 @@ final class SyncEngineTests: XCTestCase {
         return dbQueue
     }
 
-    func testSyncAddsNewAudioFilesAndSkipsNonAudio() async throws {
+    /// `SyncQueueManager.drain()` can't run here — it's main-actor and hard-wired to the
+    /// app database — so this is its loop over the injected one: claim, work, repeat. It
+    /// goes through the same `perform` the real drain does, so there's no test-only
+    /// import path to drift away from production.
+    private func drainQueue(_ engine: SyncEngine, _ record: ProviderRecord, dbQueue: DatabaseQueue) async throws {
+        let store = SyncJobStore(dbQueue: dbQueue)
+        while let job = try store.dequeueNextPending() {
+            await engine.perform(job, providerRecord: record)
+        }
+    }
+
+    func testSyncQueuesNewAudioFilesAndSkipsNonAudio() async throws {
         let dbQueue = try makeDatabase()
         let providerID = UUID().uuidString
         Self.fakeFileLists[providerID] = [
@@ -73,11 +84,34 @@ final class SyncEngineTests: XCTestCase {
 
         let result = try await engine.sync(providerRecord: record)
 
-        XCTAssertEqual(result.added, 1)
+        XCTAssertEqual(result.queued, 1)
         XCTAssertEqual(result.totalFiles, 1)
+        XCTAssertEqual(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).map(\.filePath), ["episode1.mp3"])
+        XCTAssertTrue(
+            try TrackStore(dbQueue: dbQueue).all().isEmpty,
+            "the listing pass queues; importing is the drain loop's job"
+        )
+    }
+
+    /// The other half of the pass above — and the one that still covers
+    /// `importFileIfNeeded` end to end, now that `sync` no longer calls it.
+    func testDrainingTheQueueImportsWhatTheSyncPassQueued() async throws {
+        let dbQueue = try makeDatabase()
+        let providerID = UUID().uuidString
+        Self.fakeFileLists[providerID] = [
+            CloudFile(id: "episode1.mp3", name: "episode1.mp3", path: "episode1.mp3", sizeBytes: 100, mimeType: nil, modifiedAt: nil),
+        ]
+        let record = makeRecord(providerID: providerID)
+        try ProviderStore(dbQueue: dbQueue).upsert(record)
+        let engine = try makeEngine(providerID: providerID, dbQueue: dbQueue)
+        _ = try await engine.sync(providerRecord: record)
+
+        try await drainQueue(engine, record, dbQueue: dbQueue)
+
         let tracks = try TrackStore(dbQueue: dbQueue).all()
         XCTAssertEqual(tracks.map(\.filePath), ["episode1.mp3"])
         XCTAssertEqual(tracks.first?.title, "episode1")
+        XCTAssertEqual(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).first?.status, .done)
     }
 
     func testSyncIsIdempotentForUnchangedFiles() async throws {
@@ -91,9 +125,10 @@ final class SyncEngineTests: XCTestCase {
         let engine = try makeEngine(providerID: providerID, dbQueue: dbQueue)
 
         _ = try await engine.sync(providerRecord: record)
+        try await drainQueue(engine, record, dbQueue: dbQueue)
         let second = try await engine.sync(providerRecord: record)
 
-        XCTAssertEqual(second.added, 0)
+        XCTAssertEqual(second.queued, 0)
         XCTAssertEqual(try TrackStore(dbQueue: dbQueue).all().count, 1)
     }
 
@@ -107,6 +142,7 @@ final class SyncEngineTests: XCTestCase {
         try ProviderStore(dbQueue: dbQueue).upsert(record)
         let engine = try makeEngine(providerID: providerID, dbQueue: dbQueue)
         _ = try await engine.sync(providerRecord: record)
+        try await drainQueue(engine, record, dbQueue: dbQueue)
 
         Self.fakeFileLists[providerID] = []
         let result = try await engine.sync(providerRecord: record)
@@ -127,15 +163,18 @@ final class SyncEngineTests: XCTestCase {
         try ProviderStore(dbQueue: dbQueue).upsert(record)
         let engine = try makeEngine(providerID: providerID, dbQueue: dbQueue)
         _ = try await engine.sync(providerRecord: record)
+        try await drainQueue(engine, record, dbQueue: dbQueue)
 
         Self.fakeFileLists[providerID] = [
             CloudFile(id: "episode1.mp3", name: "episode1.mp3", path: "episode1.mp3", sizeBytes: 100, mimeType: nil, modifiedAt: nil, contentHash: "hash-b"),
         ]
         let result = try await engine.sync(providerRecord: record)
 
-        XCTAssertEqual(result.added, 0)
-        let track = try TrackStore(dbQueue: dbQueue).all().first
-        XCTAssertEqual(track?.contentHash, "hash-b")
+        XCTAssertEqual(result.queued, 1, "a changed file goes back in the queue")
+        try await drainQueue(engine, record, dbQueue: dbQueue)
+        let tracks = try TrackStore(dbQueue: dbQueue).all()
+        XCTAssertEqual(tracks.count, 1)
+        XCTAssertEqual(tracks.first?.contentHash, "hash-b")
     }
 }
 

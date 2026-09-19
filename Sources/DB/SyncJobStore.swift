@@ -39,11 +39,23 @@ struct SyncJobStore {
         }
     }
 
-    /// Whether this file is already queued or being worked — lets `SyncEngine.sync` leave
-    /// it to the drain loop rather than importing it inline at the same time.
+    /// Whether this file is already queued or being worked, so a listing pass can leave it
+    /// alone. Without this, `enqueue` would delete and re-insert the pending row with a
+    /// fresh `createdAt` — and `createdAt` is the queue order, so a "Sync Now" over a full
+    /// queue would shuffle everything already waiting back to the end.
     func hasUnfinished(providerID: String, filePath: String) throws -> Bool {
         try dbQueue.read { db in
             try Self.unfinished(providerID: providerID, filePath: filePath).fetchCount(db) > 0
+        }
+    }
+
+    /// Whether anything is still waiting to be claimed. The drain loop re-checks this
+    /// before giving up, so files queued while it was winding down don't sit idle until
+    /// the next thing the user taps. Deliberately pending-only: a row stranded `.running`
+    /// would otherwise spin the loop forever against a queue with nothing claimable in it.
+    func hasPending() throws -> Bool {
+        try dbQueue.read { db in
+            try SyncJob.filter(Column("status") == SyncJobStatus.pending.rawValue).fetchCount(db) > 0
         }
     }
 
@@ -122,12 +134,6 @@ struct SyncJobStore {
             try job.save(db)
             return job
         }
-    }
-
-    /// Flips an already-enqueued job straight to `.running` — for a caller that's about to
-    /// process it inline itself, rather than leaving it `.pending` for a drain loop to claim.
-    func markRunning(id: String) throws {
-        try update(id: id) { $0.status = .running }
     }
 
     func markStage(id: String, _ stage: SyncJobStage) throws {

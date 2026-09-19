@@ -34,20 +34,36 @@ struct LibraryStore {
         try dbQueue.read { db in try Artist.fetchOne(db, key: id) }
     }
 
-    func updateArtist(id: String, name: String, bio: String?, language: String? = nil) throws {
+    /// The profile fields are `nil`-means-leave-alone rather than `nil`-means-clear: the
+    /// page saves every field on every focus change, and an AI pass writes only the ones
+    /// it had something to say about.
+    func updateArtist(
+        id: String, name: String, bio: String?, language: String? = nil,
+        knownFor: String?? = nil, background: String?? = nil, profile: String?? = nil,
+        link: String?? = nil
+    ) throws {
         let old: Artist? = try dbQueue.write { db in
             guard var artist = try Artist.fetchOne(db, key: id) else { return nil }
             let old = artist
             artist.name = name
             artist.bio = bio
             artist.language = language
+            if let knownFor { artist.knownFor = knownFor }
+            if let background { artist.background = background }
+            if let profile { artist.profile = profile }
+            if let link { artist.link = link }
             try artist.update(db)
             return old
         }
         guard let old else { return }
         ChangeLog.record(
             "speakers", key: name, old: old,
-            new: ["name": name, "bio": bio, "language": language], in: dbQueue
+            new: [
+                "name": name, "bio": bio, "language": language,
+                "knownFor": knownFor ?? old.knownFor, "background": background ?? old.background,
+                "profile": profile ?? old.profile, "link": link ?? old.link,
+            ],
+            in: dbQueue
         )
     }
 
@@ -82,6 +98,18 @@ struct LibraryStore {
     /// doesn't exist yet), rather than just the album, since tracks carry their own
     /// denormalized `artistID` too.
     @discardableResult
+    /// Detaches an album (and its episodes) from whoever it was credited to. The speaker
+    /// row itself stays — they may front other albums, and deleting a page because one
+    /// album stopped pointing at it isn't what "None" means here.
+    func clearAlbumArtist(albumID: String) throws {
+        try dbQueue.write { db in
+            guard var album = try Album.fetchOne(db, key: albumID) else { return }
+            album.artistID = nil
+            try album.update(db)
+            try db.execute(sql: "UPDATE tracks SET artistID = NULL WHERE albumID = ?", arguments: [albumID])
+        }
+    }
+
     func reassignAlbumArtist(albumID: String, artistName: String) throws -> Artist {
         try dbQueue.write { db in
             let artist: Artist
@@ -113,13 +141,18 @@ struct LibraryStore {
         }
     }
 
-    func updateAlbum(id: String, name: String, notes: String?, artworkFileName: String?, year: Int? = nil) throws {
+    /// `profile` is `nil`-means-leave-alone, for the same reason as `updateArtist`'s.
+    func updateAlbum(
+        id: String, name: String, notes: String?, artworkFileName: String?, year: Int? = nil,
+        profile: String?? = nil
+    ) throws {
         try dbQueue.write { db in
             guard var album = try Album.fetchOne(db, key: id) else { return }
             album.name = name
             album.notes = notes
             album.artworkFileName = artworkFileName
             album.year = year
+            if let profile { album.profile = profile }
             album.metadataEditedAt = Date()
             try album.update(db)
         }
@@ -127,65 +160,6 @@ struct LibraryStore {
 
     func album(id: String) throws -> Album? {
         try dbQueue.read { db in try Album.fetchOne(db, key: id) }
-    }
-
-    // MARK: Shows
-
-    func upsertShow(name: String, summary: String? = nil, isDemo: Bool = false) throws -> Show {
-        try dbQueue.write { db in
-            if let existing = try Show.filter(Column("name") == name).fetchOne(db) {
-                return existing
-            }
-            let show = Show(id: UUID().uuidString, name: name, summary: summary, isDemo: isDemo, createdAt: Date())
-            try show.insert(db)
-            return show
-        }
-    }
-
-    func shows() throws -> [Show] {
-        try dbQueue.read { db in try Show.order(Column("name")).fetchAll(db) }
-    }
-
-    func show(id: String) throws -> Show? {
-        try dbQueue.read { db in try Show.fetchOne(db, key: id) }
-    }
-
-    func savedShows() throws -> [Show] {
-        try dbQueue.read { db in try Show.filter(Column("isSaved") == true).order(Column("name")).fetchAll(db) }
-    }
-
-    func setShow(_ showID: String, saved: Bool) throws {
-        try dbQueue.write { db in
-            guard var show = try Show.fetchOne(db, key: showID) else { return }
-            show.isSaved = saved
-            try show.update(db)
-        }
-    }
-
-    func linkShowArtist(showID: String, artistID: String) throws {
-        try dbQueue.write { db in try ShowArtist(showID: showID, artistID: artistID).save(db) }
-    }
-
-    func artists(forShow showID: String) throws -> [Artist] {
-        try dbQueue.read { db in
-            try Artist.fetchAll(db, sql: """
-                SELECT artists.* FROM artists
-                JOIN showArtists ON showArtists.artistID = artists.id
-                WHERE showArtists.showID = ?
-                ORDER BY artists.name
-                """, arguments: [showID])
-        }
-    }
-
-    func shows(forArtist artistID: String) throws -> [Show] {
-        try dbQueue.read { db in
-            try Show.fetchAll(db, sql: """
-                SELECT shows.* FROM shows
-                JOIN showArtists ON showArtists.showID = shows.id
-                WHERE showArtists.artistID = ?
-                ORDER BY shows.name
-                """, arguments: [artistID])
-        }
     }
 
     // MARK: Topics
@@ -205,29 +179,45 @@ struct LibraryStore {
         try dbQueue.read { db in try Topic.order(Column("name")).fetchAll(db) }
     }
 
-    func linkShowTopic(showID: String, topicID: String) throws {
-        try dbQueue.write { db in try ShowTopic(showID: showID, topicID: topicID).save(db) }
+    func linkAlbumTopic(albumID: String, topicID: String) throws {
+        try dbQueue.write { db in try AlbumTopic(albumID: albumID, topicID: topicID).save(db) }
     }
 
-    func topics(forShow showID: String) throws -> [Topic] {
-        try dbQueue.read { db in
-            try Topic.fetchAll(db, sql: """
-                SELECT topics.* FROM topics
-                JOIN showTopics ON showTopics.topicID = topics.id
-                WHERE showTopics.showID = ?
-                ORDER BY topics.name
-                """, arguments: [showID])
+    func unlinkAlbumTopic(albumID: String, topicID: String) throws {
+        try dbQueue.write { db in
+            try AlbumTopic.filter(Column("albumID") == albumID && Column("topicID") == topicID).deleteAll(db)
         }
     }
 
-    func shows(forTopic topicID: String) throws -> [Show] {
+    func topics(forAlbum albumID: String) throws -> [Topic] {
         try dbQueue.read { db in
-            try Show.fetchAll(db, sql: """
-                SELECT shows.* FROM shows
-                JOIN showTopics ON showTopics.showID = shows.id
-                WHERE showTopics.topicID = ?
-                ORDER BY shows.name
-                """, arguments: [topicID])
+            try Topic.fetchAll(db, sql: """
+                SELECT topics.* FROM topics
+                JOIN albumTopics ON albumTopics.topicID = topics.id
+                WHERE albumTopics.albumID = ?
+                ORDER BY topics.name
+                """, arguments: [albumID])
+        }
+    }
+
+    func albumIDs(forTopic topicID: String) throws -> Set<String> {
+        try dbQueue.read { db in
+            Set(try String.fetchAll(db, sql: "SELECT albumID FROM albumTopics WHERE topicID = ?", arguments: [topicID]))
+        }
+    }
+
+    /// Replaces an album's tags in one go — what the album page's topic editor saves, and
+    /// what an accepted AI suggestion writes.
+    func setTopics(_ names: [String], forAlbum albumID: String) throws {
+        let cleaned = names
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let topics = try cleaned.map { try upsertTopic(name: $0) }
+        try dbQueue.write { db in
+            try AlbumTopic.filter(Column("albumID") == albumID).deleteAll(db)
+            for topic in topics {
+                try AlbumTopic(albumID: albumID, topicID: topic.id).save(db)
+            }
         }
     }
 }

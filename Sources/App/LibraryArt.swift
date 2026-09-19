@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Deterministic placeholder artwork for real library items (tracks, albums, speakers,
-/// shows) — none of them carry actual cover art, so a stable color+icon derived from
+/// topics) — none of them carry actual cover art, so a stable color+icon derived from
 /// their name stands in, rather than every card looking identical.
 enum LibraryArt {
     private static let colors: [Color] = [.blue, .purple, .teal, .orange, .pink, .indigo, .brown, .red]

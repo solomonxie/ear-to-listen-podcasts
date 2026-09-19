@@ -215,8 +215,9 @@ struct S3Provider: CloudProvider {
 
     /// `path` is a whole key, as `listFiles` hands them out — not relative to `keyPrefix`.
     func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+        let key = try CloudWrite.checked(path)
         _ = try await client.putObject(input: PutObjectInput(
-            body: .data(data), bucket: bucket, contentType: contentType, key: path
+            body: .data(data), bucket: bucket, contentType: contentType, key: key
         ))
     }
 

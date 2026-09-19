@@ -6,10 +6,9 @@ import Foundation
 /// `messages` before sending.
 enum AnthropicChatClient {
     private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-    private static let model = "claude-haiku-4-5-20251001"
     private static let apiVersion = "2023-06-01"
 
-    static func runChatCompletion(apiKey: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(apiKey: String, model: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
         let system = messages
             .filter { $0.role == .system }
             .map(\.content)

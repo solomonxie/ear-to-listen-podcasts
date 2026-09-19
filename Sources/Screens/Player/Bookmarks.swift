@@ -104,7 +104,7 @@ struct BookmarkEditorView: View {
 
                 Section("Note") {
                     TextField("Why this moment matters", text: $note, axis: .vertical)
-                        .lineLimit(3...8)
+                        .lineLimit(3...)
                 }
 
                 Section {
@@ -153,35 +153,5 @@ struct BookmarkEditorView: View {
         try? store.delete(id: bookmark.id)
         NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
         dismiss()
-    }
-}
-
-/// A bookmark on a Home shelf: the moment, what was said, and which episode it was in.
-struct BookmarkCard: View {
-    let bookmark: Bookmark
-    let episodeTitle: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(Scrubber.formatted(bookmark.position))
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
-                Text(bookmark.note ?? bookmark.transcriptText ?? "Saved moment")
-                    .font(.footnote)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer(minLength: 0)
-                Text(episodeTitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .padding(10)
-            .frame(width: 160, height: 120, alignment: .topLeading)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
     }
 }

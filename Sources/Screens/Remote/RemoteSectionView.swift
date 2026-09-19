@@ -12,6 +12,7 @@ struct RemoteSectionView: View {
     @State private var showingSyncQueue = false
     @State private var syncingProviderIDs: Set<String> = []
     @State private var syncMessages: [String: String] = [:]
+    @State private var openFrequency: String?
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -89,7 +90,11 @@ struct RemoteSectionView: View {
     /// open first, and burying them two taps deep made them feel like advanced settings.
     @ViewBuilder
     private func syncControls(for record: ProviderRecord) -> some View {
-        let isSyncing = syncingProviderIDs.contains(record.id)
+        // Listing is quick now, the importing isn't — so the spinner follows the queue,
+        // not just this button's own call. Only the listing disables the button though:
+        // a bucket that stopped at the ceiling has to stay tappable while the queue works.
+        let isListing = syncingProviderIDs.contains(record.id)
+        let isSyncing = isListing || syncQueue.activeProviderIDs.contains(record.id)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Button {
@@ -110,13 +115,11 @@ struct RemoteSectionView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .disabled(isSyncing)
+                .disabled(isListing)
 
-                Menu {
-                    Picker("Sync frequency", selection: frequency(for: record)) {
-                        ForEach(SyncFrequency.allCases) { option in
-                            Text(option.displayName).tag(option)
-                        }
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        openFrequency = openFrequency == record.id ? nil : record.id
                     }
                 } label: {
                     Label(SyncFrequency(minutes: record.syncFrequencyMinutes).buttonLabel,
@@ -142,6 +145,32 @@ struct RemoteSectionView: View {
             // second line inside its own pill.
             .lineLimit(1)
             .fixedSize(horizontal: false, vertical: true)
+
+            // Unfolds under the pill that opened it rather than floating a menu over the
+            // row — the connection being changed stays on screen.
+            if openFrequency == record.id {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(SyncFrequency.allCases) { option in
+                        Button {
+                            frequency(for: record).wrappedValue = option
+                            withAnimation(.easeOut(duration: 0.18)) { openFrequency = nil }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Color.accentColor)
+                                    .opacity(option.minutes == record.syncFrequencyMinutes ? 1 : 0)
+                                Text(option.displayName).font(.footnote)
+                                Spacer()
+                            }
+                            .padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.leading, 4)
+            }
 
             // A row of its own with an ordinary switch: pressed into the pill row beside
             // two buttons, an on/off setting read as a third button.
@@ -187,12 +216,7 @@ struct RemoteSectionView: View {
         syncingProviderIDs.insert(record.id)
         defer { syncingProviderIDs.remove(record.id) }
         do {
-            let result = try await SyncEngine().sync(providerRecord: record)
-            var message = "Added \(result.added), \(result.lost) missing, \(result.totalFiles) files found."
-            if result.stoppedAtQueueLimit {
-                message += " Stopped at the queue limit — sync again to carry on."
-            }
-            syncMessages[record.id] = message
+            syncMessages[record.id] = try await syncQueue.sync(providerRecord: record).summary
             viewModel.load()
             syncQueue.refresh()
         } catch {

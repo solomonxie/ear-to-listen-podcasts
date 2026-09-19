@@ -49,6 +49,12 @@ struct BookmarkStore {
         }
     }
 
+    /// Every mark, newest first. For the full bookmarks page — `recent` is what Home
+    /// reads, and its limit is why that page can't just be handed Home's copy.
+    func all() throws -> [Bookmark] {
+        try dbQueue.read { db in try Bookmark.order(Column("createdAt").desc).fetchAll(db) }
+    }
+
     /// Newest first — how Home shows them, since a bookmark is a thing to come back to.
     func recent(limit: Int = 30) throws -> [Bookmark] {
         try dbQueue.read { db in

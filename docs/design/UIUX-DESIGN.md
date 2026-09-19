@@ -121,10 +121,17 @@ too. One control, one meaning.
 
 **A ceiling of 100 unfinished jobs.** A bucket with thousands of files would
 otherwise queue every one of them the moment it's added — hours of work nobody
-asked for, in a list nobody can read. Adding stops at the ceiling with a banner
-saying so; nothing is lost, the next sync carries on from where it stopped. The
-header counts unfinished against that ceiling, not the total, so a pile of
-finished rows doesn't read as nearly full.
+asked for, in a list nobody can read. Listing stops at the ceiling with a banner
+saying so, then the queue tops itself back up: when it drains empty, that
+connection is re-listed and the next hundred go in, repeating until the bucket
+is done. The ceiling caps what's *waiting*, not what gets imported. The header
+counts unfinished against that ceiling, not the total, so a pile of finished
+rows doesn't read as nearly full.
+
+**Listing and importing are separate.** A whole-bucket pass lists, queues and
+returns in seconds; the queue does the importing at the speed set here. That's
+why "Speed: N at a time" applies to a "Sync Now" too, and why a large bucket no
+longer freezes the button that started it.
 
 Header count and the "N pending" summary come from `COUNT` queries, never off the
 visible page.

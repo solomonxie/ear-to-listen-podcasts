@@ -21,6 +21,10 @@ struct RealPlayerView: View {
     /// Whether the big transport has scrolled out of sight. The docked bar is a stand-in
     /// for it, so showing both at once is just clutter.
     @State private var isTransportOffscreen = false
+    /// Held rather than implicit, so the bar at the bottom knows whether it's standing on
+    /// the player itself or on a page pushed from it — and can pop back rather than
+    /// scroll.
+    @State private var path: [PlayerRoute] = []
 
     private static let scrollSpace = "player.scroll"
     private static let topAnchor = "player.top"
@@ -48,7 +52,7 @@ struct RealPlayerView: View {
     private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             // One reader around the whole page, so the title in the bar can scroll it too.
             ScrollViewReader { proxy in
                 Group {
@@ -72,9 +76,20 @@ struct RealPlayerView: View {
                             // shouldn't be a scroll away at the bottom of a 40-minute
                             // transcript.
                             .safeAreaInset(edge: .bottom) {
-                                if isTransportOffscreen { bottomBar.transition(.move(edge: .bottom)) }
+                                if isTransportOffscreen {
+                                    bottomBar(proxy).transition(.move(edge: .bottom))
+                                }
                             }
                             .animation(.easeInOut(duration: 0.2), value: isTransportOffscreen)
+                            .navigationDestination(for: PlayerRoute.self) { route in
+                                destination(route)
+                                    // The bar follows onto pushed pages. Attached here
+                                    // rather than on the stack so the root page keeps its
+                                    // own rule — it hides the bar while the real transport
+                                    // is still on screen, and a pushed page has no
+                                    // transport to defer to.
+                                    .safeAreaInset(edge: .bottom) { pushedPageBar }
+                            }
                             .task(id: track.id) {
                                 artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
                                 album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
@@ -233,29 +248,22 @@ struct RealPlayerView: View {
     private func titles(for track: Track) -> some View {
         VStack(spacing: 4) {
             Text(track.title).font(.title3.bold()).multilineTextAlignment(.center)
-            // Under the title everywhere it appears: a shared embedded title tag makes
-            // two episodes read identically, and the path is what separates them.
-            Text(TrackRow.pathHint(for: track))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.head)
+            // No path here. It's what tells two identically-tagged episodes apart, which
+            // matters in a *list* of them — under the title of the one already playing it
+            // answers nothing, and it's the widest, least readable line on the page. The
+            // Episode card's File rows carry it for the times you do want it.
             // Tapping either jumps to that speaker's/album's own page — same
             // destinations as tapping through from Home, just reachable from
             // whatever's currently playing too. One line rather than stacked,
             // since together they're still just a single subtitle.
             HStack(spacing: 12) {
                 if let artist {
-                    NavigationLink {
-                        SpeakerDetailView(speaker: artist)
-                    } label: {
+                    NavigationLink(value: PlayerRoute.speaker(artist.id)) {
                         Text("Speaker: \(artist.name)")
                     }
                 }
                 if let album {
-                    NavigationLink {
-                        AlbumDetailView(album: album)
-                    } label: {
+                    NavigationLink(value: PlayerRoute.album(album.id)) {
                         Text("Album: \(album.name)")
                     }
                 }
@@ -312,16 +320,28 @@ struct RealPlayerView: View {
     /// of the controls are — they used to be a menu in the top-left corner, which is
     /// nowhere near the thumb and hid the queue's length.
     ///
+    /// **"Up Next", not "Chapters".** This button opens `UpNextView`, and the queue behind
+    /// it is whatever was playing from — one album's worth when you started there, the
+    /// whole library when you didn't. Calling that a chapter count asserted a relationship
+    /// that usually isn't true, and said so most loudly when it was most wrong: a
+    /// twenty-minute episode announcing 1,469 chapters. The sheet has always been titled
+    /// Up Next; the button now agrees with it. Moving between files by swiping the artwork
+    /// is still the "turn the page" gesture — that one really is about this book.
+    ///
     /// "Transcript" rather than lyrics, subtitles or captions: lyrics are for songs, and
     /// subtitles are text laid over a picture. It's the word the rest of the app uses, for
     /// the heading, the files beside the audio and what travels in a backup.
     private func queueControls(_ proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 10) {
             Button { showingUpNext = true } label: {
-                Label("Chapters (\(engine.queue.count, format: .number.grouping(.never)))", systemImage: "list.bullet")
+                Label("Up Next", systemImage: "list.bullet")
+                    .pillLabel()
             }
             Button { showingAddToPlaylist = true } label: {
-                Label("Add to Playlist", systemImage: "text.badge.plus")
+                // "Playlist" alone, with the ⊕ carrying the "add": the long form wrapped
+                // onto two lines and left the middle pill taller than the two beside it.
+                Label("Playlist", systemImage: "text.badge.plus")
+                    .pillLabel()
             }
             // The details card sits between the transport and the text, so on an episode
             // with a transcript this saves a long scroll past everything you already know.
@@ -329,6 +349,7 @@ struct RealPlayerView: View {
                 withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.transcriptAnchor, anchor: .top) }
             } label: {
                 Label("Transcript", systemImage: "captions.bubble")
+                    .pillLabel()
             }
         }
         .font(.footnote)
@@ -449,37 +470,133 @@ struct RealPlayerView: View {
 
     /// Docked, so play/pause and position are reachable from anywhere on a page that is
     /// now arbitrarily long. Reading forty minutes of transcript must never mean scrolling
-    /// back to the top to stop playback.
-    private var bottomBar: some View {
+    /// back to the top to stop playback — tapping the bar is the way back up.
+    @ViewBuilder
+    private func destination(_ route: PlayerRoute) -> some View {
+        switch route {
+        case .speaker(let id):
+            if let speaker = (try? libraryStore.artist(id: id)) ?? nil {
+                SpeakerDetailView(speaker: speaker)
+            }
+        case .album(let id):
+            if let album = (try? libraryStore.album(id: id)) ?? nil {
+                AlbumDetailView(album: album)
+            }
+        }
+    }
+
+    /// The same bar, on a page pushed from the player. Tapping it goes back to what's
+    /// playing — there's no transport on this page to scroll up to.
+    private var pushedPageBar: some View {
         VStack(spacing: 0) {
             ProgressView(value: engine.duration > 0 ? min(engine.currentTime / engine.duration, 1) : 0)
                 .progressViewStyle(.linear)
                 .tint(.accentColor)
                 .scaleEffect(x: 1, y: 0.6, anchor: .center)
 
-            HStack(spacing: 14) {
-                Button { engine.togglePlayPause() } label: {
-                    Image(systemName: engine.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                Text("\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Button { engine.skipToNext() } label: {
-                    Image(systemName: "forward.fill")
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-            }
-            .padding(.horizontal)
+            NowPlayingBarContent(
+                track: engine.currentTrack,
+                artistName: artist?.name,
+                albumName: album?.name,
+                subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
+                isPlaying: engine.isPlaying,
+                onTogglePlay: { engine.togglePlayPause() },
+                onTapBar: { path.removeAll() }
+            )
         }
         .background(.ultraThinMaterial)
     }
+
+    private func bottomBar(_ proxy: ScrollViewProxy) -> some View {
+        VStack(spacing: 0) {
+            ProgressView(value: engine.duration > 0 ? min(engine.currentTime / engine.duration, 1) : 0)
+                .progressViewStyle(.linear)
+                .tint(.accentColor)
+                .scaleEffect(x: 1, y: 0.6, anchor: .center)
+
+            NowPlayingBarContent(
+                track: engine.currentTrack,
+                artistName: artist?.name,
+                albumName: album?.name,
+                subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
+                isPlaying: engine.isPlaying,
+                onTogglePlay: { engine.togglePlayPause() },
+                // Already on this page, so the bar's job is the way back up rather than
+                // a screen transition to where you already are.
+                onTapBar: {
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
+                }
+            )
+        }
+        .background(.ultraThinMaterial)
+    }
+}
+
+/// The bar at the bottom of the screen, wherever it appears: over Home as the way into
+/// whatever is playing, and docked on the player itself as the way back to the top.
+///
+/// Three lines because that's what the question "what am I listening to?" actually takes —
+/// the episode, who is speaking, and which collection it came from. One line of title over
+/// a filename answered none of them.
+///
+/// **Play/pause is the only button, and it's on the right.** Skip was the far-right
+/// control, which put the destructive-ish action under the thumb that reaches furthest and
+/// left pause — the thing anyone actually reaches for in a hurry — on the far side.
+struct NowPlayingBarContent: View {
+    let track: Track?
+    let artistName: String?
+    let albumName: String?
+    /// The second line under the title: a timecode on the player, the file elsewhere.
+    var subtitle: String?
+    let isPlaying: Bool
+    let onTogglePlay: () -> Void
+    let onTapBar: () -> Void
+
+    var body: some View {
+        if let track {
+            HStack(spacing: 12) {
+                Button(action: onTapBar) {
+                    HStack(spacing: 12) {
+                        ArtworkTile(track: track, cornerRadius: 7, symbolSize: 16)
+                            .frame(width: 44, height: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(track.title)
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                            if let context = [artistName, albumName].compactMap({ $0?.nilIfEmpty }).nilIfEmpty {
+                                Text(context.joined(separator: " · "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            if let subtitle {
+                                Text(subtitle)
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onTogglePlay) {
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title2)
+                        .frame(width: 48, height: 48)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+    }
+}
+
+private extension Array {
+    var nilIfEmpty: [Element]? { isEmpty ? nil : self }
 }
 
 /// Drives itself from a locally-held drag position while the user's finger is down, so
@@ -578,4 +695,23 @@ private struct UpNextView: View {
         }
         .presentationDetents([.medium, .large])
     }
+}
+
+private extension View {
+    /// Keeps a row of pills even: equal widths, one line each, shrinking the text rather
+    /// than wrapping it. Three pills whose labels are different lengths otherwise give
+    /// three different widths — and any one that wraps grows taller than the rest, which
+    /// is what left the middle of this row standing proud of the other two.
+    func pillLabel() -> some View {
+        lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+/// Where the player can push to. A route rather than a view, so the stack has a path the
+/// docked bar can read and pop.
+enum PlayerRoute: Hashable {
+    case speaker(String)
+    case album(String)
 }

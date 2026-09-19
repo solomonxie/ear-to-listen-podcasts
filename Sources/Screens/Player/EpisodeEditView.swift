@@ -1,7 +1,7 @@
 import PhotosUI
 import SwiftUI
 
-/// Edit everything an episode shows — artwork, title, speaker, album, show, year, track
+/// Edit everything an episode shows — artwork, title, speaker, album, year, track
 /// number, notes. Embedded tags are only a starting point: a batch export routinely
 /// stamps a whole folder with one generic title, and nothing but the file path tells
 /// those apart. Saved edits stand: sync only reads tags for files the library doesn't
@@ -13,13 +13,13 @@ struct EpisodeEditView: View {
     @State private var title: String
     @State private var artistName: String
     @State private var albumName: String
-    @State private var showName: String
     @State private var year: String
     @State private var trackNumber: String
     @State private var notes: String
     @State private var artworkFileName: String?
     @State private var artworkImage: UIImage?
     @State private var artworkItem: PhotosPickerItem?
+    @State private var openPicker: String?
     @State private var language: String?
     @State private var isSuggesting = false
     @State private var suggestionError: String?
@@ -34,7 +34,6 @@ struct EpisodeEditView: View {
         _title = State(initialValue: track.title)
         _artistName = State(initialValue: (track.artistID.flatMap { try? store.artist(id: $0) } ?? nil)?.name ?? "")
         _albumName = State(initialValue: (track.albumID.flatMap { try? store.album(id: $0) } ?? nil)?.name ?? "")
-        _showName = State(initialValue: (track.showID.flatMap { try? store.show(id: $0) } ?? nil)?.name ?? "")
         _year = State(initialValue: track.year.map(String.init) ?? "")
         _trackNumber = State(initialValue: track.trackNumber.map(String.init) ?? "")
         _notes = State(initialValue: track.notes ?? "")
@@ -53,6 +52,14 @@ struct EpisodeEditView: View {
             return TranscriptPane.languageName(Locale(identifier: language))
         }
         return "automatic"
+    }
+
+    private var yearValue: Binding<Int?> {
+        Binding(get: { Int(year) }, set: { year = $0.map(String.init) ?? "" })
+    }
+
+    private var trackNumberValue: Binding<Int?> {
+        Binding(get: { Int(trackNumber) }, set: { trackNumber = $0.map(String.init) ?? "" })
     }
 
     var body: some View {
@@ -80,22 +87,28 @@ struct EpisodeEditView: View {
                 .listRowSeparator(.hidden)
 
                 Section("Episode") {
-                    TextField("Title", text: $title, axis: .vertical).lineLimit(1...3)
+                    TextField("Title", text: $title, axis: .vertical).lineLimit(1...)
                     TextField("Speaker", text: $artistName)
                     TextField("Album", text: $albumName)
-                    TextField("Show", text: $showName)
-                    TextField("Year", text: $year).keyboardType(.numberPad)
-                    TextField("Track no.", text: $trackNumber).keyboardType(.numberPad)
+                    UnfoldingWheel(
+                        title: "Year", id: "year", open: $openPicker, value: yearValue,
+                        choices: NumberChoices.years
+                    )
+                    UnfoldingWheel(
+                        title: "Track no.", id: "trackNumber", open: $openPicker,
+                        value: trackNumberValue, choices: NumberChoices.trackNumbers
+                    )
                     // The last word on which recognizer to use: this is the one level
                     // where someone has actually heard the audio.
                     SpokenLanguagePicker(
-                        title: "Language", inheritedLabel: inheritedLanguageLabel, language: $language
+                        title: "Language", inheritedLabel: inheritedLanguageLabel, language: $language,
+                        id: "language", open: $openPicker
                     )
                 }
 
                 Section("Notes") {
                     TextField("What this episode is about", text: $notes, axis: .vertical)
-                        .lineLimit(3...8)
+                        .lineLimit(3...)
                 }
 
                 Section {
@@ -153,14 +166,13 @@ struct EpisodeEditView: View {
         suggestionError = nil
         do {
             let suggestion = try await EpisodeMetadataSuggester().suggest(
-                track: track, title: title, artist: artistName, album: albumName, show: showName, notes: notes
+                track: track, title: title, artist: artistName, album: albumName, notes: notes
             )
             // Only fills what the model actually improved on — a null field leaves
             // whatever's in the form alone rather than blanking it.
             if let suggested = suggestion.title { title = suggested }
             if let suggested = suggestion.artist { artistName = suggested }
             if let suggested = suggestion.album { albumName = suggested }
-            if let suggested = suggestion.show { showName = suggested }
             if let suggested = suggestion.year { year = String(suggested) }
             if let suggested = suggestion.notes { notes = suggested }
         } catch {
@@ -205,13 +217,11 @@ struct EpisodeEditView: View {
         try? trackStore.setLanguage(id: track.id, language: language)
         let artist = trimmed(artistName).flatMap { try? libraryStore.upsertArtist(name: $0) }
         let album = trimmed(albumName).flatMap { name in try? libraryStore.upsertAlbum(name: name, artistID: artist?.id) }
-        let show = trimmed(showName).flatMap { try? libraryStore.upsertShow(name: $0) }
 
         var updated = track
         updated.title = trimmed(title) ?? TrackRow.fileName(for: track)
         updated.artistID = artist?.id
         updated.albumID = album?.id
-        updated.showID = show?.id
         updated.year = trimmed(year).flatMap { Int($0) }
         updated.trackNumber = trimmed(trackNumber).flatMap { Int($0) }
         updated.notes = trimmed(notes)

@@ -12,7 +12,7 @@ No tab bar — one scrollable page (`HomeView`): search up top, then Home/Librar
 shelves, then Remote, then Settings. A fresh install starts empty — nothing
 appears in the library that the user didn't put there — with an optional sample
 library (`DemoDataSeeder`, bundled clips under `Resources/DemoAudio/`) loadable
-from the empty state or Settings for looking around first. Everything is wired
+from Settings for looking around first. Everything is wired
 to the real SQLite + Keychain layer (`Sources/DB/`, `Sources/Providers/`): adding/removing S3 and
 local sources, per-source sync frequency + manual "Sync Now", and a foreground
 `SyncScheduler` that auto-syncs due sources while the app is active. See

@@ -10,44 +10,59 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var downloadedTracks: [Track] = []
     @Published private(set) var albums: [Album] = []
     @Published private(set) var artists: [Artist] = []
-    @Published private(set) var shows: [Show] = []
     @Published private(set) var topics: [Topic] = []
     @Published private(set) var playlists: [Playlist] = []
     @Published private(set) var years: [Int] = []
     @Published private(set) var bookmarks: [Bookmark] = []
     @Published private(set) var favoriteTracks: [Track] = []
+    /// Folded once here rather than rebuilt per keystroke — see `LibrarySearch`.
+    @Published private(set) var searchIndex = LibrarySearch.Index()
+    /// Bookmarks as Home shows them: per episode, in episode order.
+    @Published private(set) var bookmarkGroups: [BookmarkGroup] = []
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
-
-    /// Nothing synced and no sample library loaded — a fresh install, where shelves of
-    /// empty headings would read as a broken screen rather than an empty one.
-    var isEmpty: Bool {
-        tracks.isEmpty && albums.isEmpty && artists.isEmpty
-            && shows.isEmpty && topics.isEmpty && playlists.isEmpty
-    }
+    private var refreshTask: Task<Void, Never>?
 
     func refresh() async {
         tracks = (try? trackStore.all()) ?? []
         recentTracks = (try? trackStore.recentlyPlayed()) ?? []
         albums = (try? libraryStore.albums()) ?? []
         artists = (try? libraryStore.artists()) ?? []
-        shows = (try? libraryStore.shows()) ?? []
         topics = (try? libraryStore.topics()) ?? []
         playlists = (try? playlistStore.all()) ?? []
         years = (try? trackStore.years()) ?? []
         bookmarks = (try? bookmarkStore.recent()) ?? []
         favoriteTracks = (try? trackStore.favorites()) ?? []
 
-        var downloaded: [Track] = []
-        for track in tracks {
-            if await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil {
-                downloaded.append(track)
-            }
+        // One directory listing, then a pure hash check per track. Asking the cache per
+        // track cost four filesystem calls each — including an attribute *write* that
+        // bumped the LRU date — so this loop alone could stall Home for seconds on a large
+        // library, every time a sync posted `.libraryDidChange`.
+        let cachedKeys = await AudioCache.shared.cachedKeys()
+        downloadedTracks = tracks.filter {
+            AudioCache.shared.isCached(cachedKeys, providerID: $0.providerID, filePath: $0.filePath)
         }
-        downloadedTracks = downloaded
+
+        regroupBookmarks()
+        searchIndex = LibrarySearch.index(
+            speakers: artists, albums: albums,
+            playlists: playlists, topics: topics, tracks: tracks
+        )
+    }
+
+    /// Coalesces a burst of refreshes into one. A sync posts `.libraryDidChange` per
+    /// imported file, so a hundred-file pass used to run `refresh()` a hundred times —
+    /// each one re-reading every table. The last one is the only one that matters.
+    func refreshSoon() {
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
     }
 
     func createPlaylist(name: String) {
@@ -56,18 +71,31 @@ final class HomeLibraryViewModel: ObservableObject {
         Task { await refresh() }
     }
 
-    func favoriteShows() -> [Show] { shows.filter(\.isSaved) }
+    /// What a fixed playlist's card shows. Both are derived rather than stored, so there's
+    /// nothing to count but the thing itself.
+    func count(of kind: FixedPlaylist) -> Int {
+        switch kind {
+        case .favorites: return favoriteTracks.count
+        case .downloaded: return downloadedTracks.count
+        }
+    }
 
     func track(id: String) -> Track? { tracks.first { $0.id == id } }
 
     func refreshBookmarks() {
         bookmarks = (try? bookmarkStore.recent()) ?? []
+        regroupBookmarks()
     }
 
-    func tracks(forShow showID: String) -> [Track] { tracks.filter { $0.showID == showID } }
+    private func regroupBookmarks() {
+        let byID = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        bookmarkGroups = BookmarkGroup.group(bookmarks) { byID[$0] }
+    }
+
+    /// A topic tags albums now, so its episodes are the episodes of those albums.
     func tracks(forTopic topicID: String) -> [Track] {
-        let showIDs = Set(((try? libraryStore.shows(forTopic: topicID)) ?? []).map(\.id))
-        return tracks.filter { track in track.showID.map(showIDs.contains) ?? false }
+        let albumIDs = (try? libraryStore.albumIDs(forTopic: topicID)) ?? []
+        return tracks.filter { track in track.albumID.map(albumIDs.contains) ?? false }
     }
     func tracks(forYear year: Int) -> [Track] { tracks.filter { $0.year == year } }
 }

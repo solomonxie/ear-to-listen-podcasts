@@ -43,7 +43,7 @@ targets:
         CFBundleName: Ear to Listen
         UIUserInterfaceStyle: Dark
         UILaunchScreen:
-          UIColorName: AccentColor
+          UIColorName: LaunchBackground
         UIBackgroundModes:
           - audio
         UIFileSharingEnabled: true
