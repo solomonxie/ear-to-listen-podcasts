@@ -1,132 +1,27 @@
 import SwiftUI
 
-/// Asking an AI key for a picture: the description it works from, what came back, and the
-/// decision to keep it or not.
-///
-/// The description arrives filled in from what the library already knows — the episode's
-/// title, its collection, who is speaking. The listener already told the app all of that
-/// once, and asking them to type it again as a prompt would be the app's failing, not
-/// theirs. It stays editable because they know things the tags don't.
-///
-/// **Nothing is saved until the picture is on screen and accepted.** A generated image is
-/// a guess that costs money, and a photo a model *named* might be the wrong person
-/// entirely — so both are shown, with where they came from, before anything is kept.
-struct AiArtworkSheet: View {
-    let source: ArtworkSource
-    let subject: ArtworkSubject
-    /// Handed the image bytes once the listener keeps them.
-    let onUse: (Data) -> Void
-
-    @State private var prompt: String
-    @State private var isWorking = false
-    @State private var found: ArtworkSuggester.Found?
-    @State private var preview: UIImage?
-    @State private var errorMessage: String?
-    @Environment(\.dismiss) private var dismiss
-
-    init(source: ArtworkSource, subject: ArtworkSubject, onUse: @escaping (Data) -> Void) {
-        self.source = source
-        self.subject = subject
-        self.onUse = onUse
-        _prompt = State(initialValue: source == .publicPhoto ? subject.describedForPrompt : subject.defaultPrompt)
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(source == .publicPhoto ? "WHO OR WHAT TO LOOK FOR" : "WHAT TO DRAW")
-                            .sectionHeading()
-                        TextField("Describe it", text: $prompt, axis: .vertical)
-                            .font(.body)
-                            .lineLimit(2...8)
-                            .padding(10)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                    }
-
-                    Text(source.detail).sectionHint()
-
-                    Button(action: run) {
-                        HStack(spacing: 8) {
-                            Label(found == nil ? "Ask" : "Try again", systemImage: "sparkles")
-                            if isWorking { ProgressView().controlSize(.small) }
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                        .background(Color.accentColor.opacity(0.22), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isWorking || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    if let errorMessage {
-                        Text(errorMessage).font(.footnote).foregroundStyle(.orange)
-                    }
-
-                    if let preview {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Image(uiImage: preview)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxWidth: .infinity)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                            // Where it came from, before the decision — a face with no
-                            // source is the one thing here nobody should keep on trust.
-                            if let sourceURL = found?.sourceURL {
-                                Link(destination: sourceURL) {
-                                    Label(sourceURL.host ?? "Source", systemImage: "safari").font(.caption)
-                                }
-                            }
-                            if let credit = found?.credit {
-                                Text(credit).font(.caption2).foregroundStyle(.secondary)
-                            }
-                            Button("Use this picture") { use() }
-                                .font(.subheadline.weight(.semibold))
-                        }
-                    }
-                }
-                .padding()
-            }
-            .background(Color.appBackground.ignoresSafeArea())
-            .navigationTitle(source.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            }
-        }
-        .presentationDetents([.large])
-    }
-
-    private func run() {
-        isWorking = true
-        errorMessage = nil
-        Task {
-            do {
-                let result = try await ArtworkSuggester().picture(for: source, prompt: prompt)
-                found = result
-                preview = UIImage(data: result.data)
-                if preview == nil { errorMessage = ArtworkSuggester.UnusableImageError().localizedDescription }
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isWorking = false
-        }
-    }
-
-    private func use() {
-        guard let found else { return }
-        onUse(found.data)
-        dismiss()
-    }
-}
-
 /// The one row that answers "where does this picture come from": the listener's own
-/// photos, an image model, or a photo already on the internet.
+/// photos, an image model, or the internet.
 ///
 /// Three buttons rather than one button and a menu of sources: which one you want is
 /// decided before reaching for it — a real person needs a real photo, a collection about
 /// a subject can be drawn — and a menu hides that choice behind a tap.
+///
+/// **Search is a web search, not a model.** Asking a chat model to name a public photo
+/// produced a URL that looked right and often wasn't, and the wrong face on a real
+/// speaker is the one mistake here that matters. Image search hands back a page of
+/// candidates the listener judges, costs nothing, and the picture comes home through the
+/// Photos picker like any other. It opens in the phone's own browser — see
+/// `ArtworkSubject.imageSearchURL` for what it takes to keep it there.
+///
+/// **Draw unfolds downward rather than opening a sheet.** A sheet covered the page the
+/// description came from and had to be dismissed; unfolded in place, the page stays where
+/// it was and the answer lands under the button that asked for it. Opening the panel
+/// costs nothing — the request only leaves when "Draw it" is pressed, because the
+/// description is the thing worth reading first and it costs real money to get wrong.
+///
+/// **Nothing is saved until the picture is on screen and accepted.** A generated image is
+/// a guess that costs a few cents, so it's shown before it's kept.
 struct ArtworkSourceRow<LibraryPicker: View>: View {
     let subject: ArtworkSubject
     let hasArtwork: Bool
@@ -136,43 +31,187 @@ struct ArtworkSourceRow<LibraryPicker: View>: View {
     let onUse: (Data) -> Void
     let onRemove: () -> Void
 
-    @State private var asking: ArtworkSource?
+    @State private var isDrawing = false
+    @State private var prompt = ""
+    @State private var isWorking = false
+    @State private var preview: UIImage?
+    @State private var pictureData: Data?
+    @State private var errorMessage: String?
+    @State private var job: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Text(hasArtwork ? "Change photo" : "Add photo")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                if hasArtwork {
-                    Button("Remove", role: .destructive, action: onRemove).font(.footnote)
-                }
-            }
+            Text(hasArtwork ? "Change photo" : "Add photo")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 libraryPicker
-                    .font(.caption)
+                    .capsuleSourceButton()
+                Button { open() } label: {
+                    Label("Draw", systemImage: "sparkles").font(.caption)
+                }
+                .capsuleSourceButton()
+                if let searchURL = subject.imageSearchURL {
+                    Link(destination: searchURL) {
+                        Label("Search", systemImage: "globe").font(.caption)
+                    }
+                    .capsuleSourceButton()
+                }
+                // In with the ways of putting a picture on, because taking one off is
+                // the fourth answer to the same question. Icon only: it's the one of the
+                // four whose symbol needs no word, and the row has to fit a phone.
+                if hasArtwork {
+                    Button(role: .destructive) { onRemove() } label: {
+                        Image(systemName: "trash").font(.caption)
+                    }
+                    .capsuleSourceButton()
+                    .tint(.red)
+                    .accessibilityLabel("Remove photo")
+                }
+                Spacer(minLength: 0)
+            }
+            if isDrawing {
+                panel
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: isDrawing)
+        .onDisappear { job?.cancel() }
+    }
+
+    /// What was asked, how it's going, and what came back — in that order, because that
+    /// is the order it happens in.
+    private var panel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("Draw one").font(.caption.weight(.semibold))
+                if isWorking { ProgressView().controlSize(.mini) }
+                Spacer(minLength: 0)
+                Button { close() } label: {
+                    Image(systemName: "xmark").font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
+
+            TextField("Describe it", text: $prompt, axis: .vertical)
+                .font(.caption)
+                .lineLimit(1...5)
+                .padding(8)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+
+            if let errorMessage {
+                Text(errorMessage).font(.caption2).foregroundStyle(.orange)
+            }
+
+            if let preview {
+                Image(uiImage: preview)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+
+            HStack(spacing: 8) {
+                if preview != nil {
+                    Button("Use this picture") { use() }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                }
+                Button(preview == nil ? "Draw it" : "Try again") { send() }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.capsule)
                     .controlSize(.small)
-                sourceButton(.generated, title: "From AI", systemImage: "sparkles")
-                sourceButton(.publicPhoto, title: "From Internet", systemImage: "globe")
+                    .disabled(isWorking || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Spacer(minLength: 0)
             }
+            .font(.caption)
+
+            Text(ArtworkSourceCopy.costNote).font(.caption2).foregroundStyle(.secondary)
         }
-        .sheet(item: $asking) { source in
-            AiArtworkSheet(source: source, subject: subject, onUse: onUse)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    /// Tapping Draw while it's open folds it away again — the same button, both
+    /// directions, like every other unfolding control on these pages. Opening only fills
+    /// the description in; nothing is sent until the button under it is pressed.
+    private func open() {
+        guard !isDrawing else { return close() }
+        isDrawing = true
+        prompt = subject.defaultPrompt
+        preview = nil
+        pictureData = nil
+        errorMessage = nil
+    }
+
+    private func send() {
+        job?.cancel()
+        isWorking = true
+        errorMessage = nil
+        let asked = prompt
+        job = Task {
+            do {
+                let data = try await ArtworkSuggester().picture(prompt: asked)
+                guard !Task.isCancelled else { return }
+                pictureData = data
+                preview = UIImage(data: data)
+                if preview == nil {
+                    errorMessage = ArtworkSuggester.UnusableImageError().localizedDescription
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+            isWorking = false
         }
     }
 
-    private func sourceButton(
-        _ source: ArtworkSource, title: LocalizedStringKey, systemImage: String
-    ) -> some View {
-        Button { asking = source } label: {
-            Label(title, systemImage: systemImage).font(.caption)
+    private func use() {
+        guard let pictureData else { return }
+        onUse(pictureData)
+        close()
+    }
+
+    private func close() {
+        job?.cancel()
+        isDrawing = false
+        preview = nil
+        pictureData = nil
+        errorMessage = nil
+        isWorking = false
+    }
+}
+
+private extension View {
+    /// One shape for every way of getting a picture, so the row reads as a set of peers.
+    func capsuleSourceButton() -> some View {
+        font(.caption)
+            // `Label` leaves a gap wide enough for a word between the icon and the text,
+            // which is what made four short names into four long capsules — and then made
+            // the longest of them wrap inside its own pill.
+            .labelStyle(TightLabelStyle())
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
+    }
+}
+
+private enum ArtworkSourceCopy {
+    static var costNote: LocalizedStringKey {
+        "An image model draws a picture from the description. Costs a few cents on your own key, and it lands in that key's history. Never use it for a real person's face."
+    }
+}
+
+private struct TightLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.icon
+            configuration.title
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
     }
 }

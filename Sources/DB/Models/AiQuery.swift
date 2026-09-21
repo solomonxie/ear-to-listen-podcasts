@@ -30,8 +30,11 @@ struct AiQuery: Codable, FetchableRecord, PersistableRecord, Identifiable {
         return (promptTokens ?? 0) + (completionTokens ?? 0)
     }
 
+    /// Falling back to the per-picture price covers the image models, which report no
+    /// tokens at all. One row is one picture — the app only ever asks for one.
     var estimatedCostUSD: Double? {
         AiPricing.estimate(model: model, promptTokens: promptTokens, completionTokens: completionTokens)
+            ?? AiPricing.imageEstimate(model: model)
     }
 
     static func trimmed(_ text: String) -> String {
