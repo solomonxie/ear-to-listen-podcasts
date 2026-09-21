@@ -56,7 +56,7 @@ struct EpisodeDetailsPane: View {
                     .foregroundStyle(.orange)
             }
 
-            DetailCard("Episode") { episodeFields }
+            DetailCard("Episode", accessory: { suggestButton }) { episodeFields }
             DetailCard("Notes") {
                 TextField("What this episode is about", text: $notes, axis: .vertical)
                     .font(.footnote)
@@ -66,7 +66,7 @@ struct EpisodeDetailsPane: View {
 
             DetailCard("File") {
                 LinkRow(
-                    "Connection", value: connectionLabel ?? "—",
+                    "Source", value: connectionLabel ?? "—",
                     route: connectionLabel == nil ? nil
                         : .browse(providerID: track.providerID, folder: nil, highlight: nil)
                 )
@@ -125,6 +125,15 @@ struct EpisodeDetailsPane: View {
 
     @ViewBuilder
     private var episodeFields: some View {
+        // Why the heading's Suggest button is greyed out, and what came back when it
+        // wasn't — at the top of the card, next to the control they belong to.
+        if let blockedReason = readiness.blockedReason {
+            Text(blockedReason).font(.caption).foregroundStyle(.secondary)
+        }
+        if let suggestionError {
+            Text(suggestionError).font(.caption).foregroundStyle(.orange)
+        }
+
         // One line, and deliberately not `axis: .vertical`: a vertical field treats
         // Return as "new paragraph", so Done added a blank row to the title instead of
         // putting the keyboard away.
@@ -183,29 +192,28 @@ struct EpisodeDetailsPane: View {
             hasArtwork: track.artworkFileName != nil,
             libraryPicker: {
                 PhotosPicker(selection: $artworkItem, matching: .images) {
-                    Label("From Library", systemImage: "photo.on.rectangle")
+                    Label("Photos", systemImage: "photo.on.rectangle")
                 }
             },
             onUse: { data in Task { await saveArtwork(data) } },
             onRemove: { setArtwork(nil) }
         )
+    }
 
+    /// Up in the card's heading rather than at the foot of the fields it fills in. Down
+    /// there it sat a few points under the row of artwork buttons, which made one more
+    /// capsule in a row of capsules — and it isn't an artwork control at all.
+    private var suggestButton: some View {
         Button {
             Task { await suggest() }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Label("Suggest with AI", systemImage: "sparkles")
                 if isSuggesting { ProgressView().controlSize(.mini) }
             }
-            .font(.footnote)
+            .font(.caption)
         }
         .disabled(isSuggesting || !readiness.isReady)
-        if let blockedReason = readiness.blockedReason {
-            Text(blockedReason).font(.caption).foregroundStyle(.secondary)
-        }
-        if let suggestionError {
-            Text(suggestionError).font(.caption).foregroundStyle(.orange)
-        }
     }
 
     private var folder: String? {
@@ -350,23 +358,39 @@ struct EpisodeDetailsPane: View {
     }
 }
 
-private struct DetailCard<Content: View>: View {
+private struct DetailCard<Content: View, Accessory: View>: View {
     let title: String
+    /// The one action that belongs to the whole card, sitting on its heading line.
+    @ViewBuilder var accessory: Accessory
     @ViewBuilder var content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(
+        _ title: String, @ViewBuilder accessory: () -> Accessory,
+        @ViewBuilder content: () -> Content
+    ) {
         self.title = title
+        self.accessory = accessory()
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).sectionHeading()
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title).sectionHeading()
+                Spacer(minLength: 8)
+                accessory
+            }
             VStack(alignment: .leading, spacing: 8) { content }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
+    }
+}
+
+extension DetailCard where Accessory == EmptyView {
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.init(title, accessory: { EmptyView() }, content: content)
     }
 }
 
