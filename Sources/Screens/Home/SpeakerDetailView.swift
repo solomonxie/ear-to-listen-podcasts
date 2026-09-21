@@ -69,28 +69,6 @@ struct SpeakerDetailView: View {
                         .multilineTextAlignment(.center)
                         .focused($focusedField, equals: .name)
                         .submitLabel(.done)
-
-                    // A real person's face is the one picture that must never be drawn —
-                    // "From Internet" is the answer here, and it's why that mode exists.
-                    ArtworkSourceRow(
-                        subject: ArtworkSubject(
-                            kind: .speaker,
-                            name: name.nilIfEmpty ?? currentSpeaker.name,
-                            details: [
-                                knownFor.nilIfEmpty,
-                                bio.nilIfEmpty,
-                                albums.first.map { "host of \($0.name)" },
-                            ].compactMap { $0 }
-                        ),
-                        hasArtwork: currentSpeaker.photoFileName != nil,
-                        libraryPicker: {
-                            PhotosPicker(selection: $photoItem, matching: .images) {
-                                Label("From Library", systemImage: "photo.on.rectangle")
-                            }
-                        },
-                        onUse: { data in Task { await savePhoto(data) } },
-                        onRemove: { removePhoto() }
-                    )
                 }
                 .listRowSeparator(.hidden)
                 .task(id: photoItem) { await handlePick() }
@@ -155,6 +133,35 @@ struct SpeakerDetailView: View {
                 rejectNote("profile")
             }
 
+            // Below the writing rather than under the name: a picture is the last thing
+            // anyone sorts out about a speaker, and a row of capsules directly beneath the
+            // avatar made the top of the page a toolbar instead of a face and a name.
+            //
+            // A real person's face is the one picture that must never be drawn — Search
+            // is the answer here, and it's why that button exists.
+            Section("Photo") {
+                ArtworkSourceRow(
+                    subject: ArtworkSubject(
+                        kind: .speaker,
+                        name: name.nilIfEmpty ?? currentSpeaker.name,
+                        details: [
+                            knownFor.nilIfEmpty,
+                            bio.nilIfEmpty,
+                            albums.first.map { "host of \($0.name)" },
+                        ].compactMap { $0 }
+                    ),
+                    hasArtwork: currentSpeaker.photoFileName != nil,
+                    libraryPicker: {
+                        PhotosPicker(selection: $photoItem, matching: .images) {
+                            Label("Photos", systemImage: "photo.on.rectangle")
+                        }
+                    },
+                    onUse: { data in Task { await savePhoto(data) } },
+                    onRemove: { removePhoto() }
+                )
+            }
+            .listRowSeparator(.hidden)
+
             Section("Albums") {
                 if albums.isEmpty {
                     Text("No albums yet").foregroundStyle(.secondary)
@@ -174,6 +181,7 @@ struct SpeakerDetailView: View {
                     NotesPane(
                         bookmarks: bookmarks,
                         episodeTitle: { bookmark in tracks.first { $0.id == bookmark.trackID }?.title },
+                        foldsByEpisode: true,
                         onPlay: { play($0) },
                         onChange: { refreshBookmarks() }
                     )
@@ -345,25 +353,6 @@ struct SpeakerDetailView: View {
         tracks = (try? trackStore.tracks(forArtist: speaker.id)) ?? []
         refreshBookmarks()
         seedFields()
-        await fillMissingPhoto()
-    }
-
-    /// A speaker with no picture gets one from their own episodes' artwork rather than
-    /// staying a grey silhouette. Only ever when there's nothing there — a photo the
-    /// listener chose is never replaced — and it's saved like any other edit, so tapping
-    /// the avatar can swap it afterwards.
-    private func fillMissingPhoto() async {
-        guard currentSpeaker.photoFileName == nil else { return }
-        guard let data = await SpeakerPhotoFinder.find(for: currentSpeaker.id),
-              let fileName = try? await ImageFileStore.speakerPhotos.save(data, maxDimension: 400) else { return }
-        // Re-read first: a photo may have been picked while this was running.
-        let latest = (try? libraryStore.artist(id: currentSpeaker.id)) ?? currentSpeaker
-        guard latest.photoFileName == nil else {
-            ImageFileStore.speakerPhotos.remove(fileName)
-            return
-        }
-        try? libraryStore.updateArtistPhoto(id: currentSpeaker.id, photoFileName: fileName)
-        currentSpeaker = (try? libraryStore.artist(id: currentSpeaker.id)) ?? currentSpeaker
     }
 }
 
