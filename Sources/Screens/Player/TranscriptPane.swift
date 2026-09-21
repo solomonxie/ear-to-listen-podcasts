@@ -26,10 +26,6 @@ struct TranscriptPane: View {
     let onFollow: () -> Void
     let onSeek: (TimeInterval) -> Void
 
-    /// The line whose Copy/Edit buttons are showing — one at a time, revealed by tapping
-    /// it. They live on the row rather than permanently down the edge of the page: they're
-    /// used once or twice an episode, and a target per row sits under the scroll handle.
-    @State private var revealed: Double?
     /// The line being rewritten, and what it says so far. Editing happens in the row
     /// itself: the lines around it are the context you're correcting against, and a sheet
     /// or a page covers exactly those.
@@ -347,28 +343,23 @@ struct TranscriptPane: View {
 
     /// A tap plays from the line *and* shows what else can be done with it. Tapping the
     /// same line again puts the buttons away.
-    private func tap(_ segment: TranscriptSegment) {
-        play(from: segment)
-        withAnimation(.easeOut(duration: 0.15)) {
-            revealed = revealed == segment.start ? nil : segment.start
-        }
-    }
-
+    /// A tap back, because a pasteboard write is otherwise completely silent — there is
+    /// no way to tell "copied" from "the menu didn't fire".
     private func copy(_ segment: TranscriptSegment) {
         UIPasteboard.general.string = segment.text
-        revealed = nil
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
-    /// Turns the row into a field. **Following goes off**: it would scroll the line being
-    /// typed in out from under the keyboard within seconds. The row is pulled to the top
-    /// of the page for the same reason — that's the half of the screen the keyboard
-    /// leaves.
+    /// Turns the row into a field, where it stands. **Following goes off**: it would
+    /// scroll the line being typed in out from under the keyboard within seconds.
+    ///
+    /// It does *not* scroll the page. Pulling the row to the top made Edit look like it
+    /// had done nothing — the row you were looking at leapt away, and the field ended up
+    /// somewhere you weren't. The keyboard moves the page itself if the field needs it.
     private func edit(_ segment: TranscriptSegment) {
         isFollowing = false
         editText = segment.text
-        revealed = nil
         editingStart = segment.start
-        withAnimation(.easeOut(duration: 0.25)) { scrollProxy.scrollTo(segment.start, anchor: .top) }
     }
 
     private func save(_ segment: TranscriptSegment) {
@@ -395,28 +386,32 @@ struct TranscriptPane: View {
             let spokenStart = transcript.currentLine(at: currentTime)?.start
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(transcript.lines) { segment in
-                    if editingStart == segment.start {
-                        InlinePhraseEditor(
-                            text: $editText,
-                            onSave: { save(segment) },
-                            onCancel: { editingStart = nil }
-                        )
-                        .id(segment.start)
-                    } else {
-                        TranscriptLine(
-                            segment: segment,
-                            isCurrent: segment.start == spokenStart,
-                            isRevealed: revealed == segment.start,
-                            onPlay: { tap(segment) },
-                            onCopy: { copy(segment) },
-                            onEdit: { edit(segment) }
-                        )
-                        // Nothing but the text, the highlight, the "still being revised"
-                        // flag and its own buttons can change a row, so a redraw of the
-                        // list leaves settled rows alone instead of rebuilding hundreds.
-                        .equatable()
-                        .id(segment.start)
+                    // One `.id` for the row, outside the branch. With the same id on both
+                    // arms of the if/else, SwiftUI reads them as one identity and keeps
+                    // showing the arm it already had: tapping Edit built the field on
+                    // every redraw — the log said so — and never put it on screen.
+                    Group {
+                        if editingStart == segment.start {
+                            InlinePhraseEditor(
+                                text: $editText,
+                                onSave: { save(segment) },
+                                onCancel: { editingStart = nil }
+                            )
+                        } else {
+                            TranscriptLine(
+                                segment: segment,
+                                isCurrent: segment.start == spokenStart,
+                                onPlay: { play(from: segment) },
+                                onCopy: { copy(segment) },
+                                onEdit: { edit(segment) }
+                            )
+                            // Nothing but the text, the highlight and the "still being
+                            // revised" flag can change a row, so a redraw of the list
+                            // leaves settled rows alone instead of rebuilding hundreds.
+                            .equatable()
+                        }
                     }
+                    .id(segment.start)
                 }
             }
             .padding(.horizontal)
@@ -432,22 +427,26 @@ private struct TranscriptLine: View, Equatable {
     /// Closures are left out of the comparison on purpose: they only ever capture this
     /// row's own segment and the pane's state, both of which survive a skipped redraw.
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.segment == rhs.segment && lhs.isCurrent == rhs.isCurrent && lhs.isRevealed == rhs.isRevealed
+        lhs.segment == rhs.segment && lhs.isCurrent == rhs.isCurrent
     }
 
     let segment: TranscriptSegment
     let isCurrent: Bool
-    /// Whether this is the line that was tapped, and so the one showing its buttons.
-    let isRevealed: Bool
     let onPlay: () -> Void
     let onCopy: () -> Void
     let onEdit: () -> Void
 
+    /// Text and timestamp, and nothing drawn on top of them. Copy and Edit were capsules
+    /// that appeared on the tapped row: they sat under the page's scroll handle, took
+    /// enough width to fold the line onto a second row, and Edit was unreliable to hit at
+    /// all. Both live on the long press now, which is where a second action on a line of
+    /// text belongs and where Play already was.
     var body: some View {
-        // The buttons sit *outside* the tapped area, not inside it. A tap gesture on the
-        // whole row swallows taps meant for a button drawn inside it — which is why Edit
-        // did nothing at all until the row was split in two.
-        HStack(alignment: .bottom, spacing: 8) {
+        // A real `Button`, not a tap gesture. `onTapGesture` and `contextMenu` on the same
+        // view fight over the press: the tap wins early and the long press never
+        // completes, which is why the menu — and so Copy and Edit — did nothing. A button
+        // with a menu attached is the pattern a List row uses, and the two coexist.
+        Button(action: onPlay) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(segment.text)
                     .font(isCurrent ? .body.weight(.semibold) : .body)
@@ -463,37 +462,13 @@ private struct TranscriptLine: View, Equatable {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            // Tapping a lyric plays from it — that's what the timestamps are for, and it's
-            // the thing you want while listening — and shows what else can be done with it.
-            .onTapGesture(perform: onPlay)
-
-            // On the line's own row rather than in a bar somewhere: what they act on is
-            // the line you just touched, and that's where you're looking.
-            if isRevealed {
-                rowButton("Copy", systemImage: "doc.on.doc", action: onCopy)
-                rowButton("Edit", systemImage: "pencil", action: onEdit)
-            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.plain)
         .contextMenu {
             Button("Play from here", systemImage: "play.fill", action: onPlay)
             Button("Copy", systemImage: "doc.on.doc", action: onCopy)
             Button("Edit", systemImage: "pencil", action: onEdit)
         }
-    }
-
-    private func rowButton(
-        _ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.caption2.weight(.medium))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.ultraThinMaterial, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Color.accentColor)
     }
 }
 
