@@ -1,6 +1,7 @@
 import Foundation
 
-/// The five S3 calls this app makes, over `URLSession`.
+/// The five S3 calls this app makes, over `URLSession` — against AWS, Tencent COS or
+/// Alibaba OSS, which differ only in the hostname `BucketEndpoint` hands back.
 ///
 /// S3's REST API is plain HTTP with XML responses; the only hard part is the signature,
 /// and that lives in `SigV4`. What this replaces brought Smithy, the AWS CRT, SwiftNIO and
@@ -9,27 +10,17 @@ import Foundation
 /// Deliberately not a general S3 client: no multipart, no streaming bodies, no retries
 /// beyond what `URLSession` does. Add those when something needs them.
 struct S3RestClient {
-    let bucket: String
+    let endpoint: BucketEndpoint
     let credentials: SigV4.Credentials
 
-    /// Virtual-hosted style, except for bucket names containing a dot — those break TLS
-    /// certificate matching on `*.s3.region.amazonaws.com`, so they go path-style.
-    private var usesPathStyle: Bool { bucket.contains(".") }
-
-    private var endpoint: URL {
-        usesPathStyle
-            ? URL(string: "https://s3.\(credentials.region).amazonaws.com")!
-            : URL(string: "https://\(bucket).s3.\(credentials.region).amazonaws.com")!
-    }
-
     private func url(key: String?, query: [(String, String)] = []) -> URL {
-        var path = usesPathStyle ? "/\(bucket)" : ""
+        var path = endpoint.usesPathStyle ? "/\(endpoint.bucket)" : ""
         if let key, !key.isEmpty {
-            path += "/" + key.split(separator: "/").map { SigV4.encode(String($0)) }.joined(separator: "/")
+            path += "/" + key.split(separator: "/").map { RFC3986.encode(String($0)) }.joined(separator: "/")
         } else if path.isEmpty {
             path = "/"
         }
-        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: URL(string: "https://\(endpoint.host)")!, resolvingAgainstBaseURL: false)!
         components.percentEncodedPath = path
         if !query.isEmpty { components.percentEncodedQuery = SigV4.canonicalQuery(query) }
         return components.url!
@@ -115,7 +106,7 @@ struct S3RestClient {
     /// callers switch on, so they're carried rather than flattened into a status number.
     private func check(_ response: HTTPURLResponse, body: Data) throws {
         guard !(200..<300).contains(response.statusCode) else { return }
-        let parsed = S3ListParser.parseError(body)
+        let parsed = StorageErrorXML.parse(body)
         throw S3Error.service(
             code: parsed.code ?? "HTTP \(response.statusCode)",
             message: parsed.message,
@@ -153,7 +144,7 @@ enum S3Error: Error, LocalizedError {
     }
 }
 
-/// Just enough XML for `ListObjectsV2` and S3's error envelope.
+/// Just enough XML for `ListObjectsV2`.
 ///
 /// `XMLParser` is in Foundation and costs nothing. The responses are a flat list of known
 /// element names, so this collects text by tag rather than building a tree.
@@ -166,18 +157,8 @@ enum S3ListParser {
         return delegate.result
     }
 
-    static func parseError(_ data: Data) -> (code: String?, message: String?) {
-        let delegate = ListDelegate()
-        let parser = XMLParser(data: data)
-        parser.delegate = delegate
-        parser.parse()
-        return (delegate.errorCode, delegate.errorMessage)
-    }
-
     private final class ListDelegate: NSObject, XMLParserDelegate {
         var result = S3RestClient.ListResult()
-        var errorCode: String?
-        var errorMessage: String?
 
         private var text = ""
         private var key: String?
@@ -237,8 +218,6 @@ enum S3ListParser {
                 if !result.commonPrefixes.contains(value) { result.commonPrefixes.append(value) }
             case "CommonPrefixes": inCommonPrefixes = false
             case "NextContinuationToken": result.nextContinuationToken = value
-            case "Code": errorCode = value
-            case "Message": errorMessage = value
             default: break
             }
             text = ""

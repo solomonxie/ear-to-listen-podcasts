@@ -6,7 +6,7 @@ Three tiers, each answering a failure the others don't.
 |---|---|---|---|---|
 | **1. This phone** — `LocalBackups`, `ChangeLog` | the data is still here and now **wrong**: a bad import, the wrong archive restored, an edit nobody meant | No | on app-background, max daily; plus before any large operation; log on every write | 7 days, by age |
 | **2. iCloud Drive** — `CloudDrive` | phone lost or app reinstalled; also "let me see the file myself" | Yes | daily, only if changed | latest 10, older pruned |
-| **3. The S3 bucket** — `S3Provider` | everything else, plus "what did this look like in March" | Yes | daily, only if changed | never deleted |
+| **3. The bucket** — any connected cloud | everything else, plus "what did this look like in March" | Yes | daily, only if changed | never deleted |
 
 Tier 1 not surviving deletion isn't a weakness, it's a different job: it's the
 only copy that's instant, offline and there the moment it's wanted. Most real
@@ -98,7 +98,7 @@ nothing new and skips, indefinitely.
   `ubiquityIdentityToken` — that token needs the iCloud entitlement itself, so
   in a free-team build it reads nil and is indistinguishable from a signed-out
   account.
-- **The S3 bucket** — switched on when a connection is added (an explicit "off"
+- **The bucket** — switched on when a connection is added (an explicit "off"
   is respected), toggled from the connection's own row in `RemoteSectionView`.
   Key: `ear-to-listen-podcasts/20260918-ear-to-listen.zip`. Restore lists that folder
   and takes the newest date (a device back from a reinstall hasn't written
@@ -106,7 +106,8 @@ nothing new and skips, indefinitely.
 
 Manual front ends, same archive format, in `Sources/Screens/Settings`:
 Export/Import via `.fileExporter`/`.fileImporter`, and Backup/Restore via
-`S3Provider.uploadBackup`/`downloadBackup` (derived key, no picker).
+`CloudProvider.uploadBackup`/`downloadBackup` (derived key, no picker) — S3,
+COS, OSS, Azure or Google, whichever is connected.
 
 ## Restore builds a new library
 

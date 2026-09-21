@@ -73,6 +73,13 @@ separate task, not scheduled here.
 - [x] T6.4 Unit tests: snapshot round-trip, restore matching (hit/miss by providerID+filePath), idempotent re-apply — see `Tests` — depends: T6.1
 
 ## Dropped (not backlogged)
+- "Ask my podcasts": a question box on Home that retrieved passages from the
+  transcripts and had a model answer from them. Built, tried, removed — the
+  answer was slower and less useful than simply being shown the matching
+  lines, and it cost a call per question. Searching transcripts from the
+  ordinary search box replaced it. Don't reintroduce the question box; if
+  answering ever comes back, it belongs on top of search results, not beside
+  them.
 - Expo / Expo Go and the `expo` Claude Code plugin: an Expo-account login,
   a second runtime that can't run the native pieces this app is made of,
   and enough flakiness to muddle "my bug" with "Expo's bug". The dev loop is
@@ -81,6 +88,8 @@ separate task, not scheduled here.
   reintroduce it.
 
 ## Backlog (not scheduled)
+
+### Storage & import adapters
 - GoogleDriveProvider adapter: OAuth via `GoogleSignIn-iOS`, Drive REST v3
   list files/download URL — same `CloudProvider` protocol from T1.4 already
   accommodates it.
@@ -89,3 +98,67 @@ separate task, not scheduled here.
 - Apple Music playlist import (`MusicKit` adapter + wiring into T4.6) —
   deferred behind Spotify; same `PlaylistImportSource` protocol from T1.5
   already accommodates it whenever it's picked up.
+
+### Playback
+- Playback speed: `defaultRate` on the engine, global default + per-album
+  override (`Album` already carries `language`/`profile`; speed fits beside
+  them). Nothing sets `rate` today — spoken audio is stuck at 1.0.
+- Skip back/forward by interval (±15/30s), on the page *and* registered as
+  `MPRemoteCommand`s so the lock screen and AirPods can nudge back over a
+  missed sentence. Only prev/next episode exist now.
+- Sleep timer, including "end of this episode".
+- Chapters: read embedded marks, and generate them from the transcript —
+  same pipeline as `AlbumMetadataSuggester`, different prompt.
+- Silence trimming and volume boost, via `AVAudioEngine` — what turns a
+  two-hour lecture file into ninety minutes.
+
+### Transcripts & AI
+- FTS5 over transcript text. Searching speech ships (`TranscriptSearch`), but
+  as an `instr` scan over the JSON blobs, capped at 30 transcripts opened per
+  query. It's fast enough on a few hundred episodes and won't be on a few
+  thousand; an FTS5 table kept up to date by `TranscriptStore.save` is the
+  answer, and would also allow ranking speech hits properly rather than
+  first-found.
+- Episode summary and key points, from a complete transcript.
+- Clip sharing and transcript export from the app: a quote card, a short
+  audio clip, or the `.vtt`/`.srt` through the share sheet. `TranscriptFile`
+  already writes VTT/LRC to the bucket — the gap is sharing off the phone.
+- Translated transcripts as a second pane beside the original.
+- Phrase timing, merge and split: correcting a line's *text* happens in place on
+  the episode page, but a recogniser gets line boundaries wrong more often than
+  words — a sentence across three lines, a line a second late. Built once as a
+  separate editor page with time wheels and multi-select merge/delete, and
+  dropped as too much screen for the job; whatever replaces it has to work in the
+  row, like the text edit does. `TranscriptSegment.isEdited` and the empty
+  "heard, nothing said" segment are the two pieces such a thing needs, and both
+  are already in the schema.
+
+### Library & discovery
+- Listening stats: minutes, per speaker, started vs finished. `lastPlayedAt`
+  and `positionMs` are already stored; nothing reads them that way.
+- Rule-based playlists ("unplayed, this speaker, oldest first") —
+  generalises the hardcoded `FixedPlaylist` shelves.
+- Spotlight indexing (`CoreSpotlight`) so episodes and transcript hits are
+  findable from system search.
+
+### Platform surfaces
+All of these need a second target in `project.yml` — the app ships as one.
+- CarPlay — the natural habitat for long-form listening.
+- App Intents / Siri / Shortcuts: "play my latest lecture", "bookmark this".
+- Widget + Lock Screen Live Activity for continue-listening.
+- Apple Watch companion, remote control at minimum.
+
+### Infrastructure
+- Background sync via `BGTaskScheduler` + a local notification when new
+  episodes land. `SyncScheduler` only runs while the app is foregrounded, so
+  "new episodes appeared in my bucket" never happens unattended.
+- Background downloads (`URLSessionConfiguration.background`) so "download
+  this album for the flight" survives leaving the app.
+- Cross-device position/bookmark sync — the open question in DESIGN.md.
+  `LibrarySnapshot` already goes to iCloud Drive; positions don't.
+
+### Needs a decision first
+- RSS feed as a source: it's a podcast app with no way to subscribe to a
+  podcast feed. The `CloudProvider`/`PlaylistImportSource` protocols would
+  take an adapter, but it cuts against bring-your-own-files — decide the
+  product question before scheduling it.

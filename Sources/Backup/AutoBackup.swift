@@ -6,7 +6,7 @@ import Foundation
 /// press Backup.
 ///
 /// Two destinations, each its own switch: the listener's iCloud Drive (nothing to set
-/// up, so it's the default one to offer) and the connected S3 bucket. Both are one-way
+/// up, so it's the default one to offer) and the connected bucket. Both are one-way
 /// backup, not multi-device merge. Episode audio never goes up — it came out of that
 /// bucket in the first place, and `SyncEngine` finds it again by itself.
 ///

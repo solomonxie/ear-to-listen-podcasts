@@ -109,8 +109,8 @@ enum Migrations {
         }
 
         // Real "Show" (a series) and "Topic" concepts, so Home's shelves can be backed by
-        // the synced library instead of mock data. `isDemo` rows come from `DemoDataSeeder`
-        // and are wiped/reseeded together, kept apart from anything the user actually synced.
+        // the synced library instead of mock data. `isDemo` marked the seeded sample rows,
+        // kept apart from anything the user actually synced; v27 drops the last of them.
         migrator.registerMigration("v6_shows_and_topics") { db in
             try db.alter(table: "artists") { t in
                 t.add(column: "bio", .text)
@@ -465,6 +465,20 @@ enum Migrations {
             try db.alter(table: "syncJobs") { t in
                 t.add(column: "transcriptPath", .text)
             }
+        }
+
+        // The sample library doesn't ship any more — its clips and seeder live in
+        // `DemoData/`, outside the app target, for testing only. An install that once
+        // loaded it keeps unplayable rows on every shelf, so they go here. Cascades from
+        // the provider row take the demo tracks and their transcripts.
+        migrator.registerMigration("v27_drop_demo_library") { db in
+            try db.execute(sql: "DELETE FROM providers WHERE type = 'demo'")
+            try db.execute(sql: "DELETE FROM playlistTracks WHERE playlistID IN (SELECT id FROM playlists WHERE isDemo = 1)")
+            try db.execute(sql: "DELETE FROM playlists WHERE isDemo = 1")
+            try db.execute(sql: "DELETE FROM albumTopics WHERE albumID IN (SELECT id FROM albums WHERE isDemo = 1)")
+            try db.execute(sql: "DELETE FROM topics WHERE isDemo = 1")
+            try db.execute(sql: "DELETE FROM albums WHERE isDemo = 1")
+            try db.execute(sql: "DELETE FROM artists WHERE isDemo = 1")
         }
 
         return migrator

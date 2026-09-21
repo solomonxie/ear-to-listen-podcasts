@@ -7,9 +7,20 @@ struct EarToListenApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        CloudProviderRegistry.shared.register(type: S3Provider.providerType) { try S3Provider(config: $0) }
+        // Every cloud the app can talk to, from the one list of them. S3, COS and OSS
+        // are the same client against three hostnames; Azure and Google each need their
+        // own.
+        for kind in CloudSourceKind.allCases {
+            switch kind {
+            case .amazonS3, .tencentCos, .aliyunOss:
+                CloudProviderRegistry.shared.register(type: kind.providerType) { try S3Provider(config: $0) }
+            case .azureBlob:
+                CloudProviderRegistry.shared.register(type: kind.providerType) { try AzureBlobProvider(config: $0) }
+            case .googleCloudStorage:
+                CloudProviderRegistry.shared.register(type: kind.providerType) { try GoogleCloudStorageProvider(config: $0) }
+            }
+        }
         CloudProviderRegistry.shared.register(type: LocalFilesProvider.providerType) { try LocalFilesProvider(config: $0) }
-        CloudProviderRegistry.shared.register(type: DemoProvider.providerType) { _ in DemoProvider() }
         PlaylistImportSourceRegistry.shared.register(SpotifyImportSource())
     }
 

@@ -24,18 +24,18 @@ final class SigV4Tests: XCTestCase {
     /// The encoding rules are stricter than `addingPercentEncoding`'s: only
     /// `A-Za-z0-9-_.~` survive, everything else is uppercase percent-hex.
     func testEncodingFollowsTheAwsRulesNotFoundations() {
-        XCTAssertEqual(SigV4.encode("a b"), "a%20b")
-        XCTAssertEqual(SigV4.encode("a+b"), "a%2Bb")
-        XCTAssertEqual(SigV4.encode("a=b&c"), "a%3Db%26c")
-        XCTAssertEqual(SigV4.encode("~_-."), "~_-.")
-        XCTAssertEqual(SigV4.encode("ä"), "%C3%A4")
+        XCTAssertEqual(RFC3986.encode("a b"), "a%20b")
+        XCTAssertEqual(RFC3986.encode("a+b"), "a%2Bb")
+        XCTAssertEqual(RFC3986.encode("a=b&c"), "a%3Db%26c")
+        XCTAssertEqual(RFC3986.encode("~_-."), "~_-.")
+        XCTAssertEqual(RFC3986.encode("ä"), "%C3%A4")
     }
 
     /// A key is a path, and its slashes must survive — encoding them turns
     /// `folder/ep.mp3` into a single object literally named with `%2F`.
     func testSlashesSurviveWhenEncodingAPath() {
-        XCTAssertEqual(SigV4.encode("a/b c/d.mp3", encodeSlash: false), "a/b%20c/d.mp3")
-        XCTAssertEqual(SigV4.encode("a/b", encodeSlash: true), "a%2Fb")
+        XCTAssertEqual(RFC3986.encode("a/b c/d.mp3", encodeSlash: false), "a/b%20c/d.mp3")
+        XCTAssertEqual(RFC3986.encode("a/b", encodeSlash: true), "a%2Fb")
     }
 
     /// Canonical query order is by *encoded* name, and every value is encoded too.
@@ -192,7 +192,7 @@ final class S3ListParserTests: XCTestCase {
 
     /// A missing backup is a normal answer, and the code is how the caller knows.
     func testAnErrorEnvelopeYieldsItsCode() {
-        let parsed = S3ListParser.parseError(Data("""
+        let parsed = StorageErrorXML.parse(Data("""
         <Error><Code>NoSuchKey</Code><Message>The key does not exist.</Message></Error>
         """.utf8))
 

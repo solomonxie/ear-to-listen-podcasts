@@ -1,8 +1,8 @@
 import Foundation
 
 /// Backs every Home shelf from the real synced library (`LibraryStore`/`TrackStore`/
-/// `PlaylistStore`) — no mock data. Demo content (`DemoDataSeeder`) flows through the
-/// exact same tables, so it shows up here the same way a real synced source would.
+/// `PlaylistStore`) — no mock data and no sample library: the shelves stay empty until a
+/// source is connected and its first files land in those tables.
 @MainActor
 final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var tracks: [Track] = []
@@ -47,10 +47,22 @@ final class HomeLibraryViewModel: ObservableObject {
         }
 
         regroupBookmarks()
+        // Every mark, not just the recent ones Home shows: search looks through the whole
+        // library, and a note from last year is exactly the kind of thing being looked for.
         searchIndex = LibrarySearch.index(
-            speakers: artists, albums: albums,
-            playlists: playlists, topics: topics, tracks: tracks
+            speakers: artists, albums: albums, playlists: playlists, topics: topics,
+            tracks: tracks, notes: (try? bookmarkStore.all()) ?? []
         )
+    }
+
+    /// What was *said* matching the query. A database scan rather than a folded index —
+    /// transcripts are megabytes — so it runs off the main actor and arrives a moment
+    /// after the rest of the results.
+    func transcriptMatches(for query: String) async -> [TranscriptSearch.Match] {
+        let search = TranscriptSearch(dbQueue: DatabaseManager.shared.dbQueue)
+        return await Task.detached(priority: .userInitiated) {
+            (try? search.matches(for: query)) ?? []
+        }.value
     }
 
     /// Coalesces a burst of refreshes into one. A sync posts `.libraryDidChange` per

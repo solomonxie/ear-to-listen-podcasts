@@ -14,6 +14,9 @@ struct HomeView: View {
     @State private var newPlaylistName = ""
     @State private var editingBookmark: Bookmark?
     @State private var results = LibrarySearch.Results()
+    /// Kept apart from `results`: this half is a database scan, so it lands after the
+    /// in-memory one rather than holding it up.
+    @State private var transcriptMatches: [TranscriptSearch.Match] = []
 
     var body: some View {
         ScrollView {
@@ -41,11 +44,13 @@ struct HomeView: View {
         .task(id: query) {
             guard !query.isEmpty else {
                 results = LibrarySearch.Results()
+                transcriptMatches = []
                 return
             }
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled else { return }
             results = await LibrarySearch.run(query, in: homeData.searchIndex)
+            transcriptMatches = await homeData.transcriptMatches(for: query)
         }
         .task { await homeData.refresh() }
         .onChange(of: PlaybackEngine.shared.isPresentingPlayer) { _, isShowing in
@@ -218,7 +223,46 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
             }
+            resultSection("Notes", results.notes) { bookmark in
+                Button { play(bookmark) } label: {
+                    BookmarkRow(
+                        bookmark: bookmark,
+                        episodeTitle: homeData.track(id: bookmark.trackID)?.title,
+                        onPlay: { play(bookmark) },
+                        onEdit: { editingBookmark = bookmark }
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            // Last, and on purpose: names are what you search when you know what you're
+            // after, speech is what you search when you don't. A line from the middle of
+            // an episode outranking the episode you actually named would be wrong every
+            // time.
+            resultSection(transcriptsTitle, transcriptMatches) { match in
+                Button { play(match) } label: {
+                    TranscriptMatchRow(
+                        match: match, episodeTitle: homeData.track(id: match.trackID)?.title
+                    )
+                }
+                .buttonStyle(.plain)
+            }
         }
+    }
+
+    private var transcriptsTitle: LocalizedStringKey {
+        transcriptMatches.count >= TranscriptSearch.matchLimit
+            ? "In transcripts (first \(TranscriptSearch.matchLimit))"
+            : "In transcripts"
+    }
+
+    private func play(_ bookmark: Bookmark) {
+        guard let track = homeData.track(id: bookmark.trackID) else { return }
+        PlaybackEngine.shared.open(track: track, queue: [track], startingAt: bookmark.position)
+    }
+
+    private func play(_ match: TranscriptSearch.Match) {
+        guard let track = homeData.track(id: match.trackID) else { return }
+        PlaybackEngine.shared.open(track: track, queue: [track], startingAt: match.start)
     }
 
     /// Says so when the list is capped, rather than silently showing part of the answer.
@@ -331,6 +375,31 @@ private struct SpeakerCard: View {
             Text(artist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 90)
+    }
+}
+
+/// A line of speech in the results: what was said, then which episode and when. The
+/// episode comes second because the words are what matched — reading the title first
+/// means reading past the answer to get to it.
+private struct TranscriptMatchRow: View {
+    let match: TranscriptSearch.Match
+    let episodeTitle: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(match.text).font(.footnote).lineLimit(3)
+            HStack(spacing: 6) {
+                Text(Scrubber.formatted(match.start)).monospacedDigit()
+                if let episodeTitle {
+                    Text("· \(episodeTitle)").lineLimit(1)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 

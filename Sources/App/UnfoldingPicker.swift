@@ -56,6 +56,10 @@ struct UnfoldingPicker<Value: Hashable>: View {
     /// *is* the value — a labelless row with its answer pushed to the far right reads as
     /// two unrelated things.
     var valueAlignment: HorizontalAlignment = .trailing
+    /// A control that belongs to the value rather than to the form — "open this speaker's
+    /// page" beside the speaker's name. It sits inside the row but outside the row's own
+    /// button, so tapping it doesn't unfold the options.
+    var accessory: AnyView?
 
     private var isOpen: Bool { open == id }
 
@@ -64,24 +68,27 @@ struct UnfoldingPicker<Value: Hashable>: View {
     }
 
     var body: some View {
-        Button(action: toggle) {
-            HStack {
-                if valueAlignment == .trailing {
-                    Text(title).foregroundStyle(.primary)
-                    Spacer()
+        HStack(spacing: 8) {
+            Button(action: toggle) {
+                HStack {
+                    if valueAlignment == .trailing {
+                        Text(title).foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    Text(currentLabel)
+                        .foregroundStyle(valueAlignment == .trailing ? .secondary : .primary)
+                        .lineLimit(1)
+                    if valueAlignment == .leading { Spacer() }
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isOpen ? 90 : 0))
                 }
-                Text(currentLabel)
-                    .foregroundStyle(valueAlignment == .trailing ? .secondary : .primary)
-                    .lineLimit(1)
-                if valueAlignment == .leading { Spacer() }
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            accessory
         }
-        .buttonStyle(.plain)
 
         if isOpen {
             ForEach(options) { option in

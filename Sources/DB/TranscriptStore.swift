@@ -110,6 +110,9 @@ struct TranscriptStore {
     // MARK: Edits
 
     /// Rewrites one line and files the correction away. Returns the updated transcript.
+    ///
+    /// `isEdited` is what stops the next transcription pass from merging its own version
+    /// of this span back over a line somebody corrected by hand.
     @discardableResult
     func applyEdit(trackID: String, segmentStart: Double, newText: String) throws -> [TranscriptSegment] {
         var segments = (try find(trackID: trackID)) ?? []
@@ -120,13 +123,19 @@ struct TranscriptStore {
         segments[index].text = newText
         segments[index].isEdited = true
         try save(trackID: trackID, segments: segments)
+        try recordEdit(trackID: trackID, segmentStart: segmentStart, from: originalText, to: newText)
+        return TranscriptSegment.normalized(segments)
+    }
 
+    private func recordEdit(
+        trackID: String, segmentStart: Double, from originalText: String, to editedText: String
+    ) throws {
         let edit = TranscriptEdit(
             id: UUID().uuidString,
             trackID: trackID,
             segmentStart: segmentStart,
             originalText: originalText,
-            editedText: newText,
+            editedText: editedText,
             createdAt: Date()
         )
         try dbQueue.write { db in try edit.insert(db) }
@@ -134,9 +143,8 @@ struct TranscriptStore {
         // it's hand-typed — the most expensive thing per byte in the whole library.
         ChangeLog.record(
             "transcriptEdits", key: "\(trackID)@\(segmentStart)",
-            old: ["text": originalText], new: ["text": newText], in: dbQueue
+            old: ["text": originalText], new: ["text": editedText], in: dbQueue
         )
-        return segments
     }
 
     func edits(trackID: String) throws -> [TranscriptEdit] {

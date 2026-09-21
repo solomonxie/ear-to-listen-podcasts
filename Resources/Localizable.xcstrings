@@ -17,22 +17,6 @@
         }
       }
     },
-    "A few sample shows and clips to look around with.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A few sample shows and clips to look around with."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "几个示例节目和片段，供你先看看。"
-          }
-        }
-      }
-    },
     "ADD EPISODES": {
       "localizations": {
         "en": {
@@ -61,6 +45,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "AI 密钥"
+          }
+        }
+      }
+    },
+    "AT THIS MOMENT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AT THIS MOMENT"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此刻的原文"
           }
         }
       }
@@ -189,6 +189,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "添加一个 S3 Bucket 即可浏览并同步单集。"
+          }
+        }
+      }
+    },
+    "Add bookmark": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add bookmark"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加书签"
+          }
+        }
+      }
+    },
+    "Add photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add photo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加图片"
           }
         }
       }
@@ -417,6 +449,22 @@
         }
       }
     },
+    "Bookmarks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmarks"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "书签"
+          }
+        }
+      }
+    },
     "Browse by Year": {
       "localizations": {
         "en": {
@@ -513,6 +561,22 @@
         }
       }
     },
+    "Change photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change photo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更换图片"
+          }
+        }
+      }
+    },
     "Changing the speaker re-points every episode in this album, not just the album itself.": {
       "localizations": {
         "en": {
@@ -593,22 +657,6 @@
         }
       }
     },
-    "Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can load the samples again later.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can load the samples again later."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "清除示例节目、讲者、专辑和播放列表。你自己同步的单集和来源会保留，之后还能再次加载示例。"
-          }
-        }
-      }
-    },
     "Close": {
       "localizations": {
         "en": {
@@ -669,6 +717,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "继续收听"
+          }
+        }
+      }
+    },
+    "Copy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制"
           }
         }
       }
@@ -785,6 +849,22 @@
         }
       }
     },
+    "Delete bookmark": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete bookmark"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除书签"
+          }
+        }
+      }
+    },
     "Delete this connection?": {
       "localizations": {
         "en": {
@@ -813,6 +893,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "示例数据"
+          }
+        }
+      }
+    },
+    "Describe it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe it"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "描述一下"
           }
         }
       }
@@ -909,6 +1005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "草稿"
+          }
+        }
+      }
+    },
+    "Draw one": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Draw one"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成图片"
           }
         }
       }
@@ -1201,6 +1313,22 @@
         }
       }
     },
+    "Find a real photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find a real photo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查找真实照片"
+          }
+        }
+      }
+    },
     "Fixes every episode in this album — use this if the speaker shown was guessed wrong from the file's metadata.": {
       "localizations": {
         "en": {
@@ -1377,6 +1505,54 @@
         }
       }
     },
+    "From AI": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From AI"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由 AI 生成"
+          }
+        }
+      }
+    },
+    "From Internet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Internet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从网络查找"
+          }
+        }
+      }
+    },
+    "From Library": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Library"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从相册"
+          }
+        }
+      }
+    },
     "From a transcript file beside the episode": {
       "localizations": {
         "en": {
@@ -1485,6 +1661,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在导入…"
+          }
+        }
+      }
+    },
+    "In transcripts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In transcripts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转写文本中"
+          }
+        }
+      }
+    },
+    "In transcripts (first %lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In transcripts (first %lld)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转写文本中（前 %lld 条）"
           }
         }
       }
@@ -1713,22 +1921,6 @@
         }
       }
     },
-    "Load sample library": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Load sample library"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "加载示例库"
-          }
-        }
-      }
-    },
     "Missing": {
       "localizations": {
         "en": {
@@ -1805,6 +1997,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "我的修正"
+          }
+        }
+      }
+    },
+    "NOTES": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NOTES"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记"
           }
         }
       }
@@ -2065,6 +2273,22 @@
         }
       }
     },
+    "Nothing marked yet. Add a bookmark for the moment you're hearing; the note goes on it afterwards.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing marked yet. Add a bookmark for the moment you're hearing; the note goes on it afterwards."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有标记。为正在听到的这一刻添加书签，之后再写下笔记。"
+          }
+        }
+      }
+    },
     "Nothing playing": {
       "localizations": {
         "en": {
@@ -2269,6 +2493,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "随单集暂停 · 已转写 %@"
+          }
+        }
+      }
+    },
+    "Phrase": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phrase"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语句"
           }
         }
       }
@@ -2593,22 +2833,6 @@
         }
       }
     },
-    "Reset sample library": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reset sample library"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重置示例库"
-          }
-        }
-      }
-    },
     "Restore from Remote": {
       "localizations": {
         "en": {
@@ -2621,22 +2845,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "从个人私有云端恢复"
-          }
-        }
-      }
-    },
-    "Restores the sample shows, speakers, and playlists in case you deleted something while exploring. Doesn't touch your real remote/local sources.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restores the sample shows, speakers, and playlists in case you deleted something while exploring. Doesn't touch your real remote/local sources."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "恢复示例节目、主讲人和播放列表，以防你在体验时删掉了什么。不会影响你真实的云端/本地存储源。"
           }
         }
       }
@@ -3041,6 +3249,22 @@
         }
       }
     },
+    "Source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来源"
+          }
+        }
+      }
+    },
     "Speaker": {
       "localizations": {
         "en": {
@@ -3249,6 +3473,22 @@
         }
       }
     },
+    "Tags, comma separated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tags, comma separated"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签，用逗号分隔"
+          }
+        }
+      }
+    },
     "Tapping this file plays it directly — if it isn't already synced, it's imported first so future syncs recognize it.": {
       "localizations": {
         "en": {
@@ -3309,22 +3549,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "此版本的应用未针对 iCloud 签名。"
-          }
-        }
-      }
-    },
-    "This puts back the sample shows, speakers, and playlists.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This puts back the sample shows, speakers, and playlists."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这会恢复示例节目、主讲人和播放列表。"
           }
         }
       }
@@ -3505,6 +3729,22 @@
         }
       }
     },
+    "Use this picture": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use this picture"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用这张图片"
+          }
+        }
+      }
+    },
     "Used to transcribe this speaker's episodes. Recognizers have to be told which language to expect — they can't work it out, and the wrong one returns confident nonsense rather than failing.": {
       "localizations": {
         "en": {
@@ -3553,6 +3793,38 @@
         }
       }
     },
+    "WHAT TO DRAW": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WHAT TO DRAW"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成内容"
+          }
+        }
+      }
+    },
+    "WHO OR WHAT TO LOOK FOR": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WHO OR WHAT TO LOOK FOR"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查找对象"
+          }
+        }
+      }
+    },
     "Waiting": {
       "localizations": {
         "en": {
@@ -3597,6 +3869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "整集已转写"
+          }
+        }
+      }
+    },
+    "Why this moment matters": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Why this moment matters"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这一刻为什么重要"
           }
         }
       }

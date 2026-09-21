@@ -1,8 +1,9 @@
 # Remote Section
 
 Embedded in the single-page root (`HomeView`), not a standalone tab. Backed by
-the real `ProviderStore`/`SyncEngine` — `RemoteSectionView` lists actual S3
-`ProviderRecord`s (shared `SettingsViewModel` with the Settings section).
+the real `ProviderStore`/`SyncEngine` — `RemoteSectionView` lists actual bucket
+`ProviderRecord`s, whichever cloud each one is in (shared `SettingsViewModel`
+with the Settings section).
 Tapping a connection goes into `RemoteBrowserView` (no separate detail
 screen), which recursively browses one directory level at a time. Every
 level — root or subfolder — carries the exact same "More" menu and a
@@ -28,11 +29,16 @@ own after that first import.
 
 Multiple connections can point at the same bucket with different key
 prefixes — each row shows a small gray `s3://bucket/prefix` subtitle so
-they're told apart (`ProviderManager.s3DisplayPath`).
+they're told apart (`ProviderManager.displayPath`), in that cloud's own
+scheme (`s3://`, `cos://`, `oss://`, `az://`, `gs://`), with its short name
+(`S3`, `COS`, `OSS`, `Azure`, `GCS`) on the row's tile.
 
 ## Adding a connection
 
-`AddS3ProviderView` validates the bucket/credentials, saves the
+`AddCloudSourceView` — one screen for all five clouds, differing only in what
+`CloudSourceKind` says each calls its credential and whether the region is
+detected (AWS) or picked (COS, OSS) or not addressed at all (Azure, Google).
+It validates the bucket/credentials, saves the
 `ProviderRecord`, then calls `SyncQueueManager.enqueueConnection(providerID:)`
 to queue the whole bucket (recursively) rather than running one opaque
 background sync — so the new source's progress (and any per-file errors)
@@ -83,9 +89,9 @@ connections list; each connection's own "More" menu also links straight to
 ```
 RemoteSectionView.swift (embedded in HomeView, not a tab)
 ┌─────────────────────────────────────────┐
-│ "Remote" header + add button            │──→ inline; opens AddS3ProviderView sheet
+│ "Remote" header + add button            │──→ inline; opens AddCloudSourceView sheet
 │ ┌─────────────────────────────────────┐ │
-│ │ RemoteSourceRow (label + s3:// path) │ │──→ tap → RemoteBrowserView.swift
+│ │ RemoteSourceRow (label + cloud path) │ │──→ tap → RemoteBrowserView.swift
 │ │   long-press → Delete                │ │──→ SettingsViewModel.delete(_:)
 │ └─────────────────────────────────────┘ │
 │ [ Queue (N) ] (pill button)             │──→ tap → SyncQueueView.swift
