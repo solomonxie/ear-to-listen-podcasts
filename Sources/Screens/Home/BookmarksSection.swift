@@ -240,6 +240,12 @@ private struct BookmarkGroupRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                try? BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue).delete(id: bookmark.id)
+                NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
+            }
+        }
     }
 }
 
