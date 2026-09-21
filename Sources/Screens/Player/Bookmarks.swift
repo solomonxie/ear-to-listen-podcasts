@@ -16,6 +16,9 @@ struct BookmarkRow: View {
     var episodeTitle: String?
     let onPlay: () -> Void
     let onEdit: () -> Void
+    /// Long press. The only way to throw a mark away now that the note card is two
+    /// buttons, and deliberately not one of them.
+    var onDelete: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -69,6 +72,11 @@ struct BookmarkRow: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
             .accessibilityLabel("Play from this moment")
+        }
+        .contextMenu {
+            if let onDelete {
+                Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+            }
         }
     }
 }
@@ -141,7 +149,7 @@ struct NotesPane: View {
                 .controlSize(.regular)
             }
         }
-        .sheet(item: $editing, onDismiss: onChange) { bookmark in
+        .fullScreenCover(item: $editing, onDismiss: onChange) { bookmark in
             BookmarkEditorView(bookmark: bookmark, episodeTitle: episodeTitle(bookmark))
         }
     }
@@ -190,7 +198,8 @@ struct NotesPane: View {
             bookmark: bookmark,
             episodeTitle: episodeTitle,
             onPlay: { onPlay(bookmark) },
-            onEdit: { editing = bookmark }
+            onEdit: { editing = bookmark },
+            onDelete: { delete(bookmark) }
         )
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
@@ -227,21 +236,33 @@ struct NotesPane: View {
     private func background(for bookmark: Bookmark) -> Color {
         highlighted == bookmark.id ? Color.accentColor.opacity(0.18) : .clear
     }
+
+    private func delete(_ bookmark: Bookmark) {
+        try? BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue).delete(id: bookmark.id)
+        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
+        onChange()
+    }
 }
 
-/// Everything a bookmark can carry, typed after the fact — a note, tags, and the words
-/// that were being spoken. The transcript line is a copy taken when the mark was made,
-/// so re-transcribing the episode can't rewrite what you marked, and it's editable for
-/// the same reason a transcript line is: the recogniser gets names wrong.
+/// The note on a saved moment, in a card floating over whatever it was opened from.
+///
+/// One box and two buttons. It was a full-page form with sections for tags and for the
+/// transcript line — a screen's worth of chrome around the one field anybody fills in,
+/// and a page that had to be scrolled to reach Save. The moment is identified above the
+/// box by its timestamp and the words that were being spoken, which is all the context a
+/// note needs, and neither is editable because neither is the thing being written.
+///
+/// Deleting is a trash glyph in the card's top corner, as far from Save as the card is
+/// wide — and also on the row's own long-press menu, for throwing one away without
+/// opening it.
 struct BookmarkEditorView: View {
     let bookmark: Bookmark
-    /// Named here because the sheet can be opened from a list spanning many episodes.
+    /// Named here because the card can be opened from a list spanning many episodes.
     var episodeTitle: String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var note: String
-    @State private var tags: String
-    @State private var transcriptText: String
+    @FocusState private var isTyping: Bool
 
     private let store = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -249,64 +270,75 @@ struct BookmarkEditorView: View {
         self.bookmark = bookmark
         self.episodeTitle = episodeTitle
         _note = State(initialValue: bookmark.note ?? "")
-        _tags = State(initialValue: bookmark.tags ?? "")
-        _transcriptText = State(initialValue: bookmark.transcriptText ?? "")
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    LabeledContent("At", value: Scrubber.formatted(bookmark.position))
+        ZStack {
+            // Tapping away is Cancel, as it is for anything that floats.
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+                .onTapGesture { dismiss() }
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Text(Scrubber.formatted(bookmark.position))
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
                     if let episodeTitle {
-                        LabeledContent("Episode", value: episodeTitle)
+                        Text(episodeTitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    LabeledContent("Saved", value: bookmark.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    Spacer(minLength: 8)
+                    // Up in the corner, away from Save. Throwing the mark away is an
+                    // answer to the same question the card asks, but it isn't one of the
+                    // two you reach for every time.
+                    Button(role: .destructive, action: delete) {
+                        Image(systemName: "trash").font(.subheadline)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("Delete this bookmark")
                 }
-                .font(.footnote)
-
-                Section("Note") {
-                    TextField("Why this moment matters", text: $note, axis: .vertical)
-                        .lineLimit(3...)
-                }
-
-                Section {
-                    TextField("Comma separated", text: $tags)
-                } header: {
-                    Text("Tags")
-                } footer: {
-                    Text("Your own words for finding this again — \u{201C}quote\u{201D}, \u{201C}to check\u{201D}, a person's name.")
-                }
-
-                Section {
-                    TextField("What was said here", text: $transcriptText, axis: .vertical)
-                        .lineLimit(2...10)
-                } header: {
-                    Text("Transcript")
-                } footer: {
-                    Text("Copied from the transcript when the mark was made. Correcting it here changes the bookmark only.")
+                if let spoken = bookmark.transcriptText?.nilIfEmpty {
+                    Text(spoken)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(3)
                 }
 
-                Section {
-                    Button("Delete Bookmark", role: .destructive) { delete() }
+                // Grows with what's typed rather than scrolling inside itself: a note is
+                // usually a line and occasionally a paragraph, and both should be visible
+                // whole.
+                TextField("Why this moment matters", text: $note, axis: .vertical)
+                    .lineLimit(1...10)
+                    .focused($isTyping)
+                    .padding(10)
+                    .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 10))
+
+                HStack(spacing: 12) {
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(.bordered)
+                    Spacer(minLength: 0)
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
                 }
+                .buttonBorderShape(.capsule)
+                .font(.subheadline)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("Bookmark")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() } }
-            }
+            .padding(18)
+            .frame(maxWidth: 380)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, 20)
         }
-        .presentationDetents([.medium, .large])
+        .presentationBackground(.clear)
+        .onAppear { isTyping = true }
     }
 
     private func save() {
         var updated = bookmark
         updated.note = note.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        updated.tags = Bookmark.tagString(tags.split(separator: ",").map(String.init))
-        updated.transcriptText = transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         try? store.update(updated)
         NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
         dismiss()
