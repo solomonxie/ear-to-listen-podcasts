@@ -57,13 +57,16 @@ struct FixedPlaylistView: View {
         .listStyle(.plain)
     }
 
-    /// Only downloads have anything to remove — a favourite is unfavourited on the episode
-    /// itself, and there's no local copy here to free up. Spelled out rather than inlined
-    /// as a ternary: `onDelete` takes an optional closure, and the inline form gave the
-    /// type checker more than it could chew.
+    /// Downloads and Listen Later each have something to take off here — a local copy, a
+    /// place in the queue. A favourite is unfavourited on the episode itself. Spelled out
+    /// rather than inlined as a ternary: `onDelete` takes an optional closure, and the
+    /// inline form gave the type checker more than it could chew.
     private var deleteAction: ((IndexSet) -> Void)? {
-        guard kind == .downloaded else { return nil }
-        return { offsets in removeDownloads(at: offsets) }
+        switch kind {
+        case .downloaded: return { offsets in removeDownloads(at: offsets) }
+        case .listenLater: return { offsets in removeFromListenLater(at: offsets) }
+        case .favorites: return nil
+        }
     }
 
     private func row(_ entry: Entry) -> some View {
@@ -85,6 +88,8 @@ struct FixedPlaylistView: View {
     private func load() async {
         defer { isLoading = false }
         switch kind {
+        case .listenLater:
+            entries = ((try? trackStore.listenLater()) ?? []).map { Entry(track: $0) }
         case .favorites:
             entries = ((try? trackStore.favorites()) ?? []).map { Entry(track: $0) }
         case .downloaded:
@@ -102,6 +107,16 @@ struct FixedPlaylistView: View {
             }
             entries = result.sorted { $0.track.title < $1.track.title }
         }
+    }
+
+    /// Takes it out of the queue. The episode, and any downloaded copy of it, stays.
+    private func removeFromListenLater(at offsets: IndexSet) {
+        let removed = offsets.map { entries[$0] }
+        entries.remove(atOffsets: offsets)
+        for entry in removed {
+            try? trackStore.setListenLater(id: entry.track.id, listenLater: false)
+        }
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
     /// Drops the local copy, not the episode.
