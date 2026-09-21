@@ -46,22 +46,28 @@ struct ArtworkTile: View {
         )
     }
 
+    /// Built on a `Color.clear` the overlay fills, so the tile is exactly the size it was
+    /// given. `scaledToFill` on the image alone reports the *filled* size as its own —
+    /// a square picture in a frame that isn't square laid itself out square and drew past
+    /// the frame, over whatever was next to it: the episode title under Now Playing's
+    /// artwork, the neighbouring card on Home's shelf.
     var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                Rectangle()
-                    .fill(LibraryArt.color(for: seed).gradient)
-                    .overlay {
-                        Image(systemName: symbol ?? LibraryArt.symbol(for: seed))
-                            .font(.system(size: symbolSize))
-                            .foregroundStyle(.white)
-                    }
+        Color.clear
+            .overlay {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    Rectangle()
+                        .fill(LibraryArt.color(for: seed).gradient)
+                        .overlay {
+                            Image(systemName: symbol ?? LibraryArt.symbol(for: seed))
+                                .font(.system(size: symbolSize))
+                                .foregroundStyle(.white)
+                        }
+                }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        .task(id: fileName) { load() }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .task(id: fileName) { load() }
     }
 
     private func load() {
