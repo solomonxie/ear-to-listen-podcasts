@@ -24,11 +24,17 @@ struct ArtworkTile: View {
     /// An episode with no picture of its own shows its album's, and takes the album's
     /// seed with it — so a collection without artwork is still one colour down the list
     /// rather than a different generated tile per row.
+    ///
+    /// The album is looked up when the caller hasn't got one to hand (`LibraryNames` holds
+    /// them all in memory, so it costs nothing). Leaving that to each call site is what
+    /// had the player showing one colour for an episode and Home another.
+    @MainActor
     init(track: Track, album: Album? = nil, cornerRadius: CGFloat = 10, symbolSize: CGFloat = 24) {
+        let collection = album ?? LibraryNames.shared.album(track.albumID)
         let ownArtwork = track.artworkFileName?.nilIfEmpty
         self.init(
-            fileName: ownArtwork ?? album?.artworkFileName,
-            seed: ownArtwork == nil ? (album?.id ?? track.id) : track.id,
+            fileName: ownArtwork ?? collection?.artworkFileName?.nilIfEmpty,
+            seed: ownArtwork == nil ? (collection?.id ?? track.id) : track.id,
             cornerRadius: cornerRadius, symbolSize: symbolSize
         )
     }

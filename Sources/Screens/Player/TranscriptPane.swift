@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Lyric-style transcript: the line being spoken is the only bright one, it scrolls
 /// itself, tapping a line plays from there and reads along, and holding a line down
@@ -25,7 +26,15 @@ struct TranscriptPane: View {
     let onFollow: () -> Void
     let onSeek: (TimeInterval) -> Void
 
-    @State private var editing: TranscriptSegment?
+    /// The line whose Copy/Edit buttons are showing — one at a time, revealed by tapping
+    /// it. They live on the row rather than permanently down the edge of the page: they're
+    /// used once or twice an episode, and a target per row sits under the scroll handle.
+    @State private var revealed: Double?
+    /// The line being rewritten, and what it says so far. Editing happens in the row
+    /// itself: the lines around it are the context you're correcting against, and a sheet
+    /// or a page covers exactly those.
+    @State private var editingStart: Double?
+    @State private var editText = ""
     @State private var showingEdits = false
     /// The recogniser waiting on "yes, spend that" — only ever one that charges.
     @State private var confirmingEngine: TranscriptionEngineKind?
@@ -40,9 +49,6 @@ struct TranscriptPane: View {
                 Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
             }
             lines
-        }
-        .sheet(item: $editing) { segment in
-            TranscriptLineEditor(segment: segment) { transcript.applyEdit(to: segment, newText: $0) }
         }
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
@@ -220,6 +226,39 @@ struct TranscriptPane: View {
         isFollowing = true
     }
 
+    /// A tap plays from the line *and* shows what else can be done with it. Tapping the
+    /// same line again puts the buttons away.
+    private func tap(_ segment: TranscriptSegment) {
+        play(from: segment)
+        withAnimation(.easeOut(duration: 0.15)) {
+            revealed = revealed == segment.start ? nil : segment.start
+        }
+    }
+
+    private func copy(_ segment: TranscriptSegment) {
+        UIPasteboard.general.string = segment.text
+        revealed = nil
+    }
+
+    /// Turns the row into a field. **Following goes off**: it would scroll the line being
+    /// typed in out from under the keyboard within seconds. The row is pulled to the top
+    /// of the page for the same reason — that's the half of the screen the keyboard
+    /// leaves.
+    private func edit(_ segment: TranscriptSegment) {
+        isFollowing = false
+        editText = segment.text
+        revealed = nil
+        editingStart = segment.start
+        withAnimation(.easeOut(duration: 0.25)) { scrollProxy.scrollTo(segment.start, anchor: .top) }
+    }
+
+    private func save(_ segment: TranscriptSegment) {
+        let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        editingStart = nil
+        guard !trimmed.isEmpty, trimmed != segment.text else { return }
+        transcript.applyEdit(to: segment, newText: trimmed)
+    }
+
     @ViewBuilder private var lines: some View {
         if transcript.lines.isEmpty {
             ContentUnavailableView {
@@ -237,17 +276,28 @@ struct TranscriptPane: View {
             let spokenStart = transcript.currentLine(at: currentTime)?.start
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(transcript.lines) { segment in
-                    TranscriptLine(
-                        segment: segment,
-                        isCurrent: segment.start == spokenStart,
-                        onPlay: { play(from: segment) },
-                        onEdit: { editing = segment }
-                    )
-                    // Nothing but the text, the highlight and the "still being revised"
-                    // flag can change a row, so a redraw of the list leaves settled rows
-                    // alone instead of rebuilding hundreds of them.
-                    .equatable()
-                    .id(segment.start)
+                    if editingStart == segment.start {
+                        InlinePhraseEditor(
+                            text: $editText,
+                            onSave: { save(segment) },
+                            onCancel: { editingStart = nil }
+                        )
+                        .id(segment.start)
+                    } else {
+                        TranscriptLine(
+                            segment: segment,
+                            isCurrent: segment.start == spokenStart,
+                            isRevealed: revealed == segment.start,
+                            onPlay: { tap(segment) },
+                            onCopy: { copy(segment) },
+                            onEdit: { edit(segment) }
+                        )
+                        // Nothing but the text, the highlight, the "still being revised"
+                        // flag and its own buttons can change a row, so a redraw of the
+                        // list leaves settled rows alone instead of rebuilding hundreds.
+                        .equatable()
+                        .id(segment.start)
+                    }
                 }
             }
             .padding(.horizontal)
@@ -263,85 +313,105 @@ private struct TranscriptLine: View, Equatable {
     /// Closures are left out of the comparison on purpose: they only ever capture this
     /// row's own segment and the pane's state, both of which survive a skipped redraw.
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.segment == rhs.segment && lhs.isCurrent == rhs.isCurrent
+        lhs.segment == rhs.segment && lhs.isCurrent == rhs.isCurrent && lhs.isRevealed == rhs.isRevealed
     }
 
     let segment: TranscriptSegment
     let isCurrent: Bool
+    /// Whether this is the line that was tapped, and so the one showing its buttons.
+    let isRevealed: Bool
     let onPlay: () -> Void
+    let onCopy: () -> Void
     let onEdit: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(segment.text)
-                .font(isCurrent ? .body.weight(.semibold) : .body)
-                .foregroundStyle(isCurrent ? .primary : .secondary)
-            HStack(spacing: 6) {
-                Text(Scrubber.formatted(segment.start))
-                if segment.isEdited {
-                    Label("edited", systemImage: "pencil").labelStyle(.titleAndIcon)
+        // The buttons sit *outside* the tapped area, not inside it. A tap gesture on the
+        // whole row swallows taps meant for a button drawn inside it — which is why Edit
+        // did nothing at all until the row was split in two.
+        HStack(alignment: .bottom, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(segment.text)
+                    .font(isCurrent ? .body.weight(.semibold) : .body)
+                    .foregroundStyle(isCurrent ? .primary : .secondary)
+                HStack(spacing: 6) {
+                    Text(Scrubber.formatted(segment.start))
+                    if segment.isEdited {
+                        Label("edited", systemImage: "pencil").labelStyle(.titleAndIcon)
+                    }
                 }
+                .font(.caption2)
+                .foregroundStyle(isCurrent ? .secondary : .tertiary)
             }
-            .font(.caption2)
-            .foregroundStyle(isCurrent ? .secondary : .tertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            // Tapping a lyric plays from it — that's what the timestamps are for, and it's
+            // the thing you want while listening — and shows what else can be done with it.
+            .onTapGesture(perform: onPlay)
+
+            // On the line's own row rather than in a bar somewhere: what they act on is
+            // the line you just touched, and that's where you're looking.
+            if isRevealed {
+                rowButton("Copy", systemImage: "doc.on.doc", action: onCopy)
+                rowButton("Edit", systemImage: "pencil", action: onEdit)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        // Tapping a lyric plays from it — that's what the timestamps are for, and it's
-        // the thing you want while listening. Correcting is the deliberate act, so it
-        // lives in the long-press menu: a pencil per line was a permanent target down the
-        // edge of the page for something done once or twice an episode, and it sat under
-        // the scroll handle.
-        .onTapGesture(perform: onPlay)
         .contextMenu {
             Button("Play from here", systemImage: "play.fill", action: onPlay)
-            Button("Correct this line", systemImage: "pencil", action: onEdit)
+            Button("Copy", systemImage: "doc.on.doc", action: onCopy)
+            Button("Edit", systemImage: "pencil", action: onEdit)
         }
+    }
+
+    private func rowButton(
+        _ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.caption2.weight(.medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.accentColor)
     }
 }
 
-private struct TranscriptLineEditor: View {
-    let segment: TranscriptSegment
-    let onSave: (String) -> Void
+/// A line turned into a field, in place, with the two answers beside it. No Save bar and
+/// no sheet: the correction is one line long, and the lines above and below it are the
+/// context it's being corrected against.
+private struct InlinePhraseEditor: View {
+    @Binding var text: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
 
-    @State private var text: String
-    @Environment(\.dismiss) private var dismiss
-
-    init(segment: TranscriptSegment, onSave: @escaping (String) -> Void) {
-        self.segment = segment
-        self.onSave = onSave
-        _text = State(initialValue: segment.text)
-    }
+    @FocusState private var isTyping: Bool
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("At \(Scrubber.formatted(segment.start))").sectionRowSecondary()
-                TextEditor(text: $text)
-                    .font(.body)
-                    .frame(minHeight: 140)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                Text("Saved on this device, and used as a hint for the rest of the episode — names and terms you fix once stop coming back wrong.")
-                    .sectionHint()
-                Spacer()
-            }
-            .padding()
-            .background(Color.appBackground.ignoresSafeArea())
-            .navigationTitle("Correct line")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        onSave(text)
-                        dismiss()
-                    }
+        HStack(alignment: .top, spacing: 8) {
+            TextField("Phrase", text: $text, axis: .vertical)
+                .font(.body)
+                .lineLimit(1...6)
+                .focused($isTyping)
+                .padding(8)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.5))
                 }
+
+            Button(action: onSave) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
+            }
+            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button(action: onCancel) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
             }
         }
-        .presentationDetents([.medium, .large])
+        .font(.title3)
+        .buttonStyle(.plain)
+        // The keyboard is the point of tapping Edit — it shouldn't need a second tap.
+        .onAppear { isTyping = true }
     }
 }
 

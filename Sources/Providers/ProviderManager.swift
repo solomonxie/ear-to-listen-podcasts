@@ -46,18 +46,28 @@ final class ProviderManager: @unchecked Sendable {
         try? credentials.getJSON([String: String].self, forKey: Self.settingsKey(providerID: providerID))
     }
 
-    /// Raw settings dict (accessKeyId/secretAccessKey/region/bucket/keyPrefix) — lets the
-    /// "add connection" screen offer an existing S3 connection as a fillable draft.
-    func s3Settings(for record: ProviderRecord) -> [String: String]? {
-        guard record.type == S3Provider.providerType else { return nil }
+    /// Raw settings dict (bucket/keyPrefix plus whatever that cloud calls its credential)
+    /// — lets the "add connection" screen offer an existing connection as a fillable
+    /// draft. `nil` for a source that isn't a bucket at all.
+    func bucketSettings(for record: ProviderRecord) -> [String: String]? {
+        guard record.cloudKind != nil else { return nil }
         return settings(for: record.id)
     }
 
-    /// "s3://bucket/folder/" for display — lets two connections to the same bucket
-    /// (different folders) be told apart in a list.
-    func s3DisplayPath(for record: ProviderRecord) -> String? {
-        guard let settings = s3Settings(for: record), let bucket = settings["bucket"], !bucket.isEmpty else { return nil }
-        let folder = S3FolderPath.normalized(settings["keyPrefix"])
-        return folder.map { "s3://\(bucket)/\($0)" } ?? "s3://\(bucket)"
+    /// Where this connection starts inside its bucket. A live listing gets this from the
+    /// provider itself; the local fallback and the stats work in whole keys, so they need
+    /// it spelled out without one.
+    func rootFolder(for record: ProviderRecord) -> String? {
+        CloudFolderPath.normalized(bucketSettings(for: record)?["keyPrefix"])
+    }
+
+    /// "s3://bucket/folder/" — and `cos://`, `oss://`, `az://`, `gs://`, each cloud's own
+    /// shorthand. Lets two connections into the same bucket (different folders) be told
+    /// apart in a list.
+    func displayPath(for record: ProviderRecord) -> String? {
+        guard let kind = record.cloudKind,
+              let bucket = bucketSettings(for: record)?["bucket"], !bucket.isEmpty else { return nil }
+        let folder = rootFolder(for: record)
+        return folder.map { "\(kind.uriScheme)://\(bucket)/\($0)" } ?? "\(kind.uriScheme)://\(bucket)"
     }
 }

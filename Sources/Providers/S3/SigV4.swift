@@ -19,25 +19,6 @@ enum SigV4 {
         var service = "s3"
     }
 
-    /// Everything that isn't `A-Za-z0-9-_.~` is percent-encoded, uppercase hex. Not
-    /// `addingPercentEncoding`'s idea of "allowed" — that leaves `+`, `=`, `&` and others
-    /// alone, and a signature computed over a differently-escaped string is simply wrong.
-    static func encode(_ text: String, encodeSlash: Bool = true) -> String {
-        let unreserved = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~")
-        var out = ""
-        for byte in Array(text.utf8) {
-            let scalar = Character(UnicodeScalar(byte))
-            if unreserved.contains(scalar) {
-                out.append(scalar)
-            } else if scalar == "/" && !encodeSlash {
-                out.append(scalar)
-            } else {
-                out += String(format: "%%%02X", byte)
-            }
-        }
-        return out
-    }
-
     static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
@@ -74,7 +55,7 @@ enum SigV4 {
         // past its budget and failed the build outright.
         var encoded: [(name: String, value: String)] = []
         for item in items {
-            encoded.append((encode(item.0), encode(item.1)))
+            encoded.append((RFC3986.encode(item.0), RFC3986.encode(item.1)))
         }
         encoded.sort { left, right in
             left.name == right.name ? left.value < right.value : left.name < right.name
@@ -118,7 +99,7 @@ enum SigV4 {
 
         let canonicalRequest = [
             request.httpMethod ?? "GET",
-            encode(url.path.isEmpty ? "/" : url.path, encodeSlash: false),
+            RFC3986.encode(url.path.isEmpty ? "/" : url.path, encodeSlash: false),
             query,
             canonicalHeaders,
             signedHeaders,
@@ -165,7 +146,7 @@ enum SigV4 {
 
         let canonicalRequest = [
             method,
-            encode(url.path.isEmpty ? "/" : url.path, encodeSlash: false),
+            RFC3986.encode(url.path.isEmpty ? "/" : url.path, encodeSlash: false),
             canonicalQueryString,
             "host:\(host)\n",
             "host",

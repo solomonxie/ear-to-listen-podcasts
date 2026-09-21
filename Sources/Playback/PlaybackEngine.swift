@@ -24,6 +24,11 @@ final class PlaybackEngine: ObservableObject {
     private let player = AVQueuePlayer()
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+    /// This app's copy of what Control Center is showing — see `updateNowPlayingInfo`.
+    private var nowPlayingInfo: [String: Any] = [:]
+    private var lastPublishedElapsed: TimeInterval = 0
+    private var lastPublishedDuration: TimeInterval = 0
     private var itemStatusObservation: NSKeyValueObservation?
     private var hasRetriedCurrentTrack = false
     private var lastPersistedProgressAt = Date.distantPast
@@ -197,6 +202,10 @@ final class PlaybackEngine: ObservableObject {
 
     func seek(to time: TimeInterval) {
         player.seek(to: CMTime(seconds: time, preferredTimescale: 600))
+        currentTime = time
+        // Straight away, so a scrub in the app doesn't leave the lock screen sitting on
+        // the old position until the next time observer fires.
+        pushNowPlayingProgress(force: true)
     }
 
     func skipToNext() {
@@ -223,7 +232,7 @@ final class PlaybackEngine: ObservableObject {
                 // the now-playing slider's range (`0...duration`) crashes it.
                 let rawDuration = self.player.currentItem?.duration.seconds ?? 0
                 self.duration = rawDuration.isFinite ? rawDuration : 0
-                self.updateNowPlayingElapsedTime()
+                self.pushNowPlayingProgress()
                 self.persistProgress()
             }
         }
@@ -258,15 +267,39 @@ final class PlaybackEngine: ObservableObject {
         }
     }
 
+    /// Everything Control Center and the lock screen show, built from scratch each time a
+    /// track loads. Held here rather than read back out of `MPNowPlayingInfoCenter`: the
+    /// getter is not a reliable copy of what was set, and the elapsed-time updates that
+    /// read-modify-wrote it were republishing a dictionary with the title and artwork
+    /// missing — which is what left the Control Center card blank a second into playing.
     private func updateNowPlayingInfo(track: Track) {
-        var info: [String: Any] = [MPMediaItemPropertyTitle: track.title]
-        if let url = ImageFileStore.artwork.url(for: track.artworkFileName),
-           let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
-            info[MPMediaItemPropertyArtwork] = Self.nowPlayingArtwork(image)
+        let album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
+        let artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
+
+        nowPlayingInfo = [
+            MPMediaItemPropertyTitle: track.title,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
+            MPNowPlayingInfoPropertyIsLiveStream: false,
+            MPMediaItemPropertyArtwork: Self.nowPlayingArtwork(artworkImage(track: track, album: album)),
+        ]
+        // The speaker and the collection, the same two lines the mini player carries.
+        if let name = artist?.name.nilIfEmpty { nowPlayingInfo[MPMediaItemPropertyArtist] = name }
+        if let name = album?.name.nilIfEmpty { nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = name }
+        pushNowPlayingProgress(force: true)
+    }
+
+    /// What the episode looks like everywhere else, in the order `ArtworkTile` picks it:
+    /// its own picture, then its collection's, then the generated tile — never nothing,
+    /// because Control Center's fallback is a grey square with no hint of what's playing.
+    private func artworkImage(track: Track, album: Album?) -> UIImage {
+        for fileName in [track.artworkFileName?.nilIfEmpty, album?.artworkFileName?.nilIfEmpty] {
+            if let url = ImageFileStore.artwork.url(for: fileName),
+               let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
+                return image
+            }
         }
-        info[MPMediaItemPropertyPlaybackDuration] = duration
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        let hasOwnArtwork = track.artworkFileName?.nilIfEmpty != nil
+        return LibraryArt.image(for: hasOwnArtwork ? track.id : (album?.id ?? track.id))
     }
 
     /// `MPMediaItemArtwork` asks for the picture on a queue of its own, and a closure
@@ -280,17 +313,21 @@ final class PlaybackEngine: ObservableObject {
         MPMediaItemArtwork(boundsSize: image.size) { _ in image }
     }
 
-    private func updateNowPlayingElapsedTime() {
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        info[MPMediaItemPropertyPlaybackDuration] = duration
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    /// Where the playhead is. The system runs the clock itself from the rate, so this
+    /// goes out when the truth changes — a load, a pause, a seek, a duration that has
+    /// finally resolved — and not with every tick of the half-second time observer.
+    private func pushNowPlayingProgress(force: Bool = false) {
+        let elapsed = currentTime.isFinite ? currentTime : 0
+        guard force || abs(elapsed - lastPublishedElapsed) > 4 || duration != lastPublishedDuration else { return }
+        lastPublishedElapsed = elapsed
+        lastPublishedDuration = duration
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
+        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
 
     private func updateNowPlayingPlaybackState() {
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        pushNowPlayingProgress(force: true)
     }
 }

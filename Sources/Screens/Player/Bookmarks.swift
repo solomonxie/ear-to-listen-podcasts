@@ -7,6 +7,8 @@ struct BookmarkRow: View {
     let bookmark: Bookmark
     /// Shown where the list spans more than one episode.
     var episodeTitle: String?
+    /// Whether its note is unfolded below — the pencil says so rather than a second glyph.
+    var isOpen = false
     let onPlay: () -> Void
     let onEdit: () -> Void
 
@@ -54,15 +56,188 @@ struct BookmarkRow: View {
             .buttonStyle(.plain)
 
             Button(action: onEdit) {
-                Image(systemName: "square.and.pencil")
+                Image(systemName: isOpen ? "chevron.down" : "square.and.pencil")
                     .font(.footnote)
                     .padding(4)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(isOpen ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
             .accessibilityLabel("Edit this bookmark")
         }
+    }
+}
+
+/// The notes made inside an episode — which is what a bookmark becomes once something is
+/// typed into it. Used on the episode page for one episode's marks, and on album and
+/// speaker pages for every mark made across theirs.
+///
+/// A mark with nothing typed in it is still a note: the timestamp is the note. Marking is
+/// one tap here and asks nothing — a dialog over the thing you're listening to is how a
+/// mark gets made too late — and the note is written afterwards, in the row itself.
+struct NotesPane: View {
+    let bookmarks: [Bookmark]
+    /// Shown per row where the list spans more than one episode.
+    var episodeTitle: (Bookmark) -> String? = { _ in nil }
+    /// The mark just made, lit until the eye has found it.
+    var highlighted: String?
+    /// Marking the moment being played. Absent where there is nothing playing to mark —
+    /// an album or speaker page collects marks, it doesn't make them.
+    var onAdd: (() -> Void)?
+    let onPlay: (Bookmark) -> Void
+    /// Saved, or deleted — the owner reloads.
+    let onChange: () -> Void
+
+    @State private var expanded: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("NOTES").sectionHeading()
+                Spacer()
+                if !bookmarks.isEmpty {
+                    Text("\(bookmarks.count)").font(.caption).foregroundStyle(.secondary)
+                }
+                if let onAdd {
+                    Button(action: onAdd) {
+                        Label("Add bookmark", systemImage: "bookmark.fill").font(.caption.weight(.medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+                }
+            }
+            if bookmarks.isEmpty {
+                Text("Nothing marked yet. Add a bookmark for the moment you're hearing; the note goes on it afterwards.")
+                    .sectionHint()
+            } else {
+                ForEach(bookmarks) { bookmark in
+                    VStack(alignment: .leading, spacing: 10) {
+                        BookmarkRow(
+                            bookmark: bookmark,
+                            episodeTitle: episodeTitle(bookmark),
+                            isOpen: expanded == bookmark.id,
+                            onPlay: { onPlay(bookmark) },
+                            onEdit: { toggle(bookmark) }
+                        )
+                        if expanded == bookmark.id {
+                            BookmarkNoteEditor(
+                                bookmark: bookmark,
+                                onClose: { expanded = nil },
+                                onChange: onChange
+                            )
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10)
+                    .background(background(for: bookmark), in: RoundedRectangle(cornerRadius: 10))
+                    .id(bookmark.id)
+                }
+            }
+        }
+    }
+
+    private func background(for bookmark: Bookmark) -> Color {
+        if expanded == bookmark.id { return Color.accentColor.opacity(0.10) }
+        return highlighted == bookmark.id ? Color.accentColor.opacity(0.18) : .clear
+    }
+
+    private func toggle(_ bookmark: Bookmark) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            expanded = expanded == bookmark.id ? nil : bookmark.id
+        }
+    }
+}
+
+/// A mark's note, written in the row it belongs to. Under it, what the transcript says at
+/// that second — read-only, and read fresh rather than from the copy taken when the mark
+/// was made, so it keeps up with corrections and with a transcript that only arrived
+/// afterwards.
+private struct BookmarkNoteEditor: View {
+    let bookmark: Bookmark
+    let onClose: () -> Void
+    let onChange: () -> Void
+
+    @State private var note: String
+    @State private var tags: String
+    @State private var spoken: String?
+    @FocusState private var isTyping: Bool
+
+    private let store = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
+
+    init(bookmark: Bookmark, onClose: @escaping () -> Void, onChange: @escaping () -> Void) {
+        self.bookmark = bookmark
+        self.onClose = onClose
+        self.onChange = onChange
+        _note = State(initialValue: bookmark.note ?? "")
+        _tags = State(initialValue: bookmark.tags ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(spacing: 8) {
+                    TextField("Why this moment matters", text: $note, axis: .vertical)
+                        .lineLimit(1...6)
+                        .focused($isTyping)
+                    TextField("Tags, comma separated", text: $tags)
+                        .font(.footnote)
+                }
+                .padding(8)
+                .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 8))
+                .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.35)) }
+
+                Button(action: save) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
+                }
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+            }
+            .font(.title3)
+            .buttonStyle(.plain)
+
+            if let spoken, !spoken.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("AT THIS MOMENT").sectionHeading()
+                    Text(spoken).font(.footnote).foregroundStyle(.tertiary)
+                }
+            }
+
+            Button("Delete bookmark", role: .destructive, action: delete)
+                .font(.caption)
+        }
+        .onAppear {
+            isTyping = true
+            spoken = Self.transcriptLine(for: bookmark)
+        }
+    }
+
+    /// What the stored transcript says at the mark's second, if anything does yet.
+    private static func transcriptLine(for bookmark: Bookmark) -> String? {
+        let segments = (try? TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
+            .find(trackID: bookmark.trackID)) ?? []
+        let covering = segments.last {
+            !$0.text.isEmpty && $0.start <= bookmark.position + 0.5
+        }
+        return covering?.text ?? bookmark.transcriptText
+    }
+
+    private func save() {
+        var updated = bookmark
+        updated.note = note.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        updated.tags = Bookmark.tagString(tags.split(separator: ",").map(String.init))
+        try? store.update(updated)
+        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
+        onChange()
+        onClose()
+    }
+
+    private func delete() {
+        try? store.delete(id: bookmark.id)
+        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
+        onChange()
+        onClose()
     }
 }
 

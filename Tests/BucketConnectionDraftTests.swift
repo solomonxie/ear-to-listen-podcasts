@@ -1,32 +1,32 @@
 import XCTest
 @testable import EarToListen
 
-final class S3ConnectionDraftTests: XCTestCase {
+final class BucketConnectionDraftTests: XCTestCase {
     /// A folder is the only thing a connection can point at: a bare `pod` would also match
     /// `podcasts-old/`, so the trailing slash is added rather than asked for again.
     func testFolderPathsAlwaysEndInASlash() {
-        XCTAssertEqual(S3FolderPath.normalized("podcasts"), "podcasts/")
-        XCTAssertEqual(S3FolderPath.normalized("podcasts/"), "podcasts/")
-        XCTAssertEqual(S3FolderPath.normalized("/podcasts/2019"), "podcasts/2019/")
-        XCTAssertEqual(S3FolderPath.normalized("  podcasts//2019//  "), "podcasts/2019/")
+        XCTAssertEqual(CloudFolderPath.normalized("podcasts"), "podcasts/")
+        XCTAssertEqual(CloudFolderPath.normalized("podcasts/"), "podcasts/")
+        XCTAssertEqual(CloudFolderPath.normalized("/podcasts/2019"), "podcasts/2019/")
+        XCTAssertEqual(CloudFolderPath.normalized("  podcasts//2019//  "), "podcasts/2019/")
     }
 
     /// Empty means the whole bucket, not a folder called "".
     func testAnEmptyFolderPathIsNil() {
-        XCTAssertNil(S3FolderPath.normalized(nil))
-        XCTAssertNil(S3FolderPath.normalized(""))
-        XCTAssertNil(S3FolderPath.normalized("   "))
-        XCTAssertNil(S3FolderPath.normalized("/"))
+        XCTAssertNil(CloudFolderPath.normalized(nil))
+        XCTAssertNil(CloudFolderPath.normalized(""))
+        XCTAssertNil(CloudFolderPath.normalized("   "))
+        XCTAssertNil(CloudFolderPath.normalized("/"))
     }
 
     func testAPastedFolderIsNormalizedAsItLands() {
-        let draft = S3ConnectionDraft.parse("bucket: my-archive\nfolder: podcasts")
+        let draft = BucketConnectionDraft.parse("bucket: my-archive\nfolder: podcasts")
 
         XCTAssertEqual(draft.keyPrefix, "podcasts/")
     }
 
     func testParsesTheDocumentedBlock() {
-        let draft = S3ConnectionDraft.parse("""
+        let draft = BucketConnectionDraft.parse("""
             bucket: my-archive
             prefix: podcasts/
             access_key_id: AKIAEXAMPLE
@@ -42,7 +42,7 @@ final class S3ConnectionDraftTests: XCTestCase {
     /// An AWS CLI credentials file pasted as-is: `=`, a profile header, and the
     /// `aws_`-prefixed key names.
     func testParsesAnAwsCredentialsFileStanza() {
-        let draft = S3ConnectionDraft.parse("""
+        let draft = BucketConnectionDraft.parse("""
             [default]
             aws_access_key_id = AKIAEXAMPLE
             aws_secret_access_key = secret+value/with=padding
@@ -53,7 +53,7 @@ final class S3ConnectionDraftTests: XCTestCase {
     }
 
     func testKeySpellingAndQuotesDoNotMatter() {
-        let draft = S3ConnectionDraft.parse("""
+        let draft = BucketConnectionDraft.parse("""
             # my bucket
             Bucket Name: "my-archive"
             - Access Key ID: 'AKIAEXAMPLE',
@@ -65,6 +65,6 @@ final class S3ConnectionDraftTests: XCTestCase {
     }
 
     func testTextWithNothingRecognisableParsesToNothing() {
-        XCTAssertTrue(S3ConnectionDraft.parse("just some notes\nno pairs here").isEmpty)
+        XCTAssertTrue(BucketConnectionDraft.parse("just some notes\nno pairs here").isEmpty)
     }
 }

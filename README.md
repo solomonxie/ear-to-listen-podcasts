@@ -1,7 +1,8 @@
 # Ear to Listen Podcasts
 
 Podcast player for iPhone that streams episodes from your own cloud storage
-(S3 primary; iCloud/Drive/Dropbox/OneDrive/Aliyun OSS/Tencent COS backlogged),
+(S3, Tencent COS, Alibaba OSS, Azure Blob, Google Cloud Storage;
+iCloud/Drive/Dropbox/OneDrive backlogged),
 builds local searchable metadata (shows, speakers, playlists, topics,
 transcripts) in SQLite, and syncs that metadata back to remote storage. No
 Spotify/Apple Podcasts lock-in.
@@ -10,10 +11,9 @@ Spotify/Apple Podcasts lock-in.
 
 No tab bar — one scrollable page (`HomeView`): search up top, then Home/Library
 shelves, then Remote, then Settings. A fresh install starts empty — nothing
-appears in the library that the user didn't put there — with an optional sample
-library (`DemoDataSeeder`, bundled clips under `Resources/DemoAudio/`) loadable
-from Settings for looking around first. Everything is wired
-to the real SQLite + Keychain layer (`Sources/DB/`, `Sources/Providers/`): adding/removing S3 and
+appears in the library that the user didn't put there. A sample library for manual
+testing lives in `DemoData/`, outside the app target and not shipped. Everything is wired
+to the real SQLite + Keychain layer (`Sources/DB/`, `Sources/Providers/`): adding/removing cloud and
 local sources, per-source sync frequency + manual "Sync Now", and a foreground
 `SyncScheduler` that auto-syncs due sources while the app is active. See
 `docs/design/` for the full design doc and phased implementation plan.
@@ -22,7 +22,7 @@ local sources, per-source sync frequency + manual "Sync Now", and a foreground
 
 ```
 EarToListenApp.swift:init()
-  registers CloudProviders (S3, Local) + SpotifyImportSource
+  registers CloudProviders (S3/COS/OSS, Azure, GCS, Local) + SpotifyImportSource
         │
         ▼
 ContentView.swift
@@ -61,15 +61,29 @@ Each window is decoded straight out of the source with `AVAssetReader` and hande
 as a 16 kHz mono WAV, reading byte ranges in place: no full download first, and no
 container the recognizer might refuse.
 
+Tapping a line plays from it and shows what else can be done with it — `⧉ Copy` and
+`✎ Edit` on the line's own row (a long-press offers the same). `✎ Edit` turns the row into
+a focused field with a ✓ and a ✕ beside it: the correction happens in place, between the
+lines it's being corrected against, with follow-along switched off so the line can't scroll
+out from under the keyboard.
+
+Search covers everything the library holds in words — titles, file paths, episode and
+collection notes, speaker bios and profiles, topics, playlists, and the notes typed onto
+bookmarks (`LibrarySearch`, one folded index) — and then what was actually *said*
+(`TranscriptSearch`, a capped `instr` scan over the stored transcripts). Speech comes last
+in the results: names are what you search when you know what you're after, speech is what
+you search when you don't. A transcript hit shows the line with its neighbours and plays
+the episode from that second.
+
 Home's shelves/search, Remote and Settings all read the real DB/Provider layers
-(`Sources/DB/README.md`, `Sources/Providers/README.md`) — sample content flows
-through the same tables, so it appears exactly as a synced source would.
+(`Sources/DB/README.md`, `Sources/Providers/README.md`) — every shelf is fed by
+synced content, so there's nothing on screen the listener didn't put there.
 
 The app's own data — playlists, hand edits and their images, transcripts and
 corrections — is backed up automatically to either or both of two places
 (`Sources/Backup/README.md`): the listener's own iCloud Drive (one switch in
 Settings, nothing to set up, visible in Files under "Ear to Listen") and the
-connected S3 bucket (a switch on that connection's row). Episode audio is never
+connected bucket (a switch on that connection's row). Episode audio is never
 uploaded. Deleting and reinstalling the app puts the data back by itself on
 first launch, and the parts that need the episode files re-link themselves as
 the next sync fetches them.

@@ -25,6 +25,6 @@ struct Artist: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// BCP-47 identifier for the language this speaker speaks, e.g. `zh-CN`. Drives which
     /// recognizer transcribes their episodes; nil falls back to the phone's language.
     var language: String?
-    /// Seeded by `DemoDataSeeder`, wiped/reseeded together rather than treated as real data.
+    /// Only ever set by the repo-only sample seeder (`DemoData/`); nothing shipped writes it.
     var isDemo: Bool = false
 }

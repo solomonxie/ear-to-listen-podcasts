@@ -8,7 +8,7 @@ enum BackupError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .noActiveRemoteProvider: return "Add and activate a remote (S3) source first."
+        case .noActiveRemoteProvider: return "Add and activate a cloud source first."
         case .noBackupFound: return "No backup found in that remote source."
         case .unsupportedVersion(let version): return "This backup (v\(version)) is newer than this app supports."
         }
@@ -35,7 +35,7 @@ enum BackupApplyScope {
 }
 
 /// Builds/applies `LibrarySnapshot`s against the local DB, and ships them to/from
-/// whichever remote (S3) provider is active — see `Sources/Backup/README.md`.
+/// whichever cloud provider is active — see `Sources/Backup/README.md`.
 struct BackupService {
     let dbQueue: DatabaseQueue
     private var playlistStore: PlaylistStore { PlaylistStore(dbQueue: dbQueue) }
@@ -342,21 +342,24 @@ struct BackupService {
     }
 
     func upload(_ archive: Data) async throws {
-        try await activeS3Provider().uploadBackup(archive)
+        try await activeRemoteProvider().uploadBackup(archive)
     }
 
     /// The archive as the bucket holds it. Nothing applies it on its own — restoring is
     /// `FirstRunRestore`'s call, and it wants the bytes so it can keep them for
     /// `PendingRestore`.
     func downloadRemoteArchive() async throws -> Data? {
-        try await activeS3Provider().downloadBackup()
+        try await activeRemoteProvider().downloadBackup()
     }
 
-    private func activeS3Provider() throws -> S3Provider {
-        guard let record = try providerStore.active().first(where: { $0.type == S3Provider.providerType }),
-              let provider = try ProviderManager.shared.provider(for: record) as? S3Provider else {
-            throw BackupError.noActiveRemoteProvider
+    /// The first connected bucket that takes writes, whichever cloud it's in — the
+    /// archive is written through the `CloudProvider` protocol, so S3, COS, OSS, Azure and
+    /// Google are all equally somewhere to put it.
+    private func activeRemoteProvider() throws -> CloudProvider {
+        for record in try providerStore.active() where record.cloudKind != nil {
+            guard let provider = try? ProviderManager.shared.provider(for: record), provider.isWritable else { continue }
+            return provider
         }
-        return provider
+        throw BackupError.noActiveRemoteProvider
     }
 }

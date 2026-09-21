@@ -355,7 +355,7 @@ struct RemoteBrowserView: View {
             // far more often than an empty folder, and silently falling back to local rows
             // made the two look identical.
             errorMessage = NetworkMonitor.shared.isConnected
-                ? "Couldn't list this folder: \(describeAWSError(error))"
+                ? "Couldn't list this folder: \(describeCloudError(error))"
                 : "You're offline — showing what's already synced."
         }
         loadSynced()
@@ -382,12 +382,7 @@ struct RemoteBrowserView: View {
         stats = try? trackStore.stats(forProvider: record.id, pathPrefix: folder ?? rootFolder)
     }
 
-    /// Where this connection starts inside its bucket. The live listing gets this from the
-    /// provider itself; the local fallback and the stats work in whole keys, so they need
-    /// it spelled out.
-    private var rootFolder: String? {
-        S3FolderPath.normalized(ProviderManager.shared.s3Settings(for: record)?["keyPrefix"])
-    }
+    private var rootFolder: String? { ProviderManager.shared.rootFolder(for: record) }
 
     private func syncNow() async {
         isSyncing = true
@@ -399,7 +394,7 @@ struct RemoteBrowserView: View {
             await load()
             loadStats()
         } catch {
-            syncMessage = describeAWSError(error)
+            syncMessage = describeCloudError(error)
         }
     }
 

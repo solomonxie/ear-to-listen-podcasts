@@ -33,8 +33,6 @@ opens the long one), never a paragraph at the bottom.
  Read where they sit, never copied.
  Files                                                  ─●   ← existing local
  Found 42 files.                                               sources only
- [ Load sample library ]  ( Remove )!    ← Reset / Remove once loaded
- A few sample shows and clips to look around with.
  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 72pt clear of the docked mini player ▁▁▁▁
 ```
 
@@ -158,18 +156,4 @@ is this spending money on, why did the bill jump, is this key failing?
 ## Confirmations
 
 ```
- ┌───────────────────────────────────────────┐
- │ Reset Sample Library?                     │
- │ This puts back the sample shows, speakers,│
- │ and playlists.                            │
- │            ( Cancel )     [ Reset ]!      │
- └───────────────────────────────────────────┘
- ┌───────────────────────────────────────────┐
- │ Remove Sample Library?                    │
- │ Clears the sample shows, speakers, albums │
- │ and playlists. Your own synced episodes   │
- │ and sources stay. You can load the samples│
- │ again later.                              │
- │            ( Cancel )     [ Remove ]!     │
- └───────────────────────────────────────────┘
 ```

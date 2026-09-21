@@ -6,7 +6,10 @@ struct RealPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingUpNext = false
     @State private var showingAddToPlaylist = false
-    @State private var bookmarkCount = 0
+    @State private var bookmarks: [Bookmark] = []
+    /// The mark just made, lit for a moment so the jump to Notes lands on something the
+    /// eye can find.
+    @State private var highlightedBookmark: String?
     /// How far the page has been pulled past its own top, so it can shrink under the
     /// finger on the way out instead of just vanishing at the threshold.
     @State private var pullDown: CGFloat = 0
@@ -29,6 +32,7 @@ struct RealPlayerView: View {
     private static let scrollSpace = "player.scroll"
     private static let topAnchor = "player.top"
     private static let transcriptAnchor = "player.transcript"
+    private static let notesAnchor = "player.notes"
     /// How far sideways counts as "the next one" rather than a scroll that wandered.
     private static let swipeToChapter: CGFloat = 80
     /// How far past the top the page has to come before it goes away. Read off the scroll
@@ -104,10 +108,10 @@ struct RealPlayerView: View {
                             .task(id: track.id) {
                                 artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
                                 album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
-                                refreshBookmarkCount(track)
+                                refreshBookmarks(track)
                             }
                             .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
-                                refreshBookmarkCount(track)
+                                refreshBookmarks(track)
                             }
                     } else {
                         ContentUnavailableView("Nothing playing", systemImage: "mic.slash")
@@ -206,13 +210,23 @@ struct RealPlayerView: View {
                 .gesture(putDownDrag)
                 Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
                     .padding(.horizontal)
-                transport(for: track)
+                transport(for: track, proxy: proxy)
                     .background { transportVisibilityProbe }
                 queueControls(proxy)
                 if let lastError = engine.lastError {
                     Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
                 }
                 EpisodeDetailsPane(playingTrack: track)
+
+                NotesPane(
+                    bookmarks: bookmarks,
+                    highlighted: highlightedBookmark,
+                    onAdd: { addBookmark(to: track, proxy: proxy) },
+                    onPlay: { engine.seek(to: $0.position) },
+                    onChange: { refreshBookmarks(track) }
+                )
+                .padding(.horizontal)
+                .id(Self.notesAnchor)
 
                 Divider()
                     .padding(.horizontal)
@@ -290,10 +304,11 @@ struct RealPlayerView: View {
         .padding(.horizontal)
     }
 
-    /// Favourite and bookmark flank the transport rather than sitting in a menu: both are
-    /// things you do *because of what you're hearing right now*, and a mark you have to go
-    /// looking for is a mark made too late.
-    private func transport(for track: Track) -> some View {
+    /// Favourite and "add to a playlist" flank the transport: both are things you do
+    /// *about the episode you're hearing*, and both are one tap with nothing to read.
+    /// Bookmarking moved out of this row — see `queueControls` — because marking a moment
+    /// is the start of writing a note, and the note lives further down the page.
+    private func transport(for track: Track, proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 28) {
             Button {
                 toggleFavorite(track)
@@ -312,22 +327,11 @@ struct RealPlayerView: View {
             Button { engine.skipToNext() } label: { Image(systemName: "forward.fill").font(.title) }
 
             Button {
-                addBookmark(to: track)
+                showingAddToPlaylist = true
             } label: {
-                Image(systemName: bookmarkCount > 0 ? "bookmark.fill" : "bookmark")
-                    .font(.title3)
-                    .overlay(alignment: .topTrailing) {
-                        if bookmarkCount > 0 {
-                            Text("\(bookmarkCount, format: .number.grouping(.never))")
-                                .font(.system(size: 9, weight: .bold))
-                                .padding(3)
-                                .background(Color.accentColor, in: Circle())
-                                .foregroundStyle(.white)
-                                .offset(x: 10, y: -8)
-                        }
-                    }
+                Image(systemName: "text.badge.plus").font(.title3)
             }
-            .accessibilityLabel("Bookmark this moment")
+            .accessibilityLabel("Add to a playlist")
         }
     }
 
@@ -352,10 +356,13 @@ struct RealPlayerView: View {
                 Label("Up Next", systemImage: "list.bullet")
                     .pillLabel()
             }
-            Button { showingAddToPlaylist = true } label: {
-                // "Playlist" alone, with the ⊕ carrying the "add": the long form wrapped
-                // onto two lines and left the middle pill taller than the two beside it.
-                Label("Playlist", systemImage: "text.badge.plus")
+            // Takes the page to the marks rather than making one: the button that
+            // *creates* a mark lives in that section, where what it made is visible. A
+            // create button up here made marks nobody could find.
+            Button {
+                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.notesAnchor, anchor: .top) }
+            } label: {
+                Label("Bookmarks", systemImage: bookmarks.isEmpty ? "bookmark" : "bookmark.fill")
                     .pillLabel()
             }
             // The details card sits between the transport and the text, so on an episode
@@ -381,19 +388,33 @@ struct RealPlayerView: View {
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
-    private func addBookmark(to track: Track) {
+    /// Saves the mark and then shows it: the page goes to Notes, the new row lights up,
+    /// and its pencil is the way in to saying why. Nothing is asked for at the moment of
+    /// marking — a dialog over the thing you're listening to is how a mark gets made too
+    /// late.
+    private func addBookmark(to track: Track, proxy: ScrollViewProxy) {
         // The line being spoken travels with the mark: what was said there is the reason
         // it was marked, and a re-transcribe shouldn't be able to rewrite that.
         let spoken = transcript.currentLine(at: engine.currentTime)?.text
-        try? bookmarkStore.add(
+        guard let saved = try? bookmarkStore.add(
             trackID: track.id, positionMs: Int(engine.currentTime * 1000), transcriptText: spoken
-        )
+        ) else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
+
+        refreshBookmarks(track)
+        isFollowingTranscript = false
+        highlightedBookmark = saved.id
+        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(saved.id, anchor: .center) }
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard highlightedBookmark == saved.id else { return }
+            withAnimation(.easeInOut(duration: 0.4)) { highlightedBookmark = nil }
+        }
     }
 
-    private func refreshBookmarkCount(_ track: Track) {
-        bookmarkCount = ((try? bookmarkStore.all(forTrack: track.id)) ?? []).count
+    private func refreshBookmarks(_ track: Track) {
+        bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
     }
 
     /// Watches where the big transport has got to, so the docked bar can stand in for it
@@ -582,6 +603,12 @@ struct NowPlayingBarContent: View {
     let onTogglePlay: () -> Void
     let onTapBar: () -> Void
 
+    /// Bigger than the `.title2` it was: it's the one control on the bar and the one
+    /// reached for in a hurry — often without looking — so it's sized for that rather
+    /// than to match the text beside it. `@ScaledMetric` keeps it growing with Dynamic
+    /// Type the way a text style would.
+    @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 26
+
     var body: some View {
         if let track {
             HStack(spacing: 12) {
@@ -613,14 +640,18 @@ struct NowPlayingBarContent: View {
 
                 Button(action: onTogglePlay) {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title2)
-                        .frame(width: 48, height: 48)
+                        .font(.system(size: glyphSize))
+                        .frame(width: 52, height: 52)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            // Less under than over: the home indicator already holds a band of clear
+            // space below the bar, and 8pt of padding on top of it read as the bar
+            // floating off the bottom of the screen.
+            .padding(.top, 8)
+            .padding(.bottom, 2)
         }
     }
 }

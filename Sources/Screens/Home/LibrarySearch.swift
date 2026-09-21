@@ -26,6 +26,8 @@ struct LibrarySearch {
         /// Title *and* path: with a folder of files sharing one embedded title tag, the
         /// filename is often the only thing the listener can search for.
         var tracks: [(item: Track, haystack: String)] = []
+        /// The marks, by what was typed into them and what was said at them.
+        var notes: [(item: Bookmark, haystack: String)] = []
     }
 
     struct Results: Sendable {
@@ -34,12 +36,13 @@ struct LibrarySearch {
         var playlists: [Playlist] = []
         var topics: [Topic] = []
         var tracks: [Track] = []
+        var notes: [Bookmark] = []
         /// How many episodes matched before `episodeLimit` cut the list down.
         var totalTrackMatches = 0
 
         var isEmpty: Bool {
-            speakers.isEmpty && albums.isEmpty
-                && playlists.isEmpty && topics.isEmpty && tracks.isEmpty
+            speakers.isEmpty && albums.isEmpty && playlists.isEmpty
+                && topics.isEmpty && tracks.isEmpty && notes.isEmpty
         }
     }
 
@@ -50,17 +53,35 @@ struct LibrarySearch {
 
     static func fold(_ text: String) -> String { text.lowercased() }
 
+    /// Everything the library holds in words, folded once.
+    ///
+    /// Not just names: a speaker's bio, a collection's notes, what someone typed on a
+    /// bookmark. The listener wrote all of it *here*, and a search box that can't find
+    /// what you yourself typed into the app is the most annoying kind of search box.
+    /// Speech is the one thing not in here — transcripts are megabytes and live in the
+    /// database, so `TranscriptSearch` goes to them instead.
     static func index(
-        speakers: [Artist], albums: [Album],
-        playlists: [Playlist], topics: [Topic], tracks: [Track]
+        speakers: [Artist], albums: [Album], playlists: [Playlist], topics: [Topic],
+        tracks: [Track], notes: [Bookmark] = []
     ) -> Index {
         Index(
-            speakers: speakers.map { ($0, fold($0.name)) },
-            albums: albums.map { ($0, fold($0.name)) },
+            speakers: speakers.map {
+                ($0, fold(joined($0.name, $0.bio, $0.knownFor, $0.background, $0.profile, $0.link)))
+            },
+            albums: albums.map {
+                ($0, fold(joined($0.name, $0.notes, $0.profile, $0.year.map(String.init))))
+            },
             playlists: playlists.map { ($0, fold($0.name)) },
             topics: topics.map { ($0, fold($0.name)) },
-            tracks: tracks.map { ($0, fold("\($0.title)\n\($0.filePath)")) }
+            tracks: tracks.map {
+                ($0, fold(joined($0.title, $0.filePath, $0.notes, $0.year.map(String.init))))
+            },
+            notes: notes.map { ($0, fold(joined($0.note, $0.tags, $0.transcriptText))) }
         )
+    }
+
+    private static func joined(_ parts: String?...) -> String {
+        parts.compactMap { $0?.nilIfEmpty }.joined(separator: "\n")
     }
 
     /// Off the main actor, at user-initiated priority — the caller awaits it, so a slow
@@ -87,6 +108,7 @@ struct LibrarySearch {
         let tracks = matches(index.tracks)
         results.totalTrackMatches = tracks.count
         results.tracks = Array(tracks.prefix(episodeLimit))
+        results.notes = Array(matches(index.notes).prefix(episodeLimit))
         return results
     }
 }

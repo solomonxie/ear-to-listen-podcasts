@@ -1,25 +1,31 @@
 import Foundation
 
-/// The four fields of an S3 connection — bucket, folder path, key, secret — read out of a
-/// pasted block of text.
+/// The fields of a bucket connection — bucket, folder path, key, secret, region — read
+/// out of a pasted block of text.
 ///
 /// Credentials arrive as a lump — a note, a chat message, a chunk of an AWS CLI
 /// credentials file — and retyping a 40-character secret on a phone keyboard is where
 /// this goes wrong. So the parser is deliberately forgiving rather than strict about one
 /// format: `:` or `=`, any capitalisation, and keys written as `access_key_id`,
 /// `accessKeyId`, `Access Key ID` or `aws_access_key_id` all land in the same place.
-struct S3ConnectionDraft: Equatable {
+///
+/// Every cloud's own spelling of the same two halves lands there too — Tencent's
+/// `SecretId`/`SecretKey`, Alibaba's `AccessKey Secret`, Azure's `AccountName`/`AccountKey`
+/// — because which cloud this text came from is already the picker's answer, not
+/// something to make the listener restate in the right vocabulary.
+struct BucketConnectionDraft: Equatable {
     var bucket: String?
     var keyPrefix: String?
     var accessKeyId: String?
     var secretAccessKey: String?
+    var region: String?
 
     var isEmpty: Bool {
-        bucket == nil && keyPrefix == nil && accessKeyId == nil && secretAccessKey == nil
+        bucket == nil && keyPrefix == nil && accessKeyId == nil && secretAccessKey == nil && region == nil
     }
 
-    static func parse(_ text: String) -> S3ConnectionDraft {
-        var draft = S3ConnectionDraft()
+    static func parse(_ text: String) -> BucketConnectionDraft {
+        var draft = BucketConnectionDraft()
         for rawLine in text.split(whereSeparator: \.isNewline) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("[") else { continue }
@@ -29,13 +35,16 @@ struct S3ConnectionDraft: Equatable {
             guard !value.isEmpty else { continue }
 
             switch normalizedKey(String(line[..<separator])) {
-            case "bucket", "bucketname", "s3bucket": draft.bucket = value
+            case "bucket", "bucketname", "s3bucket", "container", "containername": draft.bucket = value
             // Normalized on the way in, so a pasted `podcasts` fills the field as
             // `podcasts/` — the only form that addresses a folder rather than a name
             // fragment.
-            case "prefix", "keyprefix", "folder", "path", "folderpath": draft.keyPrefix = S3FolderPath.normalized(value)
-            case "accesskeyid", "awsaccesskeyid", "accesskey": draft.accessKeyId = value
-            case "secretaccesskey", "awssecretaccesskey", "secretkey": draft.secretAccessKey = value
+            case "prefix", "keyprefix", "folder", "path", "folderpath": draft.keyPrefix = CloudFolderPath.normalized(value)
+            case "accesskeyid", "awsaccesskeyid", "accesskey", "secretid", "accountname":
+                draft.accessKeyId = value
+            case "secretaccesskey", "awssecretaccesskey", "secretkey", "accesskeysecret", "accountkey":
+                draft.secretAccessKey = value
+            case "region", "awsregion", "regionid": draft.region = value
             default: break
             }
         }

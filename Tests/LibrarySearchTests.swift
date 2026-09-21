@@ -9,10 +9,53 @@ final class LibrarySearchTests: XCTestCase {
         )
     }
 
-    private func index(tracks: [Track] = [], albums: [Album] = []) -> LibrarySearch.Index {
+    private func index(
+        tracks: [Track] = [], albums: [Album] = [], speakers: [Artist] = [], notes: [Bookmark] = []
+    ) -> LibrarySearch.Index {
         LibrarySearch.index(
-            speakers: [], albums: albums, playlists: [], topics: [], tracks: tracks
+            speakers: speakers, albums: albums, playlists: [], topics: [], tracks: tracks,
+            notes: notes
         )
+    }
+
+    // MARK: Everything with words in it
+
+    /// What the listener typed into the app is the most findable thing there is — and
+    /// used to be the one thing search couldn't see.
+    func testAnEpisodeIsFoundByItsOwnNotes() {
+        var episode = track("Untitled")
+        episode.notes = "the one about harbour ferries"
+
+        XCTAssertEqual(LibrarySearch.runSync("ferries", in: index(tracks: [episode])).tracks.count, 1)
+    }
+
+    func testASpeakerIsFoundByTheirBio() {
+        let speaker = Artist(id: "a1", name: "Jane Doe", bio: "sleep researcher")
+
+        XCTAssertEqual(
+            LibrarySearch.runSync("sleep", in: index(speakers: [speaker])).speakers.map(\.name),
+            ["Jane Doe"]
+        )
+    }
+
+    func testACollectionIsFoundByItsNotes() {
+        var album = Album(id: "al1", artistID: nil, name: "Season 3")
+        album.notes = "recorded in the harbour"
+
+        XCTAssertEqual(
+            LibrarySearch.runSync("harbour", in: index(albums: [album])).albums.map(\.name),
+            ["Season 3"]
+        )
+    }
+
+    func testANoteIsFoundByWhatWasTypedOnIt() {
+        let bookmark = Bookmark(
+            id: "b1", trackID: "t1", positionMs: 1000, note: "check this quote",
+            tags: "to check", transcriptText: nil, createdAt: Date()
+        )
+
+        XCTAssertEqual(LibrarySearch.runSync("quote", in: index(notes: [bookmark])).notes.count, 1)
+        XCTAssertEqual(LibrarySearch.runSync("to check", in: index(notes: [bookmark])).notes.count, 1)
     }
 
     func testMatchingIsCaseInsensitive() {

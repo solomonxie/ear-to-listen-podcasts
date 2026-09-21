@@ -45,6 +45,39 @@ page. Reached at launch; nothing pushes back to it but Back.
 Shelves are data, never recommendation: Continue Listening is playback
 history.
 
+## Search reaches everything, in the order it was asked for
+
+```
+ Speakers      ← names
+ Albums
+ Playlists
+ Topics
+ Episodes (first 200 of 1,284)
+ Notes         ← what you typed on a bookmark, and its tags
+ In transcripts (first 30)   ← what was SAID, last
+ ┌─────────────────────────────────────────┐
+ │ …here is the thing. Code signing trips  │ ← the words first
+ │ everyone up. So check the entitlements… │
+ │ 12:14 · Signing bundles                 │ ← then where, tap to play there
+ └─────────────────────────────────────────┘
+```
+
+**Everything with words in it is searchable**: titles and file paths, an episode's
+notes, a collection's notes and profile, a speaker's bio, background and profile,
+topics, playlist names, and the notes typed onto bookmarks. A search box that
+can't find what the listener typed into the app themselves is the most annoying
+kind of search box.
+
+**Speech comes last, on purpose.** Names are what you search when you know what
+you're after; speech is what you search when you don't. A line from the middle of
+an episode outranking the episode you actually named would be wrong every time.
+
+Two scans, not one. The named half is an in-memory index folded once
+(`LibrarySearch`), so it keeps up with typing. Transcripts are megabytes and stay
+in the database (`TranscriptSearch`, `instr` over the stored JSON, capped at 30
+transcripts opened and 3 lines each), so they run off the main actor and land a
+moment later — the fast half never waits for the slow one.
+
 **Favorites and Downloaded are fixed playlists, not shelves** — pinned first
 in the Playlists row, always present, never deletable. They're computed
 (`FixedPlaylist`): favourites from the flag on the track, downloads from what
@@ -70,7 +103,6 @@ empty    search bar → Remote → Settings, with no shelves between them
            install reads as the normal page minus its content rather than a
            placeholder card. A fresh install's whole point is to go connect a
            source, and Remote is then the first thing under the search bar.
-           The sample library stays on offer in Settings.
 
 typing   search replaces the shelves in place — no push, no overlay
 

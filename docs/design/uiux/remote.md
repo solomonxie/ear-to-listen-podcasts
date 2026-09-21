@@ -3,12 +3,14 @@
 ## Section on Home  `Sources/Screens/Remote/RemoteSectionView.swift`
 
 ```
- Remote                                        ⊕   → Add S3 Bucket sheet
+ Remote                                        ⊕   → Add Cloud Storage sheet
  Sync only fetches metadata — episodes download when you listen.
  ┌───────────────────────────────────────────────┐
- │ ☁  slmx-archives2                          ›  │ long-press → Delete !
+ │ S3  slmx-archives2                         ›  │ long-press → Delete !
  │ 44 s3://slmx-archives2/bible-audio/           │ ← tells two connections to
  │    Active · synced 9 hours ago                │   the same bucket apart
+   ↑ the tile says which cloud: S3 · COS · OSS · Azure · GCS, since five
+     backends look identical in a list and the path only names the bucket
  └───────────────────────────────────────────────┘
  [ ⟳ Sync Now ] [ 🕐 Manual ▾ ] [ 📥 Queue (12) ]
    ↑ spinner replaces the icon, label stays "Syncing" — a button that
@@ -18,8 +20,8 @@
  Added 42, 0 missing, 1,226 files found.        ← after a manual sync
  ─────────────────────────────────────── (inset 68pt, between sources)
 
- empty   No remote sources yet. Add an S3 bucket to browse and sync
-         episodes from.
+ empty   No remote sources yet. Add a bucket — S3, Tencent COS, Alibaba
+         OSS, Azure or Google Cloud — to browse and sync episodes from.
 ```
 
 App-data hint, all four readings:
@@ -94,14 +96,22 @@ a connection, so they live on the source's own row above.
  listed because it's in this folder.
 ```
 
-## Add S3 bucket  `Settings/AddS3ProviderView.swift`
+## Add cloud storage  `Settings/AddCloudSourceView.swift`
+
+One screen for all five clouds. What changes between them is named in
+`CloudSourceKind` and nothing else: the credential's two labels, whether a
+region is detected (AWS), picked from a list (COS, OSS) or not part of
+addressing at all (Azure, Google), and — for Google alone — that the
+credential is a pasted JSON key rather than a pair of fields.
 
 ```
- Cancel        Add S3 Bucket            Save·    · until bucket+keys filled
- ┌ FILL FROM AN EXISTING CONNECTION ───────────┐  (only when there are any)
- │ slmx-archives2                              │
- │ s3://slmx-archives2/bible-audio/            │
- ├ S3 Bucket (paste info to add) ──────────────┤  ← the "(…)" is the button
+ Cancel     Add Cloud Storage           Save·    · until bucket+credential
+ ┌─────────────────────────────────────────────┐    are filled
+ │ Cloud                      Amazon S3   ›    │  ← UnfoldingPicker: options
+ ├ FILL FROM AN EXISTING CONNECTION ───────────┤    open in the row itself
+ │ slmx-archives2                              │  (only connections to the
+ │ s3://slmx-archives2/bible-audio/            │   same cloud)
+ ├ Amazon S3 (paste info to add) ──────────────┤  ← the "(…)" is the button
  │ Bucket name                                 │
  │ Folder path (e.g. podcasts/)                │
  │ Access Key ID                               │
@@ -113,22 +123,35 @@ a connection, so they live on the source's own row above.
  └─────────────────────────────────────────────┘
  Tip: create an IAM user scoped to read-only access on this bucket
  rather than reusing your main AWS credentials.
- How to create a bucket and set permissions →
+ How to create a bucket and set permissions →       (S3 only)
 
  tap (paste info to add) ↓
 
- ┌ S3 Bucket (back to fields) ─────────────────┐  fields are REPLACED
+ ┌ Amazon S3 (back to fields) ─────────────────┐  fields are REPLACED
  │ bucket: my-bucket                           │
  │ folder: podcasts/                           │
  │ access_key_id: AKIA…                        │
  │ secret_access_key: …                        │
  │ `:` or `=`, any spelling of the key names.  │
- │ Fills the fields as you paste. Region is    │
- │ still detected automatically.               │
+ │ Fills the fields as you paste.              │
  └─────────────────────────────────────────────┘
  one real paste ⇒ snap back to the filled fields; typing by hand keeps
  the box open
 
  saving   ⟳ in place of Save — tests the bucket, persists only on success
- error    ⊗ <AWS message>            ← inline section, never an alert
+ error    ⊗ <the cloud's own message>   ← inline section, never an alert
+```
+
+Per cloud, the same form reads:
+
+```
+ Tencent COS   Bucket name (with APPID) · Folder · Region ⌄ · SecretId ·
+               SecretKey            ← region is a list, not detected
+ Alibaba OSS   Bucket name · Folder · Region ⌄ · AccessKey ID ·
+               AccessKey Secret
+ Azure Blob    Container name · Folder · Storage account name ·
+               Account key         ← paste box takes the whole portal
+                                     connection string as-is
+ Google Cloud  Bucket name · Folder · service account JSON (a monospaced
+               editor, not two fields — that's the credential Google issues)
 ```

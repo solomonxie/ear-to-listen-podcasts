@@ -60,9 +60,10 @@ two passes over the same audio is twice the battery for one transcript.
 beside "Back to top" once the transport scrolls off, as a toggle (see
 `player.md`).
 
-Correcting a line lives in its long-press menu, next to "Play from here". A
-pencil per row was a permanent target down the right edge for something done
-once or twice an episode, and it sat under the fast-scroll handle.
+Correcting a line happens in the line itself — see "Editing a phrase, in place"
+below. Nothing is permanently down the right edge: a button per row was a target
+for something done once or twice an episode, and it sat under the fast-scroll
+handle.
 
 **Every window is kept the moment it lands — and none of it is shown until the
 pass is done.** Keeping and showing are separate: the page holds the transcript
@@ -116,25 +117,42 @@ moved. A percentage says as much and costs nothing.
            — and leaving the app doesn't lose what's already done.
 ```
 
-## Correcting a line
+## Editing a phrase, in place
 
 ```
- tap line          → plays from there AND turns Following on
- tap ✎  / long-press → Correct this line ▸
- long-press menu   ▶ Play from here
-                   ✎ Correct this line
+ tap a line     → plays from there, turns Following on,
+                  AND shows what else can be done with it
+ ┌───────────────────────────────────────────────┐
+ │ Which matters once you pipe in personal data. │
+ │ 12:14  ✎ edited          ⟨⧉ Copy⟩ ⟨✎ Edit⟩    │ ← same row, revealed by the tap
+ └───────────────────────────────────────────────┘
+ tap the same line again → buttons away
+ long-press              ▶ Play from here
+                         ⧉ Copy
+                         ✎ Edit
 ```
 
+`✎ Edit` turns the row into a field, focused, with the two answers beside it:
+
 ```
- Cancel        Correct line          Save
- At 12:14
- ┌─────────────────────────────────────────┐
- │ Which matters once you pipe in personal │  ← whole line, editable
+ ┌─────────────────────────────────────────┐  ✓  ✕
+ │ Which matters once you pipe in personal │
  │ data.                                   │
  └─────────────────────────────────────────┘
- Saved on this device, and used as a hint for the rest of the
- episode — names and terms you fix once stop coming back wrong.
+   ✓ save · ✕ leave it as it was
 ```
+
+- **The keyboard comes up by itself** — it's the point of tapping Edit — and the
+  line is pulled to the top of the page, which is the half of the screen the
+  keyboard leaves.
+- **Following goes off the moment editing starts.** It would otherwise scroll the
+  line being typed in out from under the keyboard within seconds.
+- **No page, no sheet.** The lines above and below are the context a correction is
+  made against, and both would cover exactly those. It is one line of text; it
+  gets one line of UI.
+- Saving is `TranscriptStore.applyEdit`: the line is marked edited so the next
+  pass can't write over it, the correction is filed for the diff view and the
+  vocabulary hints, and the transcript goes back beside the audio at once.
 
 `3 edits` opens the word-level diff, newest first:
 

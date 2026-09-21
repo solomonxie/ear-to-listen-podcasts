@@ -7,22 +7,22 @@ no separate mock/demo data layer. `Artist`/`Album`/`Track` keep their
 music-era table names, but the UI calls an `Artist` a "Speaker"; `Show` and
 `Topic` (added for the podcast domain — a series and its tags, distinct from
 `Album`, a curated release) sit alongside them, linked via `showArtists`/
-`showTopics`. `DemoDataSeeder` (`Sources/Library`) populates all of these
-with sample rows on first launch (or via "Reset Demo Data"), tagged
-`isDemo = true` so they can be wiped and reseeded without touching anything
-actually synced.
+`showTopics`. The `isDemo` flag on those tables is a leftover hook for the
+repo-only sample seeder (`DemoData/`, not in the app target); nothing shipped
+writes it, and `v27_drop_demo_library` cleared the rows that had it.
 
 `transcripts` holds one JSON blob of timestamped segments per track, each carrying
 the span it covers so a half-finished transcript can be resumed rather than redone;
 `transcriptEdits` keeps every correction as its own row — the diff view's history and
 the vocabulary hint handed to the next transcription pass
-(`Sources/Library/Transcription/`).
+(`Sources/Library/Transcription/`). A corrected line is marked `isEdited`, which is what
+keeps the next pass from merging its own version back over it.
 
 ## Sync Workflow
 
 The one real workflow that touches every store here — a scheduled tick,
 manual "Sync Now" (`RemoteBrowserView`), or right after adding a
-source (`AddS3ProviderView`/`SettingsSectionView`). It runs in two phases:
+source (`AddCloudSourceView`/`SettingsSectionView`). It runs in two phases:
 listing queues the work and returns; draining does it.
 
 **Phase 1 — list and queue** (returns in seconds, imports nothing):
@@ -34,7 +34,7 @@ SyncScheduler.start() (foreground poll loop)  /  manual "Sync Now"  /  add-sourc
 SyncQueueManager.sync(providerRecord:)   ← the one way in
         ▼
 Sources/Library/Sync.swift:SyncEngine.sync(providerRecord:)
-        │ provider.listFiles(inFolder: nil)   (S3Provider / LocalFilesProvider)
+        │ provider.listFiles(inFolder: nil)   (S3Provider / AzureBlobProvider / … )
         ▼
    for each listed file (TrackStore.swift:find(providerID:filePath:))
         │

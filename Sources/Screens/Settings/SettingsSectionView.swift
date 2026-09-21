@@ -1,16 +1,13 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Embeddable "Settings" section for the single-page root layout. Remote (S3) sources
+/// Embeddable "Settings" section for the single-page root layout. Remote (cloud) sources
 /// live in `RemoteSectionView`; this covers on-device storage and app-wide settings.
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var autoBackup = AutoBackup.shared
     @ObservedObject private var transcript = TranscriptRunner.shared
     @EnvironmentObject private var language: AppLanguageStore
-    @State private var showingResetConfirmation = false
-    @State private var showingRemoveDemoConfirmation = false
-    @State private var hasDemoData = DemoDataSeeder.isLoaded
     @State private var openPicker: String?
     @State private var showingFilePicker = false
     @State private var isScanning = false
@@ -43,11 +40,6 @@ struct SettingsSectionView: View {
             return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current())"
         }
         return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current()) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
-    }
-
-    private func loadDemoData() {
-        try? DemoDataSeeder.load()
-        hasDemoData = DemoDataSeeder.isLoaded
     }
 
     private var localProviders: [ProviderRecord] {
@@ -245,7 +237,7 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
                     title: "ADD EPISODES",
-                    info: "Files you pick are read where they sit — nothing is copied into the app, and nothing is uploaded. Pick a whole folder and everything under it is scanned; pick episodes one by one and only those are added. The sample library is a few short clips bundled with the app, for looking around before you connect anything; it never loads on its own."
+                    info: "Files you pick are read where they sit — nothing is copied into the app, and nothing is uploaded. Pick a whole folder and everything under it is scanned; pick episodes one by one and only those are added."
                 )
 
                 Button {
@@ -292,24 +284,6 @@ struct SettingsSectionView: View {
                     Text(importMessage)
                         .sectionHint()
                 }
-
-                HStack(spacing: 12) {
-                    Button {
-                        if hasDemoData { showingResetConfirmation = true } else { loadDemoData() }
-                    } label: {
-                        Text(hasDemoData ? "Reset sample library" : "Load sample library")
-                    }
-                    // Beside it rather than under: same sample data, opposite intent —
-                    // put it back, or be rid of it.
-                    if hasDemoData {
-                        Button("Remove", role: .destructive) {
-                            showingRemoveDemoConfirmation = true
-                        }
-                        .sectionRowSecondary()
-                    }
-                }
-                Text("A few sample shows and clips to look around with.")
-                    .sectionHint()
             }
             .padding(.horizontal)
         }
@@ -317,24 +291,6 @@ struct SettingsSectionView: View {
         // The docked mini player sits over the end of the page, and Settings is the end
         // of the page — without this the last group is half a bar short of readable.
         .padding(.bottom, 72)
-        .alert("Reset Sample Library?", isPresented: $showingResetConfirmation) {
-            Button("Reset", role: .destructive) { loadDemoData() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This puts back the sample shows, speakers, and playlists.")
-        }
-        .alert("Remove Sample Library?", isPresented: $showingRemoveDemoConfirmation) {
-            Button("Remove", role: .destructive) {
-                try? DemoDataSeeder.removeAll()
-                hasDemoData = DemoDataSeeder.isLoaded
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Clears the sample shows, speakers, albums and playlists. Your own synced episodes and sources stay. You can load the samples again later.")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
-            hasDemoData = DemoDataSeeder.isLoaded
-        }
         .alert("Error", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { _ in viewModel.errorMessage = nil }
