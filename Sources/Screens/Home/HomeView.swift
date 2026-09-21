@@ -62,7 +62,7 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
             homeData.refreshBookmarks()
         }
-        .sheet(item: $editingBookmark) { bookmark in
+        .fullScreenCover(item: $editingBookmark) { bookmark in
             BookmarkEditorView(bookmark: bookmark, episodeTitle: homeData.track(id: bookmark.trackID)?.title)
         }
     }
