@@ -21,6 +21,7 @@ struct TrackStore {
                 row.positionMs = existing.positionMs
                 row.lastPlayedAt = existing.lastPlayedAt
                 row.isFavorite = existing.isFavorite
+                row.listenLater = existing.listenLater
             }
             try row.save(db)
             try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [row.id])
@@ -86,6 +87,27 @@ struct TrackStore {
                 .order(Column("title"))
                 .fetchAll(db)
         }
+    }
+
+    /// Newest first: a queue you added to is read from the end you last added at.
+    func listenLater() throws -> [Track] {
+        try dbQueue.read { db in
+            try Track.filter(Column("listenLater") == true && Column("isLost") == false)
+                .order(Column("updatedAt").desc)
+                .fetchAll(db)
+        }
+    }
+
+    func setListenLater(id: String, listenLater: Bool) throws {
+        let was: Bool? = try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return nil }
+            let was = track.listenLater
+            track.listenLater = listenLater
+            try track.update(db)
+            return was
+        }
+        guard let was else { return }
+        ChangeLog.record("episodes", key: id, old: ["listenLater": was], new: ["listenLater": listenLater], in: dbQueue)
     }
 
     func find(providerID: String, filePath: String) throws -> Track? {

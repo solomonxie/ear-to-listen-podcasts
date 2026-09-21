@@ -481,6 +481,15 @@ enum Migrations {
             try db.execute(sql: "DELETE FROM artists WHERE isDemo = 1")
         }
 
+        // "Listen Later" — a flag on the episode rather than a seeded playlist row, for
+        // the same reason Favorites is one: a list the app owns shouldn't be a row someone
+        // can delete, rename or restore a backup over.
+        migrator.registerMigration("v28_listen_later") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "listenLater", .boolean).notNull().defaults(to: false)
+            }
+        }
+
         return migrator
     }
 }

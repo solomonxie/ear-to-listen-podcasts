@@ -13,6 +13,18 @@ struct TrackRow: View {
 
     @ObservedObject private var names = LibraryNames.shared
     @State private var showingEdit = false
+    /// Held locally so the menu says the right thing straight after a tap — the row's
+    /// `track` is a copy the list handed down, and it only catches up on the next reload.
+    @State private var queuedOverride: Bool?
+
+    private var isListenLater: Bool { queuedOverride ?? track.listenLater }
+
+    private func setListenLater(_ queued: Bool) {
+        queuedOverride = queued
+        try? TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+            .setListenLater(id: track.id, listenLater: queued)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
 
     private var album: Album? { names.album(track.albumID) }
 
@@ -55,6 +67,15 @@ struct TrackRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .contextMenu {
+            // Lining an episode up is a one-tap thing you do while browsing, so it lives
+            // on the row you're already holding rather than behind the player.
+            if isListenLater {
+                Button("Remove from Listen Later", systemImage: "clock.badge.xmark") {
+                    setListenLater(false)
+                }
+            } else {
+                Button("Listen Later", systemImage: "clock") { setListenLater(true) }
+            }
             Button("Edit Details", systemImage: "pencil") { showingEdit = true }
         }
         .sheet(isPresented: $showingEdit) { EpisodeEditView(track: track) }
