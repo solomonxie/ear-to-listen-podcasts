@@ -4,6 +4,11 @@ import SwiftUI
 /// are edited. The language ranks with them — it belongs to the recording, not to the
 /// transcript run — so this is the only place it's asked for.
 ///
+/// **The inherited answer shows as the selected one**, not as an "Inherit (English)" row
+/// above the real choices — same as `SpokenLanguagePicker`, and for the same reason: the
+/// row should read as the language this episode will actually be recognised in. Nothing
+/// is written until the listener picks.
+///
 /// Unfolds in the episode card like every other field there, rather than dropping a menu
 /// over it. That also fixes what this type was fighting: the page redraws several times a
 /// second while a window is being recognised, and SwiftUI shuts an open `Menu` whose
@@ -19,7 +24,9 @@ struct EpisodeLanguageField: View, Equatable {
     /// audio, so what they pick belongs to the episode and outranks the album's and the
     /// speaker's.
     let localeIdentifier: String?
-    let inheritedLabel: String
+    /// What this episode would be recognised in while it has no answer of its own — the
+    /// album's language, or the speaker's. Shown as the selection when there's no answer.
+    let inheritedIdentifier: String?
     /// BCP-47 languages this phone can recognise offline, so the picker can say so before
     /// you pick one rather than after it fails.
     let readyLanguages: Set<String>
@@ -29,7 +36,7 @@ struct EpisodeLanguageField: View, Equatable {
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.localeIdentifier == rhs.localeIdentifier
-            && lhs.inheritedLabel == rhs.inheritedLabel
+            && lhs.inheritedIdentifier == rhs.inheritedIdentifier
             && lhs.hasCheckedLanguages == rhs.hasCheckedLanguages
             && lhs.readyLanguages == rhs.readyLanguages
             && lhs.open == rhs.open
@@ -40,16 +47,10 @@ struct EpisodeLanguageField: View, Equatable {
         // recognizer doesn't fail — it returns confident nonsense forever.
         UnfoldingOptionWheel(
             title: "Language", id: id, open: $open, selection: languageSelection,
-            options: [UnfoldingPicker.Option(nil, "Inherit (\(inheritedLabel))")]
-                + orderedLocales.map {
-                    UnfoldingPicker.Option($0.identifier(.bcp47), label(for: $0))
-                }
+            options: orderedLocales.map {
+                UnfoldingPicker.Option($0.identifier(.bcp47), label(for: $0))
+            }
         )
-    }
-
-    private var languageLabel: String {
-        guard let localeIdentifier else { return inheritedLabel }
-        return TranscriptPane.languageName(Locale(identifier: localeIdentifier))
     }
 
     /// English, then the Chinese variants, then the rest — the two this library is in,
@@ -67,7 +68,23 @@ struct EpisodeLanguageField: View, Equatable {
     }
 
     private var languageSelection: Binding<String?> {
-        Binding(get: { localeIdentifier }, set: { TranscriptRunner.shared.setEpisodeLanguage($0) })
+        Binding(
+            get: { localeIdentifier ?? shownInherited },
+            set: { TranscriptRunner.shared.setEpisodeLanguage($0) }
+        )
+    }
+
+    /// The inherited language matched against the recogniser list so the wheel lands on
+    /// it. An album tagged `zh` and a recogniser offering `zh-CN` are the same answer to
+    /// a reader, so the region is allowed to differ; anything unmatched falls back to the
+    /// first option rather than showing a blank row.
+    private var shownInherited: String? {
+        let values = orderedLocales.map { $0.identifier(.bcp47) }
+        guard let inheritedIdentifier else { return values.first }
+        let code = Locale(identifier: inheritedIdentifier).language.languageCode
+        return values.first { $0 == inheritedIdentifier }
+            ?? values.first { Locale(identifier: $0).language.languageCode == code }
+            ?? values.first
     }
 }
 
@@ -77,15 +94,9 @@ extension EpisodeLanguageField {
     /// languages are downloaded, and whose answer this episode would inherit.
     init(playing: TranscriptRunner, languages: OnDeviceLanguages, id: String, open: Binding<String?>) {
         let inherited = playing.inheritedLanguage
-        let label: String
-        if let inherited, inherited.source != .episode {
-            label = "\(TranscriptPane.languageName(Locale(identifier: inherited.identifier))) · \(inherited.source.displayName)"
-        } else {
-            label = "automatic"
-        }
         self.init(
             localeIdentifier: playing.track?.language,
-            inheritedLabel: label,
+            inheritedIdentifier: inherited?.source == .episode ? nil : inherited?.identifier,
             readyLanguages: languages.ready,
             hasCheckedLanguages: languages.hasChecked,
             id: id,

@@ -9,7 +9,7 @@ import SwiftUI
 /// backdrop, no transition and nothing to dismiss.
 ///
 /// ```
-///  Language        English  ›        Language        English  ⌄
+///  Language        English  ⌄        Language        English  ⌃
 ///  Notes                        →    ┌───────────────────────────┐
 ///  Topics                            │   Inherit (automatic)     │
 ///                                    │ ✓ English                 │
@@ -23,7 +23,8 @@ import SwiftUI
 /// - The row doesn't move; everything below it does.
 /// - **One open at a time** — opening a row folds away whichever was open, which is what
 ///   `open` is for: every picker in a form shares one binding.
-/// - The chevron turns `›` → `⌄`: the row says where its options went.
+/// - The chevron points down and flips up when open: the row says where its options
+///   went, and it sits beside the value rather than at the far edge of the row.
 /// - Full width, options on the same left edge as the row's own label.
 /// - **No Cancel / Done.** Picking folds it; tapping the row again folds it unchanged.
 ///
@@ -60,6 +61,10 @@ struct UnfoldingPicker<Value: Hashable>: View {
     /// page" beside the speaker's name. It sits inside the row but outside the row's own
     /// button, so tapping it doesn't unfold the options.
     var accessory: AnyView?
+    /// Drops the unfold chevron. For a row whose accessory is already an icon at the same
+    /// edge: two glyphs an inch apart, one of them an arrow, read as two ways out of the
+    /// row rather than one value and one way to open it.
+    var hidesChevron = false
 
     private var isOpen: Bool { open == id }
 
@@ -78,11 +83,17 @@ struct UnfoldingPicker<Value: Hashable>: View {
                     Text(currentLabel)
                         .foregroundStyle(valueAlignment == .trailing ? .secondary : .primary)
                         .lineLimit(1)
+                    // Beside the value, not at the far edge. On a row that *is* its value
+                    // there's no label holding the left side, so a chevron pushed right
+                    // sat half a screen from the word it belongs to and read as a second,
+                    // unrelated control.
+                    if !hidesChevron {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(isOpen ? 180 : 0))
+                    }
                     if valueAlignment == .leading { Spacer() }
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isOpen ? 90 : 0))
                 }
                 .contentShape(Rectangle())
             }
@@ -220,10 +231,10 @@ struct UnfoldingWheel: View {
                 Spacer()
                 Text(value.map(String.init) ?? placeholder)
                     .foregroundStyle(value == nil ? .secondary : .primary)
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.down")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
-                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
             }
             .frame(minHeight: 44)
             .contentShape(Rectangle())
@@ -284,10 +295,10 @@ struct UnfoldingOptionWheel<Value: Hashable>: View {
                 Text(title).foregroundStyle(.primary)
                 Spacer()
                 Text(currentLabel).foregroundStyle(.secondary).lineLimit(1)
-                Image(systemName: "chevron.right")
+                Image(systemName: "chevron.down")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
-                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
             }
             .frame(minHeight: 44)
             .contentShape(Rectangle())

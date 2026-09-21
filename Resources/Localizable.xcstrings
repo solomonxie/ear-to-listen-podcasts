@@ -17,6 +17,38 @@
         }
       }
     },
+    "%lld matches": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld matches"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 条匹配"
+          }
+        }
+      }
+    },
+    "1 match": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 match"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 条匹配"
+          }
+        }
+      }
+    },
     "ADD EPISODES": {
       "localizations": {
         "en": {
@@ -177,6 +209,22 @@
         }
       }
     },
+    "Add a bookmark at current time": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a bookmark at current time"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在当前时间添加书签"
+          }
+        }
+      }
+    },
     "Add an S3 bucket to browse and sync episodes from.": {
       "localizations": {
         "en": {
@@ -189,22 +237,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "添加一个 S3 Bucket 即可浏览并同步单集。"
-          }
-        }
-      }
-    },
-    "Add bookmark": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add bookmark"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加书签"
           }
         }
       }
@@ -849,22 +881,6 @@
         }
       }
     },
-    "Delete bookmark": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete bookmark"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除书签"
-          }
-        }
-      }
-    },
     "Delete this connection?": {
       "localizations": {
         "en": {
@@ -1329,6 +1345,38 @@
         }
       }
     },
+    "Find in this episode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find in this episode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在本集中查找"
+          }
+        }
+      }
+    },
+    "First %lld matches": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First %lld matches"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前 %lld 条匹配"
+          }
+        }
+      }
+    },
     "Fixes every episode in this album — use this if the speaker shown was guessed wrong from the file's metadata.": {
       "localizations": {
         "en": {
@@ -1505,38 +1553,6 @@
         }
       }
     },
-    "From AI": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "From AI"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "由 AI 生成"
-          }
-        }
-      }
-    },
-    "From Internet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "From Internet"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从网络查找"
-          }
-        }
-      }
-    },
     "From Library": {
       "localizations": {
         "en": {
@@ -1581,6 +1597,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "已全部转写"
+          }
+        }
+      }
+    },
+    "Generate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成"
           }
         }
       }
@@ -2273,18 +2305,18 @@
         }
       }
     },
-    "Nothing marked yet. Add a bookmark for the moment you're hearing; the note goes on it afterwards.": {
+    "Nothing marked yet. Mark the moment first — the note goes on it afterwards.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nothing marked yet. Add a bookmark for the moment you're hearing; the note goes on it afterwards."
+            "value": "Nothing marked yet. Mark the moment first — the note goes on it afterwards."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "还没有标记。为正在听到的这一刻添加书签，之后再写下笔记。"
+            "value": "还没有标记。先标记这一刻，笔记之后再写。"
           }
         }
       }
@@ -2317,6 +2349,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "队列为空。从云端存储源同步文件夹后，任务会出现在这里。"
+          }
+        }
+      }
+    },
+    "Nothing said in this episode matches": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing said in this episode matches"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本集中没有匹配的内容"
           }
         }
       }
