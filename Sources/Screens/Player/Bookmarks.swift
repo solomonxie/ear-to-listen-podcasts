@@ -3,18 +3,23 @@ import SwiftUI
 /// One saved moment, wherever it's listed — Now Playing, an album page, Home. The
 /// timestamp is the anchor: a bookmark with nothing typed into it is still useful, so
 /// the row never looks empty for want of a note.
+///
+/// **The row opens the note in a sheet; the play glyph at its end jumps to the moment.**
+/// Reading and
+/// writing what a mark says is what a list of marks is scrolled for, and that's the whole
+/// row. Jumping the player is the sharper action and the rarer one, so it gets a target
+/// of its own rather than the whole row — and a mistap costs an unfolded note instead of
+/// losing your place in what's playing.
 struct BookmarkRow: View {
     let bookmark: Bookmark
     /// Shown where the list spans more than one episode.
     var episodeTitle: String?
-    /// Whether its note is unfolded below — the pencil says so rather than a second glyph.
-    var isOpen = false
     let onPlay: () -> Void
     let onEdit: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Button(action: onPlay) {
+            Button(action: onEdit) {
                 HStack(alignment: .top, spacing: 10) {
                     Text(Scrubber.formatted(bookmark.position))
                         .font(.caption.monospacedDigit().weight(.semibold))
@@ -55,15 +60,15 @@ struct BookmarkRow: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: onEdit) {
-                Image(systemName: isOpen ? "chevron.down" : "square.and.pencil")
-                    .font(.footnote)
+            Button(action: onPlay) {
+                Image(systemName: "play.circle")
+                    .font(.title3)
                     .padding(4)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(isOpen ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
-            .accessibilityLabel("Edit this bookmark")
+            .foregroundStyle(Color.accentColor)
+            .accessibilityLabel("Play from this moment")
         }
     }
 }
@@ -79,6 +84,11 @@ struct NotesPane: View {
     let bookmarks: [Bookmark]
     /// Shown per row where the list spans more than one episode.
     var episodeTitle: (Bookmark) -> String? = { _ in nil }
+    /// Folds the marks under the episode each came from, closed to start, the way Home's
+    /// bookmark shelf does. A page that collects every mark across an album or a speaker
+    /// is a wall of rows flat; folded, it says which episodes were worth marking and
+    /// opens only the one meant. An episode's own page has one episode and stays flat.
+    var foldsByEpisode = false
     /// The mark just made, lit until the eye has found it.
     var highlighted: String?
     /// Marking the moment being played. Absent where there is nothing playing to mark —
@@ -88,7 +98,12 @@ struct NotesPane: View {
     /// Saved, or deleted — the owner reloads.
     let onChange: () -> Void
 
-    @State private var expanded: String?
+    /// The mark whose editor is up. A sheet rather than a row that unfolds: the editor is
+    /// a keyboard's worth of fields, so unfolding it pushed the list around and made the
+    /// pane scroll itself to keep the field in view — a page that moves under you while
+    /// you reach for it. A sheet leaves the list exactly where it was.
+    @State private var editing: Bookmark?
+    @State private var openEpisodes: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -96,148 +111,121 @@ struct NotesPane: View {
                 Text("NOTES").sectionHeading()
                 Spacer()
                 if !bookmarks.isEmpty {
-                    Text("\(bookmarks.count)").font(.caption).foregroundStyle(.secondary)
-                }
-                if let onAdd {
-                    Button(action: onAdd) {
-                        Label("Add bookmark", systemImage: "bookmark.fill").font(.caption.weight(.medium))
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.small)
+                    Text(countLabel).font(.caption).foregroundStyle(.secondary)
                 }
             }
             if bookmarks.isEmpty {
-                Text("Nothing marked yet. Add a bookmark for the moment you're hearing; the note goes on it afterwards.")
+                Text("Nothing marked yet. Mark the moment first — the note goes on it afterwards.")
                     .sectionHint()
-            } else {
-                ForEach(bookmarks) { bookmark in
-                    VStack(alignment: .leading, spacing: 10) {
-                        BookmarkRow(
-                            bookmark: bookmark,
-                            episodeTitle: episodeTitle(bookmark),
-                            isOpen: expanded == bookmark.id,
-                            onPlay: { onPlay(bookmark) },
-                            onEdit: { toggle(bookmark) }
-                        )
-                        if expanded == bookmark.id {
-                            BookmarkNoteEditor(
-                                bookmark: bookmark,
-                                onClose: { expanded = nil },
-                                onChange: onChange
-                            )
-                        }
+            } else if foldsByEpisode {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(folds) { fold in
+                        episodeFold(fold)
+                        if fold.id != folds.last?.id { Divider() }
                     }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 10)
-                    .background(background(for: bookmark), in: RoundedRectangle(cornerRadius: 10))
-                    .id(bookmark.id)
                 }
+            } else {
+                ForEach(bookmarks) { markCard($0, episodeTitle: episodeTitle($0)) }
+            }
+            // Under the marks rather than beside the heading: it says what it marks —
+            // where you are right now — and the end of the list is where the one it's
+            // about to make will appear.
+            if let onAdd {
+                Button(action: onAdd) {
+                    Label("Add a bookmark at current time", systemImage: "bookmark.fill")
+                        .font(.footnote.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
             }
         }
+        .sheet(item: $editing, onDismiss: onChange) { bookmark in
+            BookmarkEditorView(bookmark: bookmark, episodeTitle: episodeTitle(bookmark))
+        }
+    }
+
+    private var countLabel: String {
+        guard foldsByEpisode else { return "\(bookmarks.count)" }
+        return "\(bookmarks.count) in \(folds.count) episode\(folds.count == 1 ? "" : "s")"
+    }
+
+    /// One episode's marks: a tappable line saying which episode and how many, and the
+    /// marks themselves once it's open.
+    @ViewBuilder
+    private func episodeFold(_ fold: EpisodeFold) -> some View {
+        let isOpen = openEpisodes.contains(fold.id)
+        Button {
+            withAnimation(.easeOut(duration: 0.18)) {
+                if isOpen { openEpisodes.remove(fold.id) } else { openEpisodes.insert(fold.id) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                Text(fold.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Spacer()
+                Text("(\(fold.bookmarks.count))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
+        if isOpen {
+            // No episode title on the rows: the line they are folded under just said it.
+            ForEach(fold.bookmarks) { markCard($0, episodeTitle: nil) }
+        }
+    }
+
+    private func markCard(_ bookmark: Bookmark, episodeTitle: String?) -> some View {
+        BookmarkRow(
+            bookmark: bookmark,
+            episodeTitle: episodeTitle,
+            onPlay: { onPlay(bookmark) },
+            onEdit: { editing = bookmark }
+        )
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(background(for: bookmark), in: RoundedRectangle(cornerRadius: 10))
+        .id(bookmark.id)
+    }
+
+    /// Episodes in the order they were last marked — the top of the list is the one just
+    /// left — and the marks inside each in the order they occur, since a list of moments
+    /// that jumps around its own timeline can't be read.
+    private var folds: [EpisodeFold] {
+        var order: [String] = []
+        var byTrack: [String: [Bookmark]] = [:]
+        for bookmark in bookmarks {
+            if byTrack[bookmark.trackID] == nil { order.append(bookmark.trackID) }
+            byTrack[bookmark.trackID, default: []].append(bookmark)
+        }
+        return order.compactMap { trackID in
+            guard let marks = byTrack[trackID], let first = marks.first else { return nil }
+            return EpisodeFold(
+                id: trackID,
+                title: episodeTitle(first) ?? "Unknown episode",
+                bookmarks: marks.sorted { $0.positionMs < $1.positionMs }
+            )
+        }
+    }
+
+    private struct EpisodeFold: Identifiable {
+        let id: String
+        let title: String
+        let bookmarks: [Bookmark]
     }
 
     private func background(for bookmark: Bookmark) -> Color {
-        if expanded == bookmark.id { return Color.accentColor.opacity(0.10) }
-        return highlighted == bookmark.id ? Color.accentColor.opacity(0.18) : .clear
-    }
-
-    private func toggle(_ bookmark: Bookmark) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            expanded = expanded == bookmark.id ? nil : bookmark.id
-        }
-    }
-}
-
-/// A mark's note, written in the row it belongs to. Under it, what the transcript says at
-/// that second — read-only, and read fresh rather than from the copy taken when the mark
-/// was made, so it keeps up with corrections and with a transcript that only arrived
-/// afterwards.
-private struct BookmarkNoteEditor: View {
-    let bookmark: Bookmark
-    let onClose: () -> Void
-    let onChange: () -> Void
-
-    @State private var note: String
-    @State private var tags: String
-    @State private var spoken: String?
-    @FocusState private var isTyping: Bool
-
-    private let store = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
-
-    init(bookmark: Bookmark, onClose: @escaping () -> Void, onChange: @escaping () -> Void) {
-        self.bookmark = bookmark
-        self.onClose = onClose
-        self.onChange = onChange
-        _note = State(initialValue: bookmark.note ?? "")
-        _tags = State(initialValue: bookmark.tags ?? "")
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(spacing: 8) {
-                    TextField("Why this moment matters", text: $note, axis: .vertical)
-                        .lineLimit(1...6)
-                        .focused($isTyping)
-                    TextField("Tags, comma separated", text: $tags)
-                        .font(.footnote)
-                }
-                .padding(8)
-                .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 8))
-                .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.35)) }
-
-                Button(action: save) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
-                }
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-            }
-            .font(.title3)
-            .buttonStyle(.plain)
-
-            if let spoken, !spoken.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("AT THIS MOMENT").sectionHeading()
-                    Text(spoken).font(.footnote).foregroundStyle(.tertiary)
-                }
-            }
-
-            Button("Delete bookmark", role: .destructive, action: delete)
-                .font(.caption)
-        }
-        .onAppear {
-            isTyping = true
-            spoken = Self.transcriptLine(for: bookmark)
-        }
-    }
-
-    /// What the stored transcript says at the mark's second, if anything does yet.
-    private static func transcriptLine(for bookmark: Bookmark) -> String? {
-        let segments = (try? TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
-            .find(trackID: bookmark.trackID)) ?? []
-        let covering = segments.last {
-            !$0.text.isEmpty && $0.start <= bookmark.position + 0.5
-        }
-        return covering?.text ?? bookmark.transcriptText
-    }
-
-    private func save() {
-        var updated = bookmark
-        updated.note = note.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        updated.tags = Bookmark.tagString(tags.split(separator: ",").map(String.init))
-        try? store.update(updated)
-        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
-        onChange()
-        onClose()
-    }
-
-    private func delete() {
-        try? store.delete(id: bookmark.id)
-        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
-        onChange()
-        onClose()
+        highlighted == bookmark.id ? Color.accentColor.opacity(0.18) : .clear
     }
 }
 
