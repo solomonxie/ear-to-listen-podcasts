@@ -38,6 +38,13 @@ struct TranscriptPane: View {
     @State private var showingEdits = false
     /// The recogniser waiting on "yes, spend that" — only ever one that charges.
     @State private var confirmingEngine: TranscriptionEngineKind?
+    /// The find-in-episode bar, and what was last typed into it. The words outlive the
+    /// bar on purpose: looking for the same phrase again is most of what this is for, and
+    /// the bar closes itself the moment a line is picked.
+    @State private var isSearching = false
+    @State private var searchQuery = ""
+    @State private var hits: [TranscriptPhraseSearch.Hit] = []
+    @FocusState private var isTypingSearch: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -49,6 +56,11 @@ struct TranscriptPane: View {
                 Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
             }
             lines
+        }
+        // The lines are already in memory, so this is a scan of an array rather than a
+        // query — `task(id:)` is here to keep it off the body pass, not to wait.
+        .task(id: searchQuery) {
+            hits = TranscriptPhraseSearch.hits(for: searchQuery, in: transcript.lines)
         }
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
@@ -81,14 +93,18 @@ struct TranscriptPane: View {
     /// a mode to understand first.
     private var controls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(spacing: 10) {
                 Text("TRANSCRIPT").sectionHeading()
+                searchToggle
                 Spacer()
                 if !transcript.edits.isEmpty {
                     Button("\(transcript.edits.count) edit\(transcript.edits.count == 1 ? "" : "s")") { showingEdits = true }
                         .font(.caption)
                 }
             }
+            .id(Self.searchAnchor)
+
+            if isSearching { searchBar }
 
             // Offered only until the next pass or a change of episode — it restores from a
             // copy held in memory for exactly that long.
@@ -128,6 +144,109 @@ struct TranscriptPane: View {
             }
         }
         .padding(.horizontal)
+    }
+
+    /// Where the page scrolls to when the bar opens.
+    private static let searchAnchor = "transcript-search"
+
+    private var searchToggle: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.18)) { isSearching.toggle() }
+            isTypingSearch = isSearching
+            guard isSearching else { return }
+            // The bar opens near the bottom of the page, under the transport and the
+            // floating buttons — and the hits appear below it, further under still. So
+            // the heading is pulled to the top of the screen, which is also the half the
+            // keyboard leaves. Following is turned off for the same reason it is when a
+            // line is edited: it would scroll all of this away mid-word.
+            isFollowing = false
+            withAnimation(.easeOut(duration: 0.25)) {
+                scrollProxy.scrollTo(Self.searchAnchor, anchor: .top)
+            }
+        } label: {
+            Image(systemName: isSearching ? "xmark" : "magnifyingglass")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSearching ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.accentColor))
+        .disabled(transcript.lines.isEmpty)
+    }
+
+    /// The bar and what it found, together: the answers belong under the words that asked
+    /// for them, not somewhere down the page behind the keyboard.
+    private var searchBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").font(.caption).foregroundStyle(.secondary)
+                TextField("Find in this episode", text: $searchQuery)
+                    .font(.subheadline)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .focused($isTypingSearch)
+                if !searchQuery.isEmpty {
+                    Button { searchQuery = "" } label: {
+                        Image(systemName: "xmark.circle.fill").font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+
+            if !searchQuery.isEmpty { hitList }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    @ViewBuilder private var hitList: some View {
+        if hits.isEmpty {
+            Text("Nothing said in this episode matches").sectionRowSecondary()
+        } else {
+            Text(hitSummary).font(.caption2).foregroundStyle(.secondary)
+            // Its own scroller, kept short: the page behind it is the transcript, and a
+            // list of hits as long as the episode would bury it.
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(hits) { hit in
+                        Button { jump(to: hit) } label: { hitRow(hit) }
+                            .buttonStyle(.plain)
+                        if hit.id != hits.last?.id { Divider() }
+                    }
+                }
+            }
+            .frame(maxHeight: 220)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private func hitRow(_ hit: TranscriptPhraseSearch.Hit) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(hit.text).font(.footnote).foregroundStyle(.primary).lineLimit(2)
+            Text(Scrubber.formatted(hit.start)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private var hitSummary: LocalizedStringKey {
+        if hits.count >= TranscriptPhraseSearch.limit { return "First \(TranscriptPhraseSearch.limit) matches" }
+        return hits.count == 1 ? "1 match" : "\(hits.count) matches"
+    }
+
+    /// Picking a line is the end of searching: playback moves there, the transcript
+    /// scrolls to it and follows on, and the bar folds away — with the words still in it
+    /// for the next time the magnifier is tapped.
+    private func jump(to hit: TranscriptPhraseSearch.Hit) {
+        isTypingSearch = false
+        withAnimation(.easeOut(duration: 0.18)) { isSearching = false }
+        onSeek(hit.start)
+        isFollowing = true
+        withAnimation(.easeOut(duration: 0.25)) { scrollProxy.scrollTo(hit.start, anchor: .center) }
     }
 
     /// Says the thing that can't be taken back first. The price, where there is one,
