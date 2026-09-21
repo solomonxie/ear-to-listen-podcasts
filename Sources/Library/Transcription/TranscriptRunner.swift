@@ -500,7 +500,9 @@ final class TranscriptRunner: ObservableObject {
         guard let track else { return }
         let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != segment.text else { return }
-        segments = (try? transcriptStore.applyEdit(trackID: track.id, segmentStart: segment.start, newText: trimmed)) ?? segments
+        segments = (try? transcriptStore.applyEdit(
+            trackID: track.id, segmentStart: segment.start, newText: trimmed
+        )) ?? segments
         edits = (try? transcriptStore.edits(trackID: track.id)) ?? edits
         needsSidecarExport = true
         // A correction is hand-typed and can't be regenerated, so it goes back out at once

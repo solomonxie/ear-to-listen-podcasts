@@ -27,7 +27,8 @@ primary · `[ x ]` secondary · `( x )` text button · `›` pushes · `⟳` wor
    │                                [Files picker · OS]      │   │
    └─ ▶ MiniPlayerBar (docked) ──▶ [RealPlayer] ─────────────┘   │
                                      ├ details ─▶ [EpisodeEdit]  │
-                                     ├ transcript ─▶ [Correct]   │
+                                     ├ transcript ─▶ TranscriptEditor
+                                     │              [Edit phrase]  │
                                      │              [My corrections]
                                      └ [UpNext] [AddToPlaylist]  │
  ───────────────────────────────────────────────────────────────┘
@@ -38,9 +39,9 @@ primary · `[ x ]` secondary · `( x )` text button · `›` pushes · `⟳` wor
 
 | File | Covers |
 |---|---|
-| `home.md` | root page, search, shelves, empty state, mini player |
+| `home.md` | root page, search (incl. transcripts), shelves, empty state, mini player |
 | `player.md` | Now Playing chrome, transport, scrubber, rail, Up Next |
-| `transcript.md` | transcript controls, lines, corrections |
+| `transcript.md` | transcript controls, lines, corrections, editor page |
 | `details.md` | episode detail cards, episode edit, bookmarks |
 | `collections.md` | album / speaker / show / playlist / list screens |
 | `remote.md` | Remote section, folder browser, file sheets |

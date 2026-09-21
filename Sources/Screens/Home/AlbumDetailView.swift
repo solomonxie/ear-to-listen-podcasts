@@ -28,7 +28,6 @@ struct AlbumDetailView: View {
     @State private var openPicker: String?
     @State private var allSpeakers: [Artist] = []
     @State private var bookmarks: [Bookmark] = []
-    @State private var editingBookmark: Bookmark?
     @State private var artworkItem: PhotosPickerItem?
     /// The live fields. Seeded from the album, and left alone while a field has the
     /// keyboard — a sync landing mid-edit must not retype what's being typed.
@@ -57,10 +56,28 @@ struct AlbumDetailView: View {
                 // Picked, not typed: a speaker already exists as a row with a page of
                 // their own, and typing their name again by hand is how you end up with
                 // two of them differing by a space.
+                // The way to their page rides on the speaker's own row, as a person glyph
+                // beside the name — it's about *that* value, and a row of its own put it
+                // a screen away from the thing it opens. Not a chevron: the row already
+                // has one for unfolding, and two would say the same thing twice.
                 UnfoldingPicker(
                     title: "Speaker", id: "speaker", open: $openPicker, selection: $speakerName,
                     options: [UnfoldingPicker.Option("", "None")]
-                        + allSpeakers.map { UnfoldingPicker.Option($0.name, $0.name) }
+                        + allSpeakers.map { UnfoldingPicker.Option($0.name, $0.name) },
+                    accessory: speaker.map { speaker in
+                        AnyView(
+                            NavigationLink {
+                                SpeakerDetailView(speaker: speaker)
+                            } label: {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.body)
+                                    .foregroundStyle(Color.accentColor)
+                                    .padding(.leading, 2)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Open \(speaker.name)'s page")
+                        )
+                    }
                 )
                 // The album's own year, and what every episode in it falls back to.
                 UnfoldingWheel(
@@ -94,15 +111,6 @@ struct AlbumDetailView: View {
                         .focused($focusedField, equals: .notes)
                 }
                 rejectNote("notes")
-                // Its own row, because it's the one thing here that leaves the page.
-                // Sharing the speaker field's row is what put two chevrons on it.
-                if let speaker {
-                    NavigationLink {
-                        SpeakerDetailView(speaker: speaker)
-                    } label: {
-                        Label("Open \(speaker.name)'s page", systemImage: "person.crop.circle")
-                    }
-                }
             } header: {
                 HStack {
                     Text("Details")
@@ -146,18 +154,18 @@ struct AlbumDetailView: View {
             // Above the episode list on purpose: a moment someone marked by hand is
             // worth more than the twentieth row of a folder listing.
             if !bookmarks.isEmpty {
-                Section("Bookmarks") {
-                    ForEach(bookmarks) { bookmark in
-                        BookmarkRow(
-                            bookmark: bookmark,
-                            episodeTitle: tracks.first { $0.id == bookmark.trackID }?.title
-                        ) {
-                            play(bookmark)
-                        } onEdit: {
-                            editingBookmark = bookmark
-                        }
-                    }
+                // "Notes" rather than "Bookmarks": a mark and the note typed into it are
+                // one thing, and the note is the part worth coming back for. Same pane as
+                // the episode page, so a note reads and edits the same wherever it's met.
+                Section {
+                    NotesPane(
+                        bookmarks: bookmarks,
+                        episodeTitle: { bookmark in tracks.first { $0.id == bookmark.trackID }?.title },
+                        onPlay: { play($0) },
+                        onChange: { bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? [] }
+                    )
                 }
+                .listRowSeparator(.hidden)
             }
 
             Section("Episodes") {
@@ -194,9 +202,6 @@ struct AlbumDetailView: View {
                     Image(systemName: "ellipsis.circle")
                 }
             }
-        }
-        .sheet(item: $editingBookmark) { bookmark in
-            BookmarkEditorView(bookmark: bookmark, episodeTitle: tracks.first { $0.id == bookmark.trackID }?.title)
         }
         .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
             bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
@@ -241,6 +246,26 @@ struct AlbumDetailView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            ArtworkSourceRow(
+                subject: ArtworkSubject(
+                    kind: .album,
+                    name: shown.name,
+                    details: [
+                        artistName.map { "by \($0)" },
+                        shown.year.map(String.init),
+                        topicNames.nilIfEmpty,
+                        shown.notes?.nilIfEmpty,
+                    ].compactMap { $0 }
+                ),
+                hasArtwork: shown.artworkFileName != nil,
+                libraryPicker: {
+                    PhotosPicker(selection: $artworkItem, matching: .images) {
+                        Label("From Library", systemImage: "photo.on.rectangle")
+                    }
+                },
+                onUse: { data in Task { await saveArtwork(data) } },
+                onRemove: { removeArtwork() }
+            )
         }
         .frame(maxWidth: .infinity)
         .task(id: artworkItem) { await handleArtworkPick() }
@@ -376,6 +401,17 @@ struct AlbumDetailView: View {
         )
         ImageFileStore.artwork.remove(previous)
         self.artworkItem = nil
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
+    private func saveArtwork(_ data: Data) async {
+        guard let fileName = try? await ImageFileStore.artwork.save(data, maxDimension: 800) else { return }
+        let previous = shown.artworkFileName
+        try? libraryStore.updateAlbum(
+            id: shown.id, name: shown.name, notes: shown.notes, artworkFileName: fileName, year: shown.year
+        )
+        ImageFileStore.artwork.remove(previous)
+        current = (try? libraryStore.album(id: shown.id)) ?? current
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 

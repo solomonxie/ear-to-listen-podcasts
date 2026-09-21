@@ -29,12 +29,14 @@ struct SpeakerDetailView: View {
     @State private var suggestions = ProfileSuggestionState()
     @State private var isSuggesting = false
     @State private var suggestionError: String?
+    @State private var bookmarks: [Bookmark] = []
     /// Which unfolding picker is open — one at a time, across the whole form.
     @State private var openPicker: String?
     @FocusState private var focusedField: SpeakerField?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     init(speaker: Artist) {
         self.speaker = speaker
@@ -68,6 +70,27 @@ struct SpeakerDetailView: View {
                         .focused($focusedField, equals: .name)
                         .submitLabel(.done)
 
+                    // A real person's face is the one picture that must never be drawn —
+                    // "From Internet" is the answer here, and it's why that mode exists.
+                    ArtworkSourceRow(
+                        subject: ArtworkSubject(
+                            kind: .speaker,
+                            name: name.nilIfEmpty ?? currentSpeaker.name,
+                            details: [
+                                knownFor.nilIfEmpty,
+                                bio.nilIfEmpty,
+                                albums.first.map { "host of \($0.name)" },
+                            ].compactMap { $0 }
+                        ),
+                        hasArtwork: currentSpeaker.photoFileName != nil,
+                        libraryPicker: {
+                            PhotosPicker(selection: $photoItem, matching: .images) {
+                                Label("From Library", systemImage: "photo.on.rectangle")
+                            }
+                        },
+                        onUse: { data in Task { await savePhoto(data) } },
+                        onRemove: { removePhoto() }
+                    )
                 }
                 .listRowSeparator(.hidden)
                 .task(id: photoItem) { await handlePick() }
@@ -143,6 +166,21 @@ struct SpeakerDetailView: View {
                 }
             }
 
+            // Every mark made anywhere in this speaker's episodes, newest first — the
+            // thing you remember about a speaker is something they said, not which file
+            // it was in.
+            if !bookmarks.isEmpty {
+                Section {
+                    NotesPane(
+                        bookmarks: bookmarks,
+                        episodeTitle: { bookmark in tracks.first { $0.id == bookmark.trackID }?.title },
+                        onPlay: { play($0) },
+                        onChange: { refreshBookmarks() }
+                    )
+                }
+                .listRowSeparator(.hidden)
+            }
+
             Section("Episodes") {
                 ForEach(tracks) { track in
                     Button {
@@ -163,7 +201,28 @@ struct SpeakerDetailView: View {
         .onChange(of: language) { _, _ in save() }
         .navigationTitle(currentSpeaker.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
+            refreshBookmarks()
+        }
         .task { await load() }
+    }
+
+    private func play(_ bookmark: Bookmark) {
+        guard let track = tracks.first(where: { $0.id == bookmark.trackID }) else { return }
+        PlaybackEngine.shared.open(track: track, queue: tracks, startingAt: bookmark.position)
+    }
+
+    private func savePhoto(_ data: Data) async {
+        guard let fileName = try? await ImageFileStore.speakerPhotos.save(data, maxDimension: 600) else { return }
+        let previous = currentSpeaker.photoFileName
+        try? libraryStore.updateArtistPhoto(id: currentSpeaker.id, photoFileName: fileName)
+        ImageFileStore.speakerPhotos.remove(previous)
+        currentSpeaker = (try? libraryStore.artist(id: currentSpeaker.id)) ?? currentSpeaker
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
+    private func refreshBookmarks() {
+        bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
     }
 
     /// Fills the fields from the speaker — but never over one being typed into.
@@ -284,6 +343,7 @@ struct SpeakerDetailView: View {
         currentSpeaker = (try? libraryStore.artist(id: speaker.id)) ?? currentSpeaker
         albums = (try? libraryStore.albums(forArtist: speaker.id)) ?? []
         tracks = (try? trackStore.tracks(forArtist: speaker.id)) ?? []
+        refreshBookmarks()
         seedFields()
         await fillMissingPhoto()
     }

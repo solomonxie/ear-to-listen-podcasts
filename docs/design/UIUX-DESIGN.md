@@ -29,7 +29,7 @@ ContentView → NavigationStack
 
 pushes : RemoteBrowserView · SpeakerDetailView · AlbumDetailView · ShowDetailView ·
          PlaylistDetailView
-sheets : RealPlayerView · SyncQueueView · AddS3ProviderView · AddAiKeyView ·
+sheets : RealPlayerView · SyncQueueView · AddCloudSourceView · AddAiKeyView ·
          DownloadsView · SpeakerEditView · AddToPlaylistSheet · AddTracksToPlaylistView
 ```
 
@@ -277,8 +277,8 @@ it acts on, not in a settings list that grows a section per feature:
 - **Backing app data up to a bucket** is a toggle on that connection's row in Remote,
   next to `Sync Now` and its frequency — same bucket, same question. An ordinary switch
   on its own row: pressed into the pill row beside two buttons, it read as a third button.
-- **Adding episodes** — your own files, or the samples — is the last group, two links,
-  not two sections.
+- **Adding episodes** from your own files is the last group, one link, not its own
+  section.
 
 Tapping an AI key opens its own page: every call made with that key, newest first, with
 the model, tokens in and out, and an estimated cost, and the prompt and reply behind a
@@ -309,9 +309,9 @@ under their own name:
  This build of the app isn't signed for iCloud.             ← no second line
 ```
 
-The sample library is never loaded on its own — a fresh install is an empty library with
-one offer to load it, because sample content sitting in the same shelves as synced
-content can't be told apart from it.
+No sample library ships: a fresh install is an empty library, because sample content
+sitting in the same shelves as synced content can't be told apart from it. The seeder and
+its clips stay in the repo (`DemoData/`) for manual testing only.
 
 
 ## Flows

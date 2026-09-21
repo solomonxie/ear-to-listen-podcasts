@@ -164,12 +164,12 @@ struct LibraryStore {
 
     // MARK: Topics
 
-    func upsertTopic(name: String, isDemo: Bool = false) throws -> Topic {
+    func upsertTopic(name: String) throws -> Topic {
         try dbQueue.write { db in
             if let existing = try Topic.filter(Column("name") == name).fetchOne(db) {
                 return existing
             }
-            let topic = Topic(id: UUID().uuidString, name: name, isDemo: isDemo)
+            let topic = Topic(id: UUID().uuidString, name: name)
             try topic.insert(db)
             return topic
         }

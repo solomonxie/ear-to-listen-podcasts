@@ -8,7 +8,7 @@ struct Playlist: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var name: String
     var source: String
     var createdAt: Date
-    /// Seeded by `DemoDataSeeder`, wiped/reseeded together rather than treated as real data.
+    /// Only ever set by the repo-only sample seeder (`DemoData/`); nothing shipped writes it.
     var isDemo: Bool = false
 }
 

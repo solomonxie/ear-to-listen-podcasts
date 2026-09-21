@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Embeddable "Remote" section for the single-page root layout — real S3 sources,
+/// Embeddable "Remote" section for the single-page root layout — real cloud sources,
 /// each linking to `RemoteBrowserView` for browsing/syncing/playing. "Continue
 /// Listening" lives at the top of Home instead of here, since it's about the library
 /// as a whole, not specifically about remote connections.
@@ -8,7 +8,7 @@ struct RemoteSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var syncQueue = SyncQueueManager.shared
     @ObservedObject private var autoBackup = AutoBackup.shared
-    @State private var showingAddS3 = false
+    @State private var showingAddSource = false
     @State private var showingSyncQueue = false
     @State private var syncingProviderIDs: Set<String> = []
     @State private var syncMessages: [String: String] = [:]
@@ -16,8 +16,10 @@ struct RemoteSectionView: View {
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
 
-    private var s3Providers: [ProviderRecord] {
-        viewModel.providers.filter { $0.type == S3Provider.providerType }
+    /// Every bucket, whichever cloud it's in — local files and the demo content have
+    /// their own homes in Settings.
+    private var remoteProviders: [ProviderRecord] {
+        viewModel.providers.filter { $0.cloudKind != nil }
     }
 
     var body: some View {
@@ -26,7 +28,7 @@ struct RemoteSectionView: View {
             HStack {
                 Text("Remote").sectionTitle()
                 Spacer()
-                Button { showingAddS3 = true } label: { Image(systemName: "plus.circle.fill") }
+                Button { showingAddSource = true } label: { Image(systemName: "plus.circle.fill") }
             }
             .padding(.horizontal)
 
@@ -36,13 +38,13 @@ struct RemoteSectionView: View {
                 .sectionHint()
                 .padding(.horizontal)
 
-            if s3Providers.isEmpty {
-                Text("No remote sources yet. Add an S3 bucket to browse and sync episodes from.")
+            if remoteProviders.isEmpty {
+                Text("No remote sources yet. Add a bucket — S3, Tencent COS, Alibaba OSS, Azure or Google Cloud — to browse and sync episodes from.")
                     .sectionHint()
                     .padding(.horizontal)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(s3Providers) { record in
+                    ForEach(remoteProviders) { record in
                         VStack(alignment: .leading, spacing: 8) {
                             NavigationLink {
                                 RemoteBrowserView(record: record, viewModel: viewModel)
@@ -63,7 +65,7 @@ struct RemoteSectionView: View {
                             syncControls(for: record)
                         }
                         .padding(.bottom, 6)
-                        if record.id != s3Providers.last?.id {
+                        if record.id != remoteProviders.last?.id {
                             Divider().padding(.leading, 68)
                         }
                     }
@@ -72,8 +74,8 @@ struct RemoteSectionView: View {
 
             }
         }
-        .sheet(isPresented: $showingAddS3) {
-            NavigationStack { AddS3ProviderView(viewModel: viewModel) }
+        .sheet(isPresented: $showingAddSource) {
+            NavigationStack { AddCloudSourceView(viewModel: viewModel) }
         }
         .sheet(isPresented: $showingSyncQueue) {
             NavigationStack { SyncQueueView() }
@@ -220,7 +222,7 @@ struct RemoteSectionView: View {
             viewModel.load()
             syncQueue.refresh()
         } catch {
-            syncMessages[record.id] = describeAWSError(error)
+            syncMessages[record.id] = describeCloudError(error)
         }
     }
 
@@ -243,7 +245,14 @@ private struct RemoteSourceRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(Color.accentColor.gradient)
                 .frame(width: 44, height: 44)
-                .overlay { Image(systemName: "cloud.fill").foregroundStyle(.white) }
+                // Which cloud, not just "a cloud": five backends look identical in a list
+                // otherwise, and the folder path below only names the bucket.
+                .overlay {
+                    Text(record.cloudKind?.shortName ?? "")
+                        .font(.caption2.weight(.bold))
+                        .minimumScaleFactor(0.7)
+                        .foregroundStyle(.white)
+                }
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.label).font(.subheadline.weight(.semibold))
                 // Lets two connections to the same bucket (different folders) be told apart.
@@ -259,6 +268,6 @@ private struct RemoteSourceRow: View {
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .onAppear { path = ProviderManager.shared.s3DisplayPath(for: record) }
+        .onAppear { path = ProviderManager.shared.displayPath(for: record) }
     }
 }

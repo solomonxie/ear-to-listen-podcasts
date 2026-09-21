@@ -24,6 +24,6 @@ struct Album: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var language: String? = nil
     /// Set when someone edits the album header, or applies a batch suggestion.
     var metadataEditedAt: Date? = nil
-    /// Seeded by `DemoDataSeeder`, wiped/reseeded together rather than treated as real data.
+    /// Only ever set by the repo-only sample seeder (`DemoData/`); nothing shipped writes it.
     var isDemo: Bool = false
 }

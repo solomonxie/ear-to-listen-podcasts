@@ -1,52 +1,46 @@
 import Foundation
 
-/// The code S3 actually returned — `AccessDenied`, `SignatureDoesNotMatch`, `NoSuchKey` —
-/// rather than a generic "the operation couldn't be completed". Which of those it is, is
-/// the whole content of the message for someone whose bucket won't connect.
-func describeAWSError(_ error: Error) -> String {
-    error.localizedDescription
-}
-
 enum S3ProviderError: Error, LocalizedError {
-    case missingSetting(String)
+    case unsupportedKind(String)
     case regionDetectionFailed
 
     var errorDescription: String? {
         switch self {
-        case .missingSetting(let key):
-            return "Missing setting: \(key)"
+        case .unsupportedKind(let type):
+            return "\(type) buckets aren't served by the S3 client."
         case .regionDetectionFailed:
             return "Couldn't detect the bucket's region. Check the bucket name is correct."
         }
     }
 }
 
+/// Amazon S3, Tencent Cloud COS and Alibaba Cloud OSS.
+///
+/// One implementation for three clouds, because they are one API: the same requests, the
+/// same SigV4 signature (service `s3`) and the same XML, answered on three different
+/// hostnames. Which host is the only thing that varies, and it varies in `BucketEndpoint`.
 struct S3Provider: CloudProvider {
-    static let providerType = "s3"
-    let type = S3Provider.providerType
+    let type: String
+    let rootFolder: String?
 
-    private let bucket: String
-    private let keyPrefix: String?
     private let client: S3RestClient
 
     init(config: CloudProviderConfig) throws {
-        func setting(_ key: String) throws -> String {
-            guard let value = config.settings[key], !value.isEmpty else {
-                throw S3ProviderError.missingSetting(key)
-            }
-            return value
+        guard let kind = config.kind, kind.speaksS3 else {
+            throw S3ProviderError.unsupportedKind(config.type)
+        }
+        let accessKeyId = try config.required("accessKeyId")
+        let secretAccessKey = try config.required("secretAccessKey")
+        let region = try config.required("region")
+        let bucket = try config.required("bucket")
+        guard let endpoint = BucketEndpoint(kind: kind, bucket: bucket, region: region) else {
+            throw S3ProviderError.unsupportedKind(config.type)
         }
 
-        let accessKeyId = try setting("accessKeyId")
-        let secretAccessKey = try setting("secretAccessKey")
-        let region = try setting("region")
-        bucket = try setting("bucket")
-        // Normalized on read as well as on save, so connections stored before folders were
-        // required (a prefix with no trailing slash) start behaving like folders too.
-        keyPrefix = S3FolderPath.normalized(config.settings["keyPrefix"])
-
+        type = kind.providerType
+        rootFolder = config.folder
         client = S3RestClient(
-            bucket: bucket,
+            endpoint: endpoint,
             credentials: SigV4.Credentials(
                 accessKeyID: accessKeyId, secretAccessKey: secretAccessKey, region: region
             )
@@ -56,6 +50,9 @@ struct S3Provider: CloudProvider {
     /// Looks up which region a bucket lives in, so the add-provider flow doesn't require typing it
     /// or granting any IAM permission: S3 returns this header for any request to a bucket's
     /// virtual-hosted endpoint, even unauthenticated ones, before permission checks happen.
+    ///
+    /// AWS only — COS and OSS name the region in the hostname itself, so there's nowhere to
+    /// ask before you already know it, and those connections pick it from a list instead.
     static func detectRegion(bucket: String) async throws -> String {
         var request = URLRequest(url: URL(string: "https://\(bucket).s3.amazonaws.com/")!)
         request.httpMethod = "HEAD"
@@ -72,7 +69,7 @@ struct S3Provider: CloudProvider {
         var continuationToken: String?
         repeat {
             let output = try await client.listObjects(
-                prefix: folderID ?? keyPrefix, continuationToken: continuationToken
+                prefix: folderID ?? rootFolder, continuationToken: continuationToken
             )
             for object in output.objects {
                 files.append(CloudFile(
@@ -90,12 +87,12 @@ struct S3Provider: CloudProvider {
         return files
     }
 
-    /// One folder level, asked of S3 directly: `delimiter: "/"` makes it return immediate
-    /// subfolders as `commonPrefixes` and only the keys sitting in this folder, instead of
-    /// every key underneath it. That's what makes live browsing affordable — the default
-    /// implementation would pull the whole subtree back just to show one level of it.
+    /// One folder level, asked of the bucket directly: `delimiter: "/"` makes it return
+    /// immediate subfolders as `commonPrefixes` and only the keys sitting in this folder,
+    /// instead of every key underneath it. That's what makes live browsing affordable — the
+    /// default implementation would pull the whole subtree back just to show one level of it.
     func listDirectory(atFolder folderID: String?) async throws -> (folders: [String], files: [CloudFile]) {
-        let prefix = S3FolderPath.normalized(folderID) ?? keyPrefix ?? ""
+        let prefix = CloudFolderPath.normalized(folderID) ?? rootFolder ?? ""
         var folders: [String] = []
         var files: [CloudFile] = []
         var continuationToken: String?
@@ -146,80 +143,27 @@ struct S3Provider: CloudProvider {
         return url
     }
 
-    func testConnection() async -> ConnectionTestResult {
-        do {
-            _ = try await client.listObjects(prefix: keyPrefix, maxKeys: 1)
-            return ConnectionTestResult(isSuccess: true, message: nil)
-        } catch {
-            return ConnectionTestResult(isSuccess: false, message: describeAWSError(error))
-        }
+    /// The signed GET the default would mint works, but this is already a signed request
+    /// and one round trip either way — no reason to sign a URL to hand back to ourselves.
+    func download(fileID: String) async throws -> Data {
+        try await client.getObject(key: fileID)
     }
 
-    /// A folder of its own, spelled out in full: this sits in a bucket the listener
-    /// browses in every S3 client they own, often years later, and ".byop" tells them
-    /// nothing about which app left it there or whether it's safe to delete.
-    private var backupFolder: String { (keyPrefix ?? "") + "ear-to-listen-podcasts/" }
-
-    /// Where the app kept them under its old name. Read, never written — a rename must
-    /// not strand the copies already in someone's bucket.
-    private var legacyBackupFolder: String { (keyPrefix ?? "") + "bring-your-own-podcasts/" }
-
-    /// Today's archive — see `BackupArchiveName`. Derived rather than picked, so
-    /// backing up and restoring still need no picker.
-    private var backupKey: String { backupFolder + BackupArchiveName.current() }
-
-    /// Names this backup has had before. Read-only, in order, so a copy written by any
-    /// older build still restores — losing track of one means losing the library it holds.
-    ///
-    /// `app-data-backup.zip` was the single file every build wrote before dated
-    /// archives; `.byop/library-backup.zip` was an abbreviation nobody could expand; the
-    /// `.json` before that was a zip with a lying extension, chosen only to fall outside
-    /// the old "is this an episode" filter, which `FileKind` now decides properly.
-    private var legacyBackupKeys: [String] {
-        [
-            legacyBackupFolder + "app-data-backup.zip",
-            (keyPrefix ?? "") + ".byop/library-backup.zip",
-            (keyPrefix ?? "") + "byop-backup.json",
-        ]
+    func testConnection() async -> ConnectionTestResult {
+        do {
+            _ = try await client.listObjects(prefix: rootFolder, maxKeys: 1)
+            return ConnectionTestResult(isSuccess: true, message: nil)
+        } catch {
+            return ConnectionTestResult(isSuccess: false, message: describeCloudError(error))
+        }
     }
 
     var isWritable: Bool { true }
 
-    /// `path` is a whole key, as `listFiles` hands them out — not relative to `keyPrefix`.
+    /// `path` is a whole key, as `listFiles` hands them out — not relative to the folder
+    /// this connection starts at.
     func upload(_ data: Data, toPath path: String, contentType: String) async throws {
         let key = try CloudWrite.checked(path)
         try await client.putObject(key: key, data: data, contentType: contentType)
-    }
-
-    func uploadBackup(_ data: Data) async throws {
-        try await client.putObject(key: backupKey, data: data, contentType: "application/zip")
-    }
-
-    /// `nil` means no backup has been made yet, not an error. Reads the newest month in
-    /// the folder — not necessarily this month's, since a device coming back from a
-    /// reinstall may not have backed up yet — and falls back to the keys older builds
-    /// wrote so those copies still restore.
-    func downloadBackup() async throws -> Data? {
-        let newest = (try? await newestBackupKey()) ?? nil
-        for key in (newest.map { [$0] } ?? []) + legacyBackupKeys {
-            do {
-                return try await client.getObject(key: key)
-            } catch let error as S3Error where error.code == "NoSuchKey" || error.code == "NoSuchBucket" {
-                continue
-            }
-        }
-        return nil
-    }
-
-    /// The newest archive in either folder — the app's own, and the one it used to write
-    /// to. Both are listed rather than one falling back to the other: whichever holds the
-    /// most recent copy is the one to restore from.
-    private func newestBackupKey() async throws -> String? {
-        var keys: [String] = []
-        for prefix in [backupFolder, legacyBackupFolder] {
-            let output = try? await client.listObjects(prefix: prefix)
-            keys += (output?.objects ?? []).map(\.key)
-        }
-        return BackupArchiveName.newest(among: keys)
     }
 }

@@ -19,9 +19,9 @@ import SwiftUI
 /// makes every row a fraction of a point — a touch that moves 2pt skips forty files. Over
 /// 40% the same list is still reachable in one drag, and a small correction stays small.
 ///
-/// It shows while the list is moving and fades a couple of seconds after it stops: a
-/// permanent bar over the content is furniture, and there's nothing to grab when nobody
-/// is scrolling.
+/// It shows while the listener is scrolling and fades a couple of seconds after they
+/// stop — never on arrival, however the page moves settling in: a permanent bar over the
+/// content is furniture, and there's nothing to grab when nobody is scrolling.
 struct ScrollHandle: View {
     /// Row identities, in the order they appear. The handle maps its position onto this.
     let ids: [AnyHashable]
@@ -176,6 +176,7 @@ private struct ScrollHandleModifier: ViewModifier {
     let label: (Int) -> String
 
     @StateObject private var activity = ScrollActivity()
+    @State private var isUserScrolling = false
 
     func body(content: Content) -> some View {
         scrollWatching(content)
@@ -185,14 +186,24 @@ private struct ScrollHandleModifier: ViewModifier {
             }
     }
 
-    /// Momentum counts as scrolling, so the offset itself is the signal where the OS
-    /// reports it; older systems get the drag that started it.
+    /// Only a scroll the *listener* started counts. Offset alone doesn't tell them apart:
+    /// opening an episode lays the page out and jumps the transcript to the playing line,
+    /// which moved the offset and flashed the handle at someone who hadn't touched the
+    /// screen. The phase says who is driving; momentum after a flick still counts, an
+    /// animated jump doesn't. Older systems get the drag that started it.
     @ViewBuilder
     private func scrollWatching(_ content: Content) -> some View {
         if #available(iOS 18.0, *) {
-            content.onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, _ in
-                activity.poke()
-            }
+            content
+                .onScrollPhaseChange { _, phase in
+                    isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
+                    if isUserScrolling { activity.poke() }
+                }
+                // Keeps the handle up for the length of a long flick: the phase changes
+                // once, the offset keeps arriving.
+                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, _ in
+                    if isUserScrolling { activity.poke() }
+                }
         } else {
             content.simultaneousGesture(
                 DragGesture(minimumDistance: 6).onChanged { _ in activity.poke() }

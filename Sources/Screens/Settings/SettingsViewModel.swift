@@ -22,7 +22,7 @@ final class SettingsViewModel: ObservableObject {
     private let backupService = BackupService()
 
     var hasActiveRemoteProvider: Bool {
-        providers.contains { $0.type == S3Provider.providerType && $0.isActive }
+        providers.contains { $0.cloudKind != nil && $0.isActive }
     }
 
     func load() {
@@ -82,22 +82,18 @@ final class SettingsViewModel: ObservableObject {
         AiRouter.strategy = strategy
     }
 
+    /// A connected bucket, in whichever cloud. `settings` is that cloud's own credential
+    /// (`CloudSourceKind.credential`) plus `bucket`/`keyPrefix`, and it goes to the
+    /// Keychain — the database row holds nothing secret.
     @discardableResult
-    func addS3Provider(accessKeyId: String, secretAccessKey: String, region: String, bucket: String, keyPrefix: String) -> ProviderRecord? {
+    func addCloudProvider(kind: CloudSourceKind, label: String, settings: [String: String]) -> ProviderRecord? {
         let id = UUID().uuidString
-        let settings = [
-            "accessKeyId": accessKeyId,
-            "secretAccessKey": secretAccessKey,
-            "region": region,
-            "bucket": bucket,
-            "keyPrefix": keyPrefix,
-        ]
         do {
             try ProviderManager.shared.saveSettings(settings, forProviderID: id)
             let record = ProviderRecord(
                 id: id,
-                type: S3Provider.providerType,
-                label: bucket,
+                type: kind.providerType,
+                label: label,
                 configJSON: "",
                 isActive: true,
                 createdAt: Date()

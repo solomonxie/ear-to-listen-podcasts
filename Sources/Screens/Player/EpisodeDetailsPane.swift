@@ -37,8 +37,6 @@ struct EpisodeDetailsPane: View {
     @State private var draftTrackID = ""
     @FocusState private var focusedField: EpisodeField?
 
-    @State private var bookmarks: [Bookmark] = []
-    @State private var editingBookmark: Bookmark?
     @State private var artworkItem: PhotosPickerItem?
     @State private var isSuggesting = false
     @State private var suggestionError: String?
@@ -47,7 +45,6 @@ struct EpisodeDetailsPane: View {
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
-    private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     private var track: Track { latest ?? playingTrack }
 
@@ -65,19 +62,6 @@ struct EpisodeDetailsPane: View {
                     .font(.footnote)
                     .lineLimit(2...8)
                     .focused($focusedField, equals: .notes)
-            }
-
-            if !bookmarks.isEmpty {
-                DetailCard("Bookmarks") {
-                    ForEach(bookmarks) { bookmark in
-                        BookmarkRow(bookmark: bookmark) {
-                            PlaybackEngine.shared.seek(to: bookmark.position)
-                        } onEdit: {
-                            editingBookmark = bookmark
-                        }
-                        if bookmark.id != bookmarks.last?.id { Divider() }
-                    }
-                }
             }
 
             DetailCard("File") {
@@ -119,12 +103,6 @@ struct EpisodeDetailsPane: View {
         // puts their changes on screen without waiting for the next track change.
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
             Task { await load() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
-            bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
-        }
-        .sheet(item: $editingBookmark) { bookmark in
-            BookmarkEditorView(bookmark: bookmark)
         }
         // Leaving a field is the commit. Scrolling away, or the page closing, counts too.
         .onChange(of: focusedField) { previous, _ in
@@ -200,17 +178,17 @@ struct EpisodeDetailsPane: View {
         // episode. The picture already has a full-size copy at the top of the page, and a
         // second thumbnail of it in the middle of a list of fields read as a stray badge
         // rather than a control.
-        HStack(spacing: 16) {
-            PhotosPicker(selection: $artworkItem, matching: .images) {
-                Label(track.artworkFileName == nil ? "Add Photo" : "Change Photo", systemImage: "photo")
-                    .font(.footnote)
-            }
-            if track.artworkFileName != nil {
-                Button("Remove Photo", role: .destructive) { setArtwork(nil) }
-                    .font(.footnote)
-            }
-            Spacer(minLength: 0)
-        }
+        ArtworkSourceRow(
+            subject: artworkSubject,
+            hasArtwork: track.artworkFileName != nil,
+            libraryPicker: {
+                PhotosPicker(selection: $artworkItem, matching: .images) {
+                    Label("From Library", systemImage: "photo.on.rectangle")
+                }
+            },
+            onUse: { data in Task { await saveArtwork(data) } },
+            onRemove: { setArtwork(nil) }
+        )
 
         Button {
             Task { await suggest() }
@@ -262,7 +240,6 @@ struct EpisodeDetailsPane: View {
         topics = track.albumID.flatMap { try? libraryStore.topics(forAlbum: $0) } ?? []
         connectionLabel = (try? providerStore.all())?.first { $0.id == track.providerID }?.label
         downloadedBytes = await AudioCache.shared.cachedSize(providerID: track.providerID, filePath: track.filePath)
-        bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
         // Half-typed words outrank whatever the database says — a sync landing mid-edit
         // must not pull the text out from under the cursor. A different track is the one
         // exception: those words have nowhere left to go.
@@ -310,6 +287,28 @@ struct EpisodeDetailsPane: View {
         guard let item, let picked = try? await item.loadTransferable(type: PickedImageFile.self) else { return }
         defer { picked.discard() }
         guard let fileName = try? await ImageFileStore.artwork.save(contentsOf: picked.url, maxDimension: 800) else { return }
+        setArtwork(fileName)
+    }
+
+    /// What the model is told this episode is. Everything already known about it, in the
+    /// order that identifies it fastest — nobody should have to type their own library
+    /// back into a prompt box.
+    private var artworkSubject: ArtworkSubject {
+        ArtworkSubject(
+            kind: .episode,
+            name: track.title,
+            details: [
+                artistName.nilIfEmpty.map { "speaker \($0)" },
+                albumName.nilIfEmpty.map { "from \($0)" },
+                year.nilIfEmpty,
+                topics.isEmpty ? nil : topics.map(\.name).joined(separator: ", "),
+                notes.nilIfEmpty,
+            ].compactMap { $0 }
+        )
+    }
+
+    private func saveArtwork(_ data: Data) async {
+        guard let fileName = try? await ImageFileStore.artwork.save(data, maxDimension: 800) else { return }
         setArtwork(fileName)
     }
 
