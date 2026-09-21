@@ -4,8 +4,13 @@ import GRDB
 struct BookmarkStore {
     let dbQueue: DatabaseQueue
 
+    /// A second is as fine as a mark gets: the list shows whole seconds, so two rows both
+    /// reading 12:03 are one mark made twice — a double tap, or a second thought a moment
+    /// later. The mark already there comes back instead of a new one, which leaves the
+    /// caller free to scroll to and highlight it exactly as it would a fresh one.
     @discardableResult
     func add(trackID: String, positionMs: Int, transcriptText: String? = nil) throws -> Bookmark {
+        if let existing = try existing(trackID: trackID, inSecondOf: positionMs) { return existing }
         let bookmark = Bookmark(
             id: UUID().uuidString, trackID: trackID, positionMs: positionMs,
             note: nil, tags: nil, transcriptText: transcriptText, createdAt: Date()
@@ -13,6 +18,16 @@ struct BookmarkStore {
         try dbQueue.write { db in try bookmark.insert(db) }
         ChangeLog.record("bookmarks", key: bookmark.id, new: bookmark, in: dbQueue)
         return bookmark
+    }
+
+    private func existing(trackID: String, inSecondOf positionMs: Int) throws -> Bookmark? {
+        let second = (positionMs / 1000) * 1000
+        return try dbQueue.read { db in
+            try Bookmark
+                .filter(Column("trackID") == trackID)
+                .filter(Column("positionMs") >= second && Column("positionMs") < second + 1000)
+                .fetchOne(db)
+        }
     }
 
     func update(_ bookmark: Bookmark) throws {
