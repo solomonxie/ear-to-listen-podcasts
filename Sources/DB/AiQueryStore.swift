@@ -25,6 +25,35 @@ struct AiQueryStore {
             completionTokens: result?.completionTokens,
             createdAt: Date()
         )
+        try insert(query)
+        return query
+    }
+
+    /// A drawn picture. Billed per image rather than per token, so there are no counts to
+    /// store — the model name is what `AiQuery.estimatedCostUSD` prices it from. `note`
+    /// stands in for the reply: a line saying what came back, never the image itself.
+    @discardableResult
+    func recordImage(
+        keyID: String, vendor: AiVendor, model: String, prompt: String,
+        note: String? = nil, error: Error? = nil
+    ) throws -> AiQuery {
+        let query = AiQuery(
+            id: UUID().uuidString,
+            keyID: keyID,
+            vendor: vendor,
+            model: model,
+            prompt: AiQuery.trimmed(prompt),
+            response: note,
+            errorMessage: error?.localizedDescription,
+            promptTokens: nil,
+            completionTokens: nil,
+            createdAt: Date()
+        )
+        try insert(query)
+        return query
+    }
+
+    private func insert(_ query: AiQuery) throws {
         try dbQueue.write { db in
             try query.insert(db)
             // `rowid` breaks the tie: several calls can land in the same stored
@@ -34,9 +63,8 @@ struct AiQueryStore {
                 DELETE FROM aiQueries WHERE keyID = ? AND id NOT IN (
                     SELECT id FROM aiQueries WHERE keyID = ? ORDER BY createdAt DESC, rowid DESC LIMIT ?
                 )
-                """, arguments: [keyID, keyID, Self.historyLimit])
+                """, arguments: [query.keyID, query.keyID, Self.historyLimit])
         }
-        return query
     }
 
     func recent(keyID: String) throws -> [AiQuery] {

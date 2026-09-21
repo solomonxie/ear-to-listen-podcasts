@@ -21,6 +21,19 @@ enum AiPricing {
         "grok-2-latest": (2.00, 10.00),
     ]
 
+    /// USD per picture, for the models billed by the image rather than by the token.
+    /// One 1024×1024 at the quality the app asks for, which is each vendor's default.
+    private static let perImageUSD: [String: Double] = [
+        "gpt-image-1": 0.042,
+        "grok-2-image": 0.07,
+    ]
+
+    /// Nil for anything that isn't one of the image models, so a chat row can fall
+    /// through to this without inventing a per-picture price for a chat model.
+    static func imageEstimate(model: String, images: Int = 1) -> Double? {
+        perImageUSD[model].map { $0 * Double(images) }
+    }
+
     static func estimate(model: String, promptTokens: Int?, completionTokens: Int?) -> Double? {
         guard promptTokens != nil || completionTokens != nil, let price = price(for: model) else { return nil }
         return Double(promptTokens ?? 0) / 1_000_000 * price.input
