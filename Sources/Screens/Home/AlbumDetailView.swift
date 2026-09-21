@@ -28,6 +28,8 @@ struct AlbumDetailView: View {
     @State private var openPicker: String?
     @State private var allSpeakers: [Artist] = []
     @State private var bookmarks: [Bookmark] = []
+    /// Pushed by the speaker row's icon — see the comment where it's built.
+    @State private var openSpeaker: Artist?
     @State private var artworkItem: PhotosPickerItem?
     /// The live fields. Seeded from the album, and left alone while a field has the
     /// keyboard — a sync landing mid-edit must not retype what's being typed.
@@ -62,22 +64,9 @@ struct AlbumDetailView: View {
                 // has one for unfolding, and two would say the same thing twice.
                 UnfoldingPicker(
                     title: "Speaker", id: "speaker", open: $openPicker, selection: $speakerName,
-                    options: [UnfoldingPicker.Option("", "None")]
-                        + allSpeakers.map { UnfoldingPicker.Option($0.name, $0.name) },
-                    accessory: speaker.map { speaker in
-                        AnyView(
-                            NavigationLink {
-                                SpeakerDetailView(speaker: speaker)
-                            } label: {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.body)
-                                    .foregroundStyle(Color.accentColor)
-                                    .padding(.leading, 2)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Open \(speaker.name)'s page")
-                        )
-                    }
+                    options: speakerOptions,
+                    accessory: speakerAccessory,
+                    hidesChevron: speaker != nil
                 )
                 // The album's own year, and what every episode in it falls back to.
                 UnfoldingWheel(
@@ -136,6 +125,24 @@ struct AlbumDetailView: View {
                 rejectNote("profile")
             }
 
+            // Below the writing, like the speaker page: the cover is the last thing anyone
+            // sorts out, and a row of capsules under the name made the top of the page a
+            // toolbar instead of a cover and a title.
+            Section("Picture") {
+                ArtworkSourceRow(
+                    subject: artworkSubject,
+                    hasArtwork: shown.artworkFileName != nil,
+                    libraryPicker: {
+                        PhotosPicker(selection: $artworkItem, matching: .images) {
+                            Label("Photos", systemImage: "photo.on.rectangle")
+                        }
+                    },
+                    onUse: { data in Task { await saveArtwork(data) } },
+                    onRemove: { removeArtwork() }
+                )
+            }
+            .listRowSeparator(.hidden)
+
             Section("Stats") {
                 LabeledContent("Episodes", value: "\(tracks.count)")
                 if let totalDuration { LabeledContent("Total length", value: totalDuration) }
@@ -161,6 +168,7 @@ struct AlbumDetailView: View {
                     NotesPane(
                         bookmarks: bookmarks,
                         episodeTitle: { bookmark in tracks.first { $0.id == bookmark.trackID }?.title },
+                        foldsByEpisode: true,
                         onPlay: { play($0) },
                         onChange: { bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? [] }
                     )
@@ -206,6 +214,7 @@ struct AlbumDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
             bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
         }
+        .navigationDestination(item: $openSpeaker) { SpeakerDetailView(speaker: $0) }
         .sheet(isPresented: $showingAnalysis) {
             AlbumAnalysisView(album: shown, artistName: artistName, tracks: tracks)
         }
@@ -245,30 +254,52 @@ struct AlbumDetailView: View {
             Text(metaLine)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
-            ArtworkSourceRow(
-                subject: ArtworkSubject(
-                    kind: .album,
-                    name: shown.name,
-                    details: [
-                        artistName.map { "by \($0)" },
-                        shown.year.map(String.init),
-                        topicNames.nilIfEmpty,
-                        shown.notes?.nilIfEmpty,
-                    ].compactMap { $0 }
-                ),
-                hasArtwork: shown.artworkFileName != nil,
-                libraryPicker: {
-                    PhotosPicker(selection: $artworkItem, matching: .images) {
-                        Label("From Library", systemImage: "photo.on.rectangle")
-                    }
-                },
-                onUse: { data in Task { await saveArtwork(data) } },
-                onRemove: { removeArtwork() }
-            )
         }
         .frame(maxWidth: .infinity)
         .task(id: artworkItem) { await handleArtworkPick() }
+    }
+
+    /// A button driving `navigationDestination`, not a `NavigationLink`: a link nested in
+    /// a List row gets the system's own disclosure arrow added at the row's trailing edge,
+    /// which is the second of the two arrows that were on this row.
+    /// Everything the page already knows, in the order that pins the subject down
+    /// fastest: who, when, what it's about, then the longer writing about the collection
+    /// and the person behind it. A cover for a series of sermons on Ecclesiastes by a
+    /// named preacher is a different picture from "传道书", and all of that is already
+    /// typed in above — asking for it again in a prompt box would be the app's failing.
+    private var artworkSubject: ArtworkSubject {
+        ArtworkSubject(
+            kind: .album,
+            name: name.nilIfEmpty ?? shown.name,
+            details: [
+                artistName.map { "by \($0)" },
+                speaker?.knownFor?.nilIfEmpty.map { "who speaks on \($0)" },
+                year.nilIfEmpty,
+                topicNames.nilIfEmpty.map { "topics: \($0)" },
+                notes.nilIfEmpty,
+                profile.nilIfEmpty,
+                speaker?.bio?.nilIfEmpty,
+                speaker?.background?.nilIfEmpty,
+            ].compactMap { $0 }
+        )
+    }
+
+    private var speakerOptions: [UnfoldingPicker<String>.Option] {
+        [UnfoldingPicker.Option("", "None")] + allSpeakers.map { UnfoldingPicker.Option($0.name, $0.name) }
+    }
+
+    private var speakerAccessory: AnyView? {
+        guard let speaker else { return nil }
+        return AnyView(
+            Button { openSpeaker = speaker } label: {
+                Image(systemName: "person.crop.circle")
+                    .font(.body)
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.leading, 2)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(speaker.name)'s page")
+        )
     }
 
     private var speaker: Artist? {
