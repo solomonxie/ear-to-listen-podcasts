@@ -11,6 +11,13 @@ struct AddToPlaylistSheet: View {
     @State private var newPlaylistName = ""
 
     private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+
+    /// Read fresh rather than from the copy the player is holding, which was loaded when
+    /// playback started.
+    private var isQueued: Bool {
+        ((try? trackStore.find(id: track.id)) ?? nil)?.listenLater ?? track.listenLater
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,6 +35,21 @@ struct AddToPlaylistSheet: View {
                     try? playlistStore.create(playlist)
                     add(to: playlist)
                 }
+                // The app's own list, above the hand-made ones and reachable from the
+                // player — the one place you can't long-press a row to get at it.
+                Section {
+                    Button {
+                        try? trackStore.setListenLater(id: track.id, listenLater: !isQueued)
+                        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+                        dismiss()
+                    } label: {
+                        Label(
+                            isQueued ? "Remove from Listen Later" : "Listen Later",
+                            systemImage: isQueued ? "clock.badge.xmark" : "clock"
+                        )
+                    }
+                }
+
                 if !playlists.isEmpty {
                     Section("Playlists") {
                         ForEach(playlists) { playlist in

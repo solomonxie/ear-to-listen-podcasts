@@ -15,6 +15,7 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var years: [Int] = []
     @Published private(set) var bookmarks: [Bookmark] = []
     @Published private(set) var favoriteTracks: [Track] = []
+    @Published private(set) var listenLaterTracks: [Track] = []
     /// Folded once here rather than rebuilt per keystroke — see `LibrarySearch`.
     @Published private(set) var searchIndex = LibrarySearch.Index()
     /// Bookmarks as Home shows them: per episode, in episode order.
@@ -36,6 +37,7 @@ final class HomeLibraryViewModel: ObservableObject {
         years = (try? trackStore.years()) ?? []
         bookmarks = (try? bookmarkStore.recent()) ?? []
         favoriteTracks = (try? trackStore.favorites()) ?? []
+        listenLaterTracks = (try? trackStore.listenLater()) ?? []
 
         // One directory listing, then a pure hash check per track. Asking the cache per
         // track cost four filesystem calls each — including an attribute *write* that
@@ -87,6 +89,7 @@ final class HomeLibraryViewModel: ObservableObject {
     /// nothing to count but the thing itself.
     func count(of kind: FixedPlaylist) -> Int {
         switch kind {
+        case .listenLater: return listenLaterTracks.count
         case .favorites: return favoriteTracks.count
         case .downloaded: return downloadedTracks.count
         }

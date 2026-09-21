@@ -44,4 +44,7 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// Marked by hand from the player. Says nothing about how often it's played — that's
     /// what `lastPlayedAt` is for — only that the listener wants it findable.
     var isFavorite: Bool = false
+    /// Put aside to hear soon. The other half of favouriting: a favourite is what you
+    /// keep after listening, this is what you line up before.
+    var listenLater: Bool = false
 }
