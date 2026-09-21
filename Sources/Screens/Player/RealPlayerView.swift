@@ -13,8 +13,6 @@ struct RealPlayerView: View {
     /// How far the page has been pulled past its own top, so it can shrink under the
     /// finger on the way out instead of just vanishing at the threshold.
     @State private var pullDown: CGFloat = 0
-    /// How far the header has been dragged down, so the page follows the finger.
-    @State private var dragDown: CGFloat = 0
     @State private var isDismissing = false
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
@@ -33,17 +31,11 @@ struct RealPlayerView: View {
     private static let topAnchor = "player.top"
     private static let transcriptAnchor = "player.transcript"
     private static let notesAnchor = "player.notes"
-    /// How far sideways counts as "the next one" rather than a scroll that wandered.
-    private static let swipeToChapter: CGFloat = 80
     /// How far past the top the page has to come before it goes away. Read off the scroll
     /// view's overscroll, which rubber-bands: the finger travels two to three times this,
     /// so it's well clear of the idle bounce at the top of a long page without asking for
     /// a stroke longer than the screen.
     private static let pullToDismiss: CGFloat = 70
-    /// The same gesture, on the artwork and titles, where a scroll view isn't in the way.
-    /// This is the one that actually gets used — a card is put down by dragging the top of
-    /// it, not by fighting a transcript for the overscroll underneath.
-    private static let dragToDismiss: CGFloat = 110
     /// Read, never observed. A running transcription republishes several times a second,
     /// and observing it here redrew the artwork, the transport and the whole details card
     /// along with the text — which is what made the page flash while transcribing. The
@@ -119,6 +111,11 @@ struct RealPlayerView: View {
                 }
                 .background(Color.appBackground.ignoresSafeArea())
                 .navigationBarTitleDisplayMode(.inline)
+                // The bar has a background of its own rather than floating clear over the
+                // artwork: the page opens scrolled to the top, where a transparent bar put
+                // "Now Playing" and the close chevron straight onto the picture.
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarBackground(Color.appBackground, for: .navigationBar)
                 .toolbar {
                     // A card you put down, not a page you back out of: the arrow points
                     // the way the gesture goes, and both leave the same way.
@@ -153,46 +150,11 @@ struct RealPlayerView: View {
         // walks into subfolders with plain links of its own, and a per-destination inset
         // never saw those.
         .safeAreaInset(edge: .bottom) { pushedPageBar }
-        // Put the card down by pulling it down — either by dragging its top, or by pulling
-        // the whole page past its own top, which the scroll view reports as overscroll. It
-        // follows the finger and shrinks as it goes, so the pull is answered before the
+        // Put the card down by pulling the page past its own top, which the scroll view
+        // reports as overscroll. It shrinks as it goes, so the pull is answered before the
         // threshold rather than at it.
-        .offset(y: dragDown)
-        .scaleEffect(1 - min(max(pullDown, dragDown), Self.pullToDismiss) / 1600, anchor: .center)
+        .scaleEffect(1 - min(pullDown, Self.pullToDismiss) / 1600, anchor: .center)
         .animation(.interactiveSpring(response: 0.3), value: pullDown)
-    }
-
-    /// The two gestures the top of the card carries, told apart by which way the finger
-    /// actually went: **down** puts the card away, **sideways** moves a chapter. Dragging
-    /// up on the artwork is how you get to the transcript, and that belongs to the scroll
-    /// view.
-    private var putDownDrag: some Gesture {
-        DragGesture(minimumDistance: 10)
-            .onChanged { value in
-                guard abs(value.translation.height) > abs(value.translation.width) else { return }
-                dragDown = max(0, value.translation.height)
-            }
-            .onEnded { value in
-                let sideways = value.translation.width
-                guard abs(value.translation.height) > abs(sideways) else {
-                    withAnimation(.easeOut(duration: 0.2)) { dragDown = 0 }
-                    guard abs(sideways) > Self.swipeToChapter else { return }
-                    // Where a book's pages go: left for the next one, right for the last.
-                    sideways < 0 ? engine.skipToNext() : engine.skipToPrevious()
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    return
-                }
-                // The flick counts as well as the distance, so putting it down briskly
-                // doesn't need the full stroke.
-                let thrown = value.predictedEndTranslation.height > Self.dragToDismiss * 2
-                guard value.translation.height > Self.dragToDismiss || thrown else {
-                    withAnimation(.easeOut(duration: 0.2)) { dragDown = 0 }
-                    return
-                }
-                guard !isDismissing else { return }
-                isDismissing = true
-                dismiss()
-            }
     }
 
     /// Split out of `body` purely so the type-checker can cope — it timed out once the
@@ -200,14 +162,15 @@ struct RealPlayerView: View {
     private func page(for track: Track, proxy: ScrollViewProxy) -> some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Artwork and titles move together, and carry the put-down gesture: the
-                // top of the card is the part of it a hand reaches for, and it's the one
-                // part with no scrolling text underneath to fight over the drag.
+                // No gesture of its own. A `DragGesture` here took the whole area away
+                // from the scroll view — dragging up on the artwork, the most natural way
+                // to reach the details and the transcript, did nothing at all. Putting the
+                // card down is the overscroll pull, which the scroll view reports without
+                // having to be fought for.
                 VStack(spacing: 20) {
                     artwork(for: track)
                     titles(for: track)
                 }
-                .gesture(putDownDrag)
                 Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
                     .padding(.horizontal)
                 transport(for: track, proxy: proxy)
@@ -253,8 +216,11 @@ struct RealPlayerView: View {
     }
 
     private func artwork(for track: Track) -> some View {
+        // Square and whole, the way every music player shows a cover: a 220pt band cropped
+        // the top and bottom off pictures that are square to begin with, and nothing is
+        // drawn over it — the title and speaker have their own line underneath.
         ArtworkTile(track: track, cornerRadius: 16, symbolSize: 64)
-            .frame(height: 220)
+            .aspectRatio(1, contentMode: .fit)
             .padding(.horizontal)
             .id(Self.topAnchor)
             // The big empty area at the top of the page doubles as "I'm done typing".
@@ -319,12 +285,14 @@ struct RealPlayerView: View {
             }
             .accessibilityLabel(track.isFavorite ? "Remove from favourites" : "Add to favourites")
 
-            Button { engine.skipToPrevious() } label: { Image(systemName: "backward.fill").font(.title) }
+            // The bar-and-triangle skip glyph, not the double arrowhead: two arrowheads
+            // read as rewind — hold to scrub — and these move to another episode.
+            Button { engine.skipToPrevious() } label: { Image(systemName: "backward.end.fill").font(.title) }
             Button { engine.togglePlayPause() } label: {
                 Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 56))
             }
-            Button { engine.skipToNext() } label: { Image(systemName: "forward.fill").font(.title) }
+            Button { engine.skipToNext() } label: { Image(systemName: "forward.end.fill").font(.title) }
 
             Button {
                 showingAddToPlaylist = true
@@ -664,51 +632,96 @@ private extension Array {
 /// `PlaybackEngine`'s periodic `currentTime` publishing (every 0.5s) can't yank the thumb
 /// back mid-drag. A zero-distance drag gesture also means tapping anywhere on the track
 /// jumps straight there, not just dragging the thumb.
+/// Where you are in the episode, and the way to move it.
+///
+/// **It has to be taken hold of first.** A bare drag gesture across the width of the
+/// screen is a trap on a page you scroll: a thumb brushing the bar on the way past threw
+/// away the place you were listening to, with nothing to undo it. A press of a moment
+/// arms it — the bar thickens, the handle appears under the finger and the app taps back
+/// — and only then does sliding move anything. A stroke that keeps moving never arms it,
+/// so the page scrolls as it should.
+///
+/// The handle is hidden until then, the way every music player does it: a dot sitting on
+/// the line is an invitation to drag, and this one shouldn't be taken up by accident.
 struct Scrubber: View {
     let currentTime: TimeInterval
     let duration: TimeInterval
     let onSeek: (TimeInterval) -> Void
 
-    @State private var isDragging = false
+    /// Long enough not to fire on a thumb passing through, short enough that reaching for
+    /// it on purpose doesn't feel like waiting.
+    private static let holdToScrub = 0.22
+
+    @State private var isScrubbing = false
     @State private var dragTime: TimeInterval = 0
 
-    private var displayedTime: TimeInterval { isDragging ? dragTime : currentTime }
+    private var displayedTime: TimeInterval { isScrubbing ? dragTime : currentTime }
     private var progress: Double { duration > 0 ? min(max(displayedTime / duration, 0), 1) : 0 }
+    private var trackHeight: CGFloat { isScrubbing ? 7 : 4 }
+    private var knobSize: CGFloat { isScrubbing ? 18 : 0 }
 
     var body: some View {
         VStack(spacing: 4) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary).frame(height: 4)
-                    Capsule().fill(Color.accentColor).frame(width: geo.size.width * progress, height: 4)
+                    Capsule().fill(.quaternary).frame(height: trackHeight)
+                    Capsule().fill(Color.accentColor)
+                        .frame(width: geo.size.width * progress, height: trackHeight)
                     Circle().fill(Color.accentColor)
-                        .frame(width: 14, height: 14)
-                        .offset(x: geo.size.width * progress - 7)
+                        .frame(width: knobSize, height: knobSize)
+                        .shadow(radius: isScrubbing ? 3 : 0)
+                        .offset(x: geo.size.width * progress - knobSize / 2)
                 }
+                .animation(.easeOut(duration: 0.15), value: isScrubbing)
                 .frame(maxHeight: .infinity, alignment: .center)
                 .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            isDragging = true
-                            dragTime = time(atX: value.location.x, width: geo.size.width)
-                        }
-                        .onEnded { value in
-                            let time = time(atX: value.location.x, width: geo.size.width)
-                            onSeek(time)
-                            isDragging = false
-                        }
-                )
+                .gesture(scrub(width: geo.size.width))
             }
-            .frame(height: 20)
+            .frame(height: 24)
             HStack {
                 Text(Self.formatted(displayedTime))
+                    .foregroundStyle(isScrubbing ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
                 Spacer()
                 Text(Self.formatted(duration))
             }
-            .font(.caption2)
+            .font(.caption2.monospacedDigit())
             .foregroundStyle(.secondary)
         }
+    }
+
+    /// Hold, then slide. `maximumDistance` is what lets a scroll through the bar fail the
+    /// press instead of arming it.
+    private func scrub(width: CGFloat) -> some Gesture {
+        LongPressGesture(minimumDuration: Self.holdToScrub, maximumDistance: 12)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                switch value {
+                case .first(true):
+                    take(hold: true)
+                case .second(true, let drag):
+                    take(hold: true)
+                    if let drag { dragTime = time(atX: drag.location.x, width: width) }
+                default:
+                    break
+                }
+            }
+            .onEnded { value in
+                guard isScrubbing else { return }
+                if case .second(true, let drag?) = value {
+                    dragTime = time(atX: drag.location.x, width: width)
+                }
+                onSeek(dragTime)
+                isScrubbing = false
+            }
+    }
+
+    /// Arms once per hold: the gesture reports `.first`/`.second` repeatedly, and the
+    /// starting time must not be re-read after the finger has begun to move it.
+    private func take(hold: Bool) {
+        guard hold, !isScrubbing else { return }
+        dragTime = currentTime
+        isScrubbing = true
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     }
 
     private func time(atX x: CGFloat, width: CGFloat) -> TimeInterval {
