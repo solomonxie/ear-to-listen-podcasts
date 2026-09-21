@@ -46,24 +46,26 @@ struct ArtworkTile: View {
         )
     }
 
-    /// Built on a `Color.clear` the overlay fills, so the tile is exactly the size it was
-    /// given. `scaledToFill` on the image alone reports the *filled* size as its own —
-    /// a square picture in a frame that isn't square laid itself out square and drew past
-    /// the frame, over whatever was next to it: the episode title under Now Playing's
-    /// artwork, the neighbouring card on Home's shelf.
+    /// The generated tile is the base and the picture is laid over it, rather than the
+    /// picture being the view.
+    ///
+    /// Two reasons. `scaledToFill` on the image alone reports the *filled* size as its
+    /// own, so a square picture in a frame that isn't square laid itself out square and
+    /// drew past the frame — over the episode title under Now Playing's artwork, over the
+    /// neighbouring card on Home's shelf. A greedy base takes exactly the size it was
+    /// given and the clip does the rest. And whatever happens to the picture — file gone,
+    /// bytes unreadable, nothing decoded yet — what's underneath is a coloured tile rather
+    /// than a hole the background shows through.
     var body: some View {
-        Color.clear
+        Rectangle()
+            .fill(LibraryArt.color(for: seed).gradient)
             .overlay {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
                 } else {
-                    Rectangle()
-                        .fill(LibraryArt.color(for: seed).gradient)
-                        .overlay {
-                            Image(systemName: symbol ?? LibraryArt.symbol(for: seed))
-                                .font(.system(size: symbolSize))
-                                .foregroundStyle(.white)
-                        }
+                    Image(systemName: symbol ?? LibraryArt.symbol(for: seed))
+                        .font(.system(size: symbolSize))
+                        .foregroundStyle(.white)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
