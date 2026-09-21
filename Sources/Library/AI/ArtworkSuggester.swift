@@ -1,40 +1,6 @@
 import Foundation
 import GRDB
 
-/// Two ways to get a picture for something in the library out of an AI key, because they
-/// answer different questions.
-///
-/// A real person has a face, and drawing one is worse than useless — it puts an invented
-/// stranger on a real speaker. For them the right answer is a photograph that already
-/// exists and is free to use, which a model is good at *naming* even though it can't
-/// serve it: "the portrait on their Wikipedia page" is a fact about the world, and the
-/// URL is checkable. A collection or an episode about a subject has no such photograph,
-/// and there an image model drawing something evocative is exactly right.
-enum ArtworkSource: String, CaseIterable, Identifiable, Sendable {
-    /// An image model draws one from the prompt.
-    case generated
-    /// A chat model names a public image that already exists; the app fetches it.
-    case publicPhoto
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .generated: return "Draw one"
-        case .publicPhoto: return "Find a real photo"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .generated:
-            return "An image model draws a picture from the description. Costs a few cents on your own key. Never use it for a real person's face."
-        case .publicPhoto:
-            return "A model names a public photo that already exists — a Wikipedia portrait, say — and the app fetches it. Costs what one short question costs. Check the credit before you keep it."
-        }
-    }
-}
-
 /// What the library already knows about the thing needing a picture, turned into the
 /// description a model is handed. Metadata rather than a blank box: the listener has
 /// already told the app who this is, and typing it again is the app's failure, not theirs.
@@ -49,8 +15,18 @@ struct ArtworkSubject: Sendable {
     /// identifies the subject fastest.
     var details: [String]
 
+    /// Long enough for a sentence of context per fact, short enough that a profile of
+    /// several paragraphs doesn't crowd out the facts after it.
+    private static let maxDetailCharacters = 220
+    private static let maxPromptCharacters = 1400
+
     var describedForPrompt: String {
-        ([name] + details.filter { !$0.isEmpty }).joined(separator: " · ")
+        let terms = details
+            .filter { !$0.isEmpty }
+            .map { $0.count > Self.maxDetailCharacters ? $0.prefix(Self.maxDetailCharacters) + "…" : $0[...] }
+        let described = ([name[...]] + terms).joined(separator: " · ")
+        guard described.count > Self.maxPromptCharacters else { return described }
+        return String(described.prefix(Self.maxPromptCharacters)) + "…"
     }
 
     /// The prompt the sheet opens with. Editable — the listener knows things the tags
@@ -65,26 +41,51 @@ struct ArtworkSubject: Sendable {
             return "Cover art for a podcast episode: \(describedForPrompt). Bold, simple, readable at thumbnail size, no text."
         }
     }
-}
 
-struct ArtworkSuggester {
-    /// A picture and where it came from. The credit matters for the found kind: a photo
-    /// with no idea who took it is a photo nobody can decide about.
-    struct Found: Sendable {
-        var data: Data
-        var sourceURL: URL?
-        var credit: String?
+    /// The same facts as a search box wants them: the connectives that make a prompt read
+    /// as English are noise in a query, and a paragraph of notes buries the words that
+    /// actually narrow it.
+    var searchQuery: String {
+        let connectives = ["speaker ", "from ", "by ", "host of "]
+        let terms = details
+            .filter { !$0.isEmpty && $0.count <= 40 }
+            .map { term in
+                connectives.first { term.hasPrefix($0) }
+                    .map { String(term.dropFirst($0.count)) } ?? term
+            }
+        return ([name] + terms).joined(separator: " ")
     }
 
+    /// Google Images rather than a model naming a URL. A model asked for "a photo of this
+    /// person" answers with a link that looks right and often isn't — and the wrong face
+    /// on a real speaker is the one mistake here that matters. Search results are a page
+    /// of candidates the listener judges, which is what that job actually needs.
+    /// `noiga=1` is what keeps this in the browser. Google's site claims `/search` as a
+    /// universal link for the Google app, and a universal link overrides the phone's
+    /// default-browser setting — tapping Search left for that app instead. The same file
+    /// declares `noiga=1` as an exclusion, so the address stops being a universal link
+    /// and iOS hands it to the default browser, which is where a page of candidate
+    /// photographs belongs.
+    var imageSearchURL: URL? {
+        var components = URLComponents(string: "https://www.google.com/search")
+        components?.queryItems = [
+            URLQueryItem(name: "q", value: searchQuery),
+            URLQueryItem(name: "tbm", value: "isch"),
+            URLQueryItem(name: "noiga", value: "1"),
+        ]
+        return components?.url
+    }
+}
+
+/// Asks an image model for a picture, on whichever key can draw one.
+///
+/// A collection or an episode about a subject has no photograph of its own, and there an
+/// image model drawing something evocative is exactly right. A real person's face is the
+/// exception, and the reason the row beside this offers a search instead.
+struct ArtworkSuggester {
     struct NoImageKeyError: Error, LocalizedError {
         var errorDescription: String? {
             "Drawing a picture needs an OpenAI or xAI key — the other vendors here only do text. Add one in Settings ▸ AI Features."
-        }
-    }
-
-    struct NoPhotoFoundError: Error, LocalizedError {
-        var errorDescription: String? {
-            "No public photo came back for that. Try naming them more exactly, or draw one instead."
         }
     }
 
@@ -99,32 +100,47 @@ struct ArtworkSuggester {
 
     var dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue
 
-    func picture(for source: ArtworkSource, prompt: String) async throws -> Found {
-        switch source {
-        case .generated: return try await drawn(prompt: prompt)
-        case .publicPhoto: return try await found(subject: prompt)
-        }
-    }
-
-    // MARK: Drawing one
-
     /// `/v1/images/generations`, which OpenAI and xAI both speak — the same shape as the
     /// chat endpoint they also share, so there's one request here rather than two clients.
-    private func drawn(prompt: String) async throws -> Found {
+    ///
+    /// Every attempt lands in the key's history the way a chat call does, win or lose.
+    /// A picture is the most expensive single thing this app can ask for, and a spend
+    /// that doesn't show up beside the others is a spend nobody notices.
+    func picture(prompt: String) async throws -> Data {
         let store = AiKeyStore(dbQueue: dbQueue)
+        let queryStore = AiQueryStore(dbQueue: dbQueue)
         let keys = try store.all().filter { $0.vendor == .openAI || $0.vendor == .xai }
         guard !keys.isEmpty else { throw NoImageKeyError() }
 
         var lastError: Error?
         for key in keys {
             guard let secret = try? store.secret(forKeyID: key.id), !secret.isEmpty else { continue }
+            let model = Self.imageModel(for: key.vendor)
+            try? store.bumpRequestCount(id: key.id)
             do {
-                return Found(data: try await Self.generate(prompt: prompt, vendor: key.vendor, apiKey: secret))
+                let data = try await Self.generate(prompt: prompt, vendor: key.vendor, apiKey: secret)
+                // The picture itself stays out of the row: it's already saved wherever
+                // the listener kept it, and a second copy per attempt would make the
+                // history the biggest thing in the database.
+                try? queryStore.recordImage(
+                    keyID: key.id, vendor: key.vendor, model: model, prompt: prompt,
+                    note: "One \(Self.imageSize) picture, \(data.count.formatted(.byteCount(style: .file)))"
+                )
+                return data
             } catch {
+                try? queryStore.recordImage(
+                    keyID: key.id, vendor: key.vendor, model: model, prompt: prompt, error: error
+                )
                 lastError = error
             }
         }
         throw lastError ?? NoImageKeyError()
+    }
+
+    private static let imageSize = "1024x1024"
+
+    static func imageModel(for vendor: AiVendor) -> String {
+        vendor == .openAI ? "gpt-image-1" : "grok-2-image"
     }
 
     private static func generate(prompt: String, vendor: AiVendor, apiKey: String) async throws -> Data {
@@ -137,14 +153,15 @@ struct ArtworkSuggester {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 120
         var body: [String: Any] = [
-            "model": vendor == .openAI ? "gpt-image-1" : "grok-2-image",
+            "model": imageModel(for: vendor),
             "prompt": prompt,
             "n": 1,
         ]
-        // xAI's endpoint takes neither, and refuses the request outright if they're sent.
+        // xAI's endpoint takes no size and refuses the request outright if one is sent.
+        // Neither vendor takes `response_format` on this model — gpt-image-1 rejects it
+        // as an unknown parameter and always answers in base64 anyway.
         if vendor == .openAI {
-            body["size"] = "1024x1024"
-            body["response_format"] = "b64_json"
+            body["size"] = imageSize
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -171,52 +188,12 @@ struct ArtworkSuggester {
         return try await fetchImage(at: link)
     }
 
-    // MARK: Finding one that exists
-
-    private struct PhotoAnswer: Decodable {
-        var url: String?
-        var credit: String?
-    }
-
-    private func found(subject: String) async throws -> Found {
-        let prompt = """
-        Name one publicly available image for: \(subject)
-
-        Rules:
-        - It must be an image that already exists on the public internet and is free to \
-        reuse — Wikipedia and Wikimedia Commons first, then an official page.
-        - Give the direct file URL, the one ending in .jpg/.jpeg/.png/.webp \
-        (on Wikimedia that is an `upload.wikimedia.org/...` link, not the article page).
-        - If you are not confident the image exists at that exact URL, return null. A \
-        wrong picture of a real person is worse than none.
-
-        Strict JSON only, no other text:
-        {"url": string|null, "credit": string|null}
-        """
-
-        let answer = try await AiRouter.runChatCompletion(
-            messages: [ChatMessage(role: .user, content: prompt)], dbQueue: dbQueue
-        )
-        guard let json = EpisodeMetadataSuggester.jsonObject(in: answer),
-              let decoded = try? JSONDecoder().decode(PhotoAnswer.self, from: Data(json.utf8)),
-              let link = decoded.url?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-              let url = URL(string: link), url.scheme == "https" else {
-            throw NoPhotoFoundError()
-        }
-        return Found(
-            data: try await Self.fetchImage(at: url), sourceURL: url,
-            credit: decoded.credit?.nilIfEmpty
-        )
-    }
-
-    /// Fetches a URL a model named, and insists it really is a picture. A model naming a
-    /// link is a claim, not a fact — an HTML page or a 404 arriving as "artwork" is the
-    /// normal failure here, not an exotic one.
+    /// Fetches the link an image model answered with, and insists it really is a picture:
+    /// an HTML error page arriving as "artwork" is the normal failure here, not an exotic
+    /// one.
     private static func fetchImage(at url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.timeoutInterval = 30
-        // Wikimedia refuses requests without one.
-        request.setValue("EarToListen/1.0 (podcast player)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
               (http.mimeType ?? "").hasPrefix("image/"), data.count < maximumBytes else {
