@@ -28,17 +28,17 @@ opens the long one), never a paragraph at the bottom.
  LANGUAGE                                               ⓘ
  Same as device ▾        ← each option written in its own language
 
- ADD EPISODES                                           ⓘ
- Import podcasts from Files        ⟳ Importing…
- Read where they sit, never copied.
- Files                                                  ─●   ← existing local
- Found 42 files.                                               sources only
+ FILES ON THIS DEVICE                                   ⓘ   ← only if any exist
+ Files                                                  ─●   ← switch off or
+                                                               long-press to
+                                                               delete
  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 72pt clear of the docked mini player ▁▁▁▁
 ```
 
 Settings holds only what has nowhere better to live:
 
 ```
+ adding episodes → the bucket folder's ⋯ menu            (remote.md)
  downloads      → the Downloaded shelf's own ( More )
  backup to a bucket → that connection's row in Remote  (remote.md)
  sync frequency → the source's row                      (remote.md)

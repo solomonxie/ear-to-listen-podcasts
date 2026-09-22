@@ -78,6 +78,14 @@ Anything the grouping can't claim — a loose note, a bucket-level cover, this
 app's own backup zip — keeps its own row. A bucket is the listener's, so nothing
 in it is hidden.
 
+## What the app writes into the audio's own folder
+
+Only two things, and neither touches a file already there: a sidecar (a
+different extension beside the episode) and an episode the listener uploaded
+from Files, under a name nothing in the folder has. `CloudWrite` enforces the
+split — `upload` refuses a playable extension, `uploadEpisode` requires one and
+a free key.
+
 ## Not sidecars: the app's own data
 
 Playlists, hand edits, topics, bookmarks and transcript corrections already

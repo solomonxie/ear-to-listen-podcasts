@@ -1,6 +1,6 @@
 # Cloud Providers
 
-`CloudProvider` protocol (list/metadata/stream/download/upload/test-connection)
+`CloudProvider` protocol (list/metadata/stream/download/write/test-connection)
 plus a `CloudProviderRegistry` that maps a provider type string to a factory, so
 adding a backend means implementing the protocol and registering it in
 `EarToListenApp.init()` — nothing else has to change.
@@ -28,6 +28,13 @@ same. iCloud/Drive/Dropbox/OneDrive are backlogged behind the same protocol.
 Signing is hand-written on purpose (`S3/SigV4.swift`, `Azure/SharedKey.swift`,
 `GoogleCloud/ServiceAccount.swift`): published algorithms over plain
 `URLSession`, against three SDKs that would each cost more than the whole app.
+
+Writes go through one of two gates in the protocol extension, never `write`
+directly: `upload` for what the app makes itself (a transcript sidecar, a
+library archive), which refuses a playable extension, and `uploadEpisode` for a
+file the listener picked, which requires one and refuses a key that already
+exists. `CloudWrite` holds both rules, so a new backend implements one raw
+`write` and inherits the never-overwrite-audio promise.
 
 `ProviderManager` resolves a `ProviderRecord` (from `Sources/DB`) into a live
 provider instance and owns its settings/credentials lifecycle. `CloudBackup`
@@ -62,7 +69,10 @@ ProviderManager.swift:provider(for: record)
                                resolves security-scoped bookmarks: one folder,
                                or the individual episodes picked from Files
                                (`LocalFileEntry`, keyed by the path each is
-                               filed under — read-only, no folder for sidecars)
+                               filed under — read-only, no folder for sidecars).
+                               No longer creatable: episodes go into a bucket
+                               now ("Upload from Files"), so this only reads
+                               sources added before that.
               │ caches the instance
               ▼
 caller: .listFiles(inFolder:) / .streamURL(forFileID:) / .testConnection()

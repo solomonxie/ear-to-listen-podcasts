@@ -6,8 +6,8 @@ the real `ProviderStore`/`SyncEngine` — `RemoteSectionView` lists actual bucke
 with the Settings section).
 Tapping a connection goes into `RemoteBrowserView` (no separate detail
 screen), which recursively browses one directory level at a time. Every
-level — root or subfolder — carries the exact same "More" menu and a
-one-line stats footer scoped to that folder; there's no per-level
+level — root or subfolder — carries the exact same "More" menu (queue,
+upload, delete) and a one-line stats footer scoped to that folder; there's no per-level
 distinction, since sync controls/delete act on the connection as a whole
 regardless of where you're browsing. Tapping a file plays it directly, same
 as any other episode.
@@ -44,6 +44,23 @@ to queue the whole bucket (recursively) rather than running one opaque
 background sync — so the new source's progress (and any per-file errors)
 shows up in the sync queue right away instead of only once everything's done.
 
+## Adding episodes
+
+"Upload from Files" in the folder browser's More menu is the only way in — a
+picked file is written into the folder on screen (`EpisodeUpload`) and its one
+key is queued directly, rather than re-listing the bucket to find what just
+changed. Settings no longer imports from Files at all: a local source is
+readable on one phone only, while an episode in the bucket is backed up and on
+every device, and the sync path that already exists imports it.
+
+`CloudWrite` is what makes that safe. The rule was "never write audio"; it is
+now "never write *over* audio", which is the rule it was always standing in for:
+`upload` (sidecars, archives) refuses a playable extension, `uploadEpisode`
+requires one and refuses a key that already exists. Both go through the one
+per-provider `write`, so neither is a habit five backends have to remember. The
+picker's names are deduped against the live listing first (`ep-01 2.mp3`), so
+the existence check is the backstop for a folder that changed underneath it.
+
 ## Bucket layout
 
 Transcripts and artwork sit flat beside the audio, matched on basename
@@ -66,8 +83,7 @@ closes the row either way. Failed jobs can be retried individually
 (`SyncJobStore.retry`) rather than requiring a queue clear.
 
 **Listing and importing are separate.** Every entry point — add-connection,
-"Sync Now", the schedule, a local folder import — goes through
-`SyncQueueManager.sync(providerRecord:)`, which lists, queues what needs
+"Sync Now", the schedule — goes through `SyncQueueManager.sync(providerRecord:)`, which lists, queues what needs
 fetching (new, changed, or previously lost; unchanged files get no row at all),
 and returns. `drain()` is the only thing that imports, so a bucket of thousands
 no longer holds a button hostage for minutes and the queue's speed control
@@ -104,10 +120,11 @@ RemoteBrowserView.swift (pushes itself per subfolder, same UI at every level)
 │   tap a file → import if needed, play    │──→ SyncEngine.importFileIfNeeded /
 │                                          │     PlaybackEngine.play(track:)
 │ One-line stats footer (this folder)      │──→ TrackStore.stats(forProvider:pathPrefix:)
+│   + how to add episodes here             │
 │ "More" toolbar menu:                     │
-│   frequency, last synced, sync now,      │──→ ProviderStore.updateSyncFrequency /
-│   sync queue, delete                     │     SyncQueueManager.sync(…) (queues,
-│                                          │     doesn't import) /
+│   last synced, sync queue,               │──→ SyncQueueManager.sync(…) (queues,
+│   upload from Files, delete              │     doesn't import) /
+│                                          │     EpisodeUpload.run(_:avoiding:) /
 │                                          │     SettingsViewModel.delete(_:)
 └─────────────────────────────────────────┘
 ```
