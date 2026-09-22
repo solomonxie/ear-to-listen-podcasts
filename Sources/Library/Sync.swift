@@ -173,6 +173,13 @@ struct SyncEngine {
     func perform(_ job: SyncJob, providerRecord record: ProviderRecord) async {
         do {
             let provider = try ProviderManager.shared.provider(for: record)
+            // An upload job has to put the file there before there's anything to import.
+            // Same row, same retry: a failed upload is a failed job, not a lost episode.
+            if job.uploadBookmark != nil {
+                try? jobStore.markStage(id: job.id, .uploading)
+                NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
+                try await EpisodeUpload.send(job, provider: provider)
+            }
             let file = CloudFile(
                 id: job.filePath, name: job.displayName, path: job.filePath, sizeBytes: job.sizeBytes,
                 mimeType: nil, modifiedAt: job.remoteModifiedAt, contentHash: job.contentHash

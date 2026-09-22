@@ -192,5 +192,7 @@ for where the episode is described. Inherit (speaker) → album → app default.
   tap-and-hunt, and hid whether anything was running at all.
 - What the switch governs is **dimmed, not hidden** — the section must not
   reflow under a thumb.
-- Off for every episode, never remembered: transcribing spends battery or
-  money. Anything transcribed before still shows with it off.
+- Off for every episode, never remembered, and with no global switch in
+  Settings to change that: transcribing spends battery or money, and it's
+  asked for here or not at all. Anything transcribed before still shows with
+  it off.
