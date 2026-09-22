@@ -47,12 +47,6 @@ final class TranscriptRunner: ObservableObject {
         didSet { UserDefaults.standard.set(localeIdentifier, forKey: Self.localeDefaultsKey) }
     }
 
-    /// The answer to "every episode, or only the ones I ask for?", set once in Settings.
-    /// With it on, opening an episode with no transcript starts an on-device pass.
-    @Published var startsAutomatically: Bool {
-        didSet { UserDefaults.standard.set(startsAutomatically, forKey: Self.autoStartDefaultsKey) }
-    }
-
     /// The transcript as it stood when the running pass began. Nil when nothing is
     /// running, which is when the page follows what's stored again.
     private var frozenLines: [TranscriptSegment]?
@@ -72,7 +66,6 @@ final class TranscriptRunner: ObservableObject {
     /// recognizer, so it's clear nothing was spent making them.
     static let sidecarEngine = "sidecar"
 
-    private static let autoStartDefaultsKey = "transcript.autoStart"
     private static let localeDefaultsKey = "transcript.locale"
 
     private let transcriptStore = TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -109,7 +102,6 @@ final class TranscriptRunner: ObservableObject {
     private static let silentWindowLimit = 6
 
     private init() {
-        startsAutomatically = UserDefaults.standard.bool(forKey: Self.autoStartDefaultsKey)
         localeIdentifier = UserDefaults.standard.string(forKey: Self.localeDefaultsKey)
     }
 
@@ -183,16 +175,11 @@ final class TranscriptRunner: ObservableObject {
 
         // A transcript already sitting beside the audio is the cheapest one there is, so
         // look before spending anything.
-        guard segments.isEmpty else {
-            startAutomaticallyIfAsked()
-            return
-        }
+        guard segments.isEmpty else { return }
         // Always, whenever nothing is stored — a recorded path makes it one request
         // instead of a few, but its absence is not evidence there's no transcript.
         sidecarTask = Task { [weak self] in
             await self?.importSidecar(track: newTrack)
-            guard let self, track?.id == newTrack.id else { return }
-            startAutomaticallyIfAsked()
         }
     }
 
@@ -218,13 +205,6 @@ final class TranscriptRunner: ObservableObject {
                 lastError = "Kept your edited transcript — remote copies never overwrite corrections."
             }
         }
-    }
-
-    /// Settings' "transcribe every episode" — an on-device pass, since the other one
-    /// spends money and nobody asked for that episode by episode.
-    private func startAutomaticallyIfAsked() {
-        guard startsAutomatically, !isComplete, !isRunning else { return }
-        run(engine: .onDevice)
     }
 
     /// Pulls the transcript the bucket holds for this episode.

@@ -21,7 +21,7 @@ struct SyncJobStore {
     func enqueue(
         providerID: String, filePath: String, displayName: String, sizeBytes: Int64?,
         contentHash: String? = nil, remoteModifiedAt: Date? = nil, transcriptPath: String? = nil,
-        capacity: Int = SyncQueuePolicy.capacity
+        uploadBookmark: String? = nil, capacity: Int = SyncQueuePolicy.capacity
     ) throws -> SyncJob {
         try dbQueue.write { db in
             if let existing = try Self.unfinished(providerID: providerID, filePath: filePath).fetchOne(db) {
@@ -32,7 +32,8 @@ struct SyncJobStore {
             let job = SyncJob(
                 id: UUID().uuidString, providerID: providerID, filePath: filePath, displayName: displayName,
                 sizeBytes: sizeBytes, contentHash: contentHash, remoteModifiedAt: remoteModifiedAt,
-                transcriptPath: transcriptPath, status: .pending, stage: .queued, errorMessage: nil, createdAt: Date(), updatedAt: Date()
+                transcriptPath: transcriptPath, uploadBookmark: uploadBookmark, status: .pending,
+                stage: .queued, errorMessage: nil, createdAt: Date(), updatedAt: Date()
             )
             try job.save(db)
             return job

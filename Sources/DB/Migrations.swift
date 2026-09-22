@@ -490,6 +490,15 @@ enum Migrations {
             }
         }
 
+        // An episode picked out of Files is uploaded by the queue rather than in front of
+        // the listener: the bookmark travels on the job, so a phone locked mid-upload
+        // resumes it, and pause/speed/retry work on it like any other file.
+        migrator.registerMigration("v29_upload_jobs") { db in
+            try db.alter(table: "syncJobs") { t in
+                t.add(column: "uploadBookmark", .text)
+            }
+        }
+
         return migrator
     }
 }

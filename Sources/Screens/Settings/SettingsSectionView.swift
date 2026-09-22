@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var autoBackup = AutoBackup.shared
-    @ObservedObject private var transcript = TranscriptRunner.shared
     @EnvironmentObject private var language: AppLanguageStore
     @State private var openPicker: String?
     @State private var exportDocument: BackupDocument?
@@ -196,17 +195,6 @@ struct SettingsSectionView: View {
             .sheet(isPresented: $showingAddAiKey) {
                 AddAiKeyView(viewModel: viewModel)
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                SectionHeading(
-                    title: "TRANSCRIPTS",
-                    info: "Transcribing spends battery on this device, or money through an AI key, so it's off unless asked for. With this on, opening an episode with no transcript starts an on-device pass over the whole of it in the background; you can stop it from that episode's own page, and the AI recogniser is always asked for by hand. Transcripts already made, and any transcript file sitting beside the audio, are shown either way."
-                )
-                Toggle("Transcribe every episode automatically", isOn: $transcript.startsAutomatically)
-                Text(transcript.startsAutomatically ? "On for every episode." : "Only the episodes you ask for.")
-                    .sectionHint()
-            }
-            .padding(.horizontal)
 
             // Down here because it's set once and never thought about again, unlike the
             // groups above it.

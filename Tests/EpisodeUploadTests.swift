@@ -3,8 +3,8 @@ import XCTest
 @testable import EarToListen
 
 /// An episode picked out of Files is the one write that *is* audio, so the rules around it
-/// are the interesting part: it lands in the folder being browsed, it never lands on top of
-/// something already there, and the library hears about it without a whole-bucket re-listing.
+/// are the interesting part: picking queues a job against the folder being browsed, the
+/// queue does the sending, and nothing ever lands on top of a file already there.
 private final class WritableBucket: CloudProvider, @unchecked Sendable {
     let type = "test-bucket"
     let rootFolder: String?
@@ -64,33 +64,53 @@ final class EpisodeUploadTests: XCTestCase {
         return dbQueue
     }
 
-    private func upload(
+    private func queue(
         _ urls: [URL], to bucket: WritableBucket, folder: String?, avoiding taken: Set<String> = [],
         dbQueue: DatabaseQueue
-    ) async -> EpisodeUpload.Outcome {
-        await EpisodeUpload(
+    ) -> EpisodeUpload.Outcome {
+        EpisodeUpload(
             provider: bucket, providerID: "p1", folder: folder, jobStore: SyncJobStore(dbQueue: dbQueue)
-        ).run(urls, avoiding: taken)
+        ).queue(urls, avoiding: taken)
     }
 
-    func testAnEpisodeLandsInTheFolderBeingBrowsedAndIsQueued() async throws {
+    /// What the drain loop does with the row `queue` wrote.
+    private func send(_ job: SyncJob, to bucket: WritableBucket) async throws {
+        try await EpisodeUpload.send(job, provider: bucket)
+    }
+
+    /// Picking writes a job and nothing else — the bytes go up when the queue gets to it,
+    /// so a 60 MB episode never holds the screen it was picked from.
+    func testPickingQueuesAJobAgainstTheFolderBeingBrowsed() async throws {
         let dbQueue = try makeDatabase()
         let bucket = WritableBucket(rootFolder: "podcasts/")
-        let outcome = await upload([try pick("ep-01.mp3")], to: bucket, folder: "podcasts/2026/", dbQueue: dbQueue)
+        let outcome = queue([try pick("ep-01.mp3")], to: bucket, folder: "podcasts/2026/", dbQueue: dbQueue)
 
         XCTAssertEqual(outcome.failures, [])
-        XCTAssertEqual(bucket.writes.map(\.path), ["podcasts/2026/ep-01.mp3"])
+        XCTAssertEqual(bucket.writes.count, 0)
         let jobs = try SyncJobStore(dbQueue: dbQueue).page(limit: 10)
         XCTAssertEqual(jobs.map(\.filePath), ["podcasts/2026/ep-01.mp3"])
+        XCTAssertNotNil(jobs.first?.uploadBookmark)
+    }
+
+    func testTheQueuedJobSendsTheFileItWasPickedFrom() async throws {
+        let dbQueue = try makeDatabase()
+        let bucket = WritableBucket(rootFolder: "podcasts/")
+        _ = queue([try pick("ep-01.mp3", bytes: 32)], to: bucket, folder: nil, dbQueue: dbQueue)
+        let job = try XCTUnwrap(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).first)
+
+        try await send(job, to: bucket)
+
+        XCTAssertEqual(bucket.writes.map(\.path), ["podcasts/ep-01.mp3"])
+        XCTAssertEqual(bucket.writes.map(\.bytes), [32])
     }
 
     /// No folder open means the level the connection itself starts at, not the bucket root.
-    func testWithNoFolderOpenItLandsAtTheConnectionsOwnRoot() async throws {
+    func testWithNoFolderOpenItTargetsTheConnectionsOwnRoot() throws {
         let dbQueue = try makeDatabase()
         let bucket = WritableBucket(rootFolder: "podcasts/")
-        _ = await upload([try pick("ep-01.mp3")], to: bucket, folder: nil, dbQueue: dbQueue)
+        _ = queue([try pick("ep-01.mp3")], to: bucket, folder: nil, dbQueue: dbQueue)
 
-        XCTAssertEqual(bucket.writes.map(\.path), ["podcasts/ep-01.mp3"])
+        XCTAssertEqual(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).map(\.filePath), ["podcasts/ep-01.mp3"])
     }
 
     /// Two episodes with the same filename are two episodes. Renaming the newcomer is the
@@ -98,7 +118,9 @@ final class EpisodeUploadTests: XCTestCase {
     func testANameAlreadyInTheFolderIsRenamedRatherThanOverwritten() async throws {
         let dbQueue = try makeDatabase()
         let bucket = WritableBucket(keys: ["ep-01.mp3"])
-        _ = await upload([try pick("ep-01.mp3")], to: bucket, folder: nil, avoiding: ["ep-01.mp3"], dbQueue: dbQueue)
+        _ = queue([try pick("ep-01.mp3")], to: bucket, folder: nil, avoiding: ["ep-01.mp3"], dbQueue: dbQueue)
+        let job = try XCTUnwrap(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).first)
+        try await send(job, to: bucket)
 
         XCTAssertEqual(bucket.writes.map(\.path), ["ep-01 2.mp3"])
     }
@@ -108,20 +130,43 @@ final class EpisodeUploadTests: XCTestCase {
     func testAKeyTheListingDidntShowIsStillRefused() async throws {
         let dbQueue = try makeDatabase()
         let bucket = WritableBucket(keys: ["ep-01.mp3"])
-        let outcome = await upload([try pick("ep-01.mp3")], to: bucket, folder: nil, dbQueue: dbQueue)
+        _ = queue([try pick("ep-01.mp3")], to: bucket, folder: nil, dbQueue: dbQueue)
+        let job = try XCTUnwrap(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).first)
 
+        do {
+            try await send(job, to: bucket)
+            XCTFail("should have refused a key that's already taken")
+        } catch {
+            XCTAssertTrue(error is CloudWrite.WouldOverwriteAudioError)
+        }
         XCTAssertEqual(bucket.writes.count, 0)
-        XCTAssertEqual(outcome.uploaded, [])
-        XCTAssertEqual(outcome.failures.count, 1)
-        XCTAssertEqual(try SyncJobStore(dbQueue: dbQueue).counts().total, 0)
     }
 
-    func testAReadOnlySourceIsReportedRatherThanWrittenTo() async throws {
+    /// The file can be gone by the time the queue reaches the job — moved, deleted, a
+    /// device that came back from a reinstall. That's a failed job, not a crash.
+    func testAPickedFileThatHasSinceGoneIsAFailedJob() async throws {
+        let dbQueue = try makeDatabase()
+        let bucket = WritableBucket()
+        let url = try pick("ep-01.mp3")
+        _ = queue([url], to: bucket, folder: nil, dbQueue: dbQueue)
+        let job = try XCTUnwrap(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).first)
+        try FileManager.default.removeItem(at: url)
+
+        do {
+            try await send(job, to: bucket)
+            XCTFail("should have failed on a file that isn't there")
+        } catch {
+            XCTAssertEqual(bucket.writes.count, 0)
+        }
+    }
+
+    func testAReadOnlySourceIsReportedRatherThanQueued() throws {
         let dbQueue = try makeDatabase()
         let bucket = WritableBucket(isWritable: false)
-        let outcome = await upload([try pick("ep-01.mp3")], to: bucket, folder: nil, dbQueue: dbQueue)
+        let outcome = queue([try pick("ep-01.mp3")], to: bucket, folder: nil, dbQueue: dbQueue)
 
-        XCTAssertEqual(bucket.writes.count, 0)
+        XCTAssertEqual(outcome.queued, [])
         XCTAssertEqual(outcome.failures.count, 1)
+        XCTAssertEqual(try SyncJobStore(dbQueue: dbQueue).counts().total, 0)
     }
 }

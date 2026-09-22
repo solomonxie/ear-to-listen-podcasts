@@ -198,9 +198,9 @@ Rules this encodes:
   recognised the same audio several times over as the playhead moved.
 - Options the switch governs are dimmed rather than hidden, so the section doesn't reflow
   under your thumb as you flip it.
-- **Off for every episode**, and not remembered between them. Transcribing spends battery
-  or money; a preference that sticks means opening any episode quietly starts spending on
-  it. Whatever was transcribed before — and any transcript file sitting beside the audio —
+- **Off for every episode**, and not remembered between them — there is no global "do
+  this always" switch either, for the same reason. Transcribing spends battery or money;
+  a preference that sticks means opening any episode quietly starts spending on it. Whatever was transcribed before — and any transcript file sitting beside the audio —
   still shows with the switch off, so nothing is lost by asking each time.
 - Tap corrects; "play from here" is on the line's context menu. Correcting is the one
   thing only a human can do here, so it gets the primary gesture.
@@ -261,7 +261,7 @@ Nothing is written until `Save`, and a saved edit outranks the embedded tags fro
 
 ### Settings
 
-Sections: Sync & Backup · AI Keys · Transcripts · Language (last: set once, never
+Sections: Sync & Backup · AI Keys · Language (last: set once, never
 thought about again). Each
 carries a short hint under its heading, not a paragraph at the bottom. Row labels say
 what the row does, not what it is: "Upload from Files", not "Add a Folder".

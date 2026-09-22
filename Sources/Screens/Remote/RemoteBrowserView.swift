@@ -32,7 +32,6 @@ struct RemoteBrowserView: View {
     @State private var loadingFileID: String?
     @State private var showingQueue = false
     @State private var showingUploadPicker = false
-    @State private var isUploading = false
     @State private var uploadMessage: String?
     @State private var canUpload = false
 
@@ -118,7 +117,7 @@ struct RemoteBrowserView: View {
                 // indicator rides on the same line rather than its own row, since it's just
                 // a transient qualifier on those same numbers.
                 if !isLoadingListing {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 4) {
                             Text(isShowingSyncedFallback ? "Last synced · \(statsSummary)" : statsSummary)
                                 .font(.caption)
@@ -135,20 +134,20 @@ struct RemoteBrowserView: View {
                                 .buttonStyle(.plain)
                                 .foregroundStyle(Color.accentColor)
                             }
-                            if isUploading {
-                                ProgressView().controlSize(.small)
-                                Text("Uploading…").font(.caption)
-                            }
                         }
                         if let uploadMessage {
-                            Text(uploadMessage).font(.caption)
+                            Text(uploadMessage).font(.caption).padding(.top, 6)
                         }
                         // Under the stats rather than in the empty state: a folder with
                         // forty episodes in it is also where you'd want to add the
                         // forty-first, and the menu that does it is three dots in a corner.
+                        // A rule above it, nothing below: it's an instruction, not another
+                        // line of the readout, and the list's own bottom hairline is hidden.
                         if canUpload {
+                            Divider().padding(.vertical, 10)
                             Text("To add podcasts, open the ⋯ menu and pick Upload from Files — they go into this folder and into your library.")
                                 .font(.caption)
+                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
@@ -185,7 +184,6 @@ struct RemoteBrowserView: View {
                         } label: {
                             Label("Upload from Files", systemImage: "square.and.arrow.up")
                         }
-                        .disabled(isUploading)
                     }
                     Divider()
                     Button(role: .destructive) {
@@ -201,9 +199,12 @@ struct RemoteBrowserView: View {
         .task { await load() }
         .onAppear { loadStats() }
         .onChange(of: isProviderSyncQueueActive) { wasActive, isActive in
-            // Only the footer's synced numbers depend on the queue — the listing above it
-            // is live and owes the queue nothing.
-            if wasActive && !isActive { loadStats() }
+            // The listing is live and owes the queue nothing — except after an upload,
+            // where what the queue just finished is a new row in this very folder.
+            if wasActive && !isActive {
+                loadStats()
+                Task { await load() }
+            }
         }
         .confirmationDialog("Delete this connection?", isPresented: $showingDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -227,7 +228,7 @@ struct RemoteBrowserView: View {
             allowedContentTypes: [.audio],
             allowsMultipleSelection: true
         ) { result in
-            Task { await upload(result) }
+            upload(result)
         }
     }
 
@@ -457,10 +458,10 @@ struct RemoteBrowserView: View {
         }
     }
 
-    /// Writes the picked episodes into the folder on screen and queues each one, then
-    /// redraws — the new rows come from the bucket's own listing, so what's shown is what
-    /// actually landed.
-    private func upload(_ result: Result<[URL], Error>) async {
+    /// Queues the picked episodes against the folder on screen — the queue does the
+    /// sending, so a big file doesn't hold this screen (or the app) while it goes up, and
+    /// it survives the phone being locked. The rows appear here once the listing sees them.
+    private func upload(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else {
             if case .failure(let error) = result { uploadMessage = error.localizedDescription }
             return
@@ -469,14 +470,9 @@ struct RemoteBrowserView: View {
             uploadMessage = "Couldn't connect to this source."
             return
         }
-        isUploading = true
-        defer { isUploading = false }
-        let outcome = await EpisodeUpload(
+        uploadMessage = EpisodeUpload(
             provider: provider, providerID: record.id, folder: folder
-        ).run(urls, avoiding: Set(files.map(\.name) + folders.map { ($0 as NSString).lastPathComponent }))
-        uploadMessage = outcome.summary
-        await load()
-        loadStats()
+        ).queue(urls, avoiding: Set(files.map(\.name) + folders.map { ($0 as NSString).lastPathComponent })).summary
     }
 
     private func play(_ file: CloudFile) async {
