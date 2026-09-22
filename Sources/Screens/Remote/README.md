@@ -46,12 +46,19 @@ shows up in the sync queue right away instead of only once everything's done.
 
 ## Adding episodes
 
-"Upload from Files" in the folder browser's More menu is the only way in — a
-picked file is written into the folder on screen (`EpisodeUpload`) and its one
-key is queued directly, rather than re-listing the bucket to find what just
-changed. Settings no longer imports from Files at all: a local source is
-readable on one phone only, while an episode in the bucket is backed up and on
-every device, and the sync path that already exists imports it.
+"Upload from Files" in the folder browser's More menu is the only way in.
+Picking doesn't upload anything: `EpisodeUpload.queue` writes one `SyncJob` per
+file, carrying a security-scoped bookmark and the key it's bound for in the
+folder on screen. The drain loop sends it (`EpisodeUpload.send`, stage
+`Uploading`) and then imports what it just put there, in the same job — so an
+upload pauses, paces, retries and survives a relaunch like every other unit of
+work here, and a 60 MB episode never holds the screen it was picked from. The
+bookmark rather than a copy, so ten queued episodes aren't ten files on the disk
+twice.
+
+Settings no longer imports from Files at all: a local source is readable on one
+phone only, while an episode in the bucket is backed up and on every device, and
+the sync path that already exists imports it.
 
 `CloudWrite` is what makes that safe. The rule was "never write audio"; it is
 now "never write *over* audio", which is the rule it was always standing in for:
@@ -71,7 +78,9 @@ their episode, so a 37-episode folder lists 37 rows instead of ~150.
 
 ## Queue
 
-Per-file jobs (`SyncJob`, in `syncJobs`) persist across launches.
+Per-file jobs (`SyncJob`, in `syncJobs`) persist across launches. A job with an
+`uploadBookmark` puts the file in the bucket first and imports it second; every
+other job only imports.
 `SyncQueueManager.drain()` claims jobs via `SyncJobStore.dequeueNextPending()`,
 which fetches the oldest pending job and flips it to `.running` in the same
 write transaction — that atomicity matters, since two concurrent drain slots

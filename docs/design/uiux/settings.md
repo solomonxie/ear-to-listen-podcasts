@@ -21,10 +21,6 @@ opens the long one), never a paragraph at the bottom.
  12 requests sent                          ›              disabled under 2 keys
  ⊕ Add AI Key
 
- TRANSCRIPTS                                            ⓘ
- Transcribe every episode as you listen                 ○─
- Only the episodes you ask for.        ← flips to "On for every episode."
-
  LANGUAGE                                               ⓘ
  Same as device ▾        ← each option written in its own language
 

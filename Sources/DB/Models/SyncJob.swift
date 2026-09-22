@@ -10,6 +10,7 @@ enum SyncJobStatus: String, Codable {
 /// identical without this.
 enum SyncJobStage: String, Codable {
     case queued
+    case uploading
     case readingTags
     case askingAI
     case saving
@@ -17,6 +18,7 @@ enum SyncJobStage: String, Codable {
     var displayName: String {
         switch self {
         case .queued: return "Waiting"
+        case .uploading: return "Uploading"
         case .readingTags: return "Reading tags"
         case .askingAI: return "Asking AI"
         case .saving: return "Saving to library"
@@ -41,6 +43,10 @@ struct SyncJob: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var remoteModifiedAt: Date?
     /// The transcript sitting beside this file in the listing, if there was one.
     var transcriptPath: String?
+    /// Set only on a job that has to *put* the file there first: a security-scoped
+    /// bookmark to the episode the listener picked out of Files. The bookmark rather than
+    /// a copy, so a queue of ten episodes doesn't hold ten of them twice on the disk.
+    var uploadBookmark: String?
     var status: SyncJobStatus
     var stage: SyncJobStage?
     var errorMessage: String?

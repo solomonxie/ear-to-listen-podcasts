@@ -32,7 +32,7 @@ struct SyncQueueView: View {
             }
             Section {
                 if manager.jobs.isEmpty {
-                    Text("Nothing queued. Sync a folder from a remote source to add files here.")
+                    Text("Nothing queued. Sync a folder, or upload episodes to one, to add files here.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(manager.jobs) { job in
