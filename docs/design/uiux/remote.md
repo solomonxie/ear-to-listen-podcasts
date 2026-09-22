@@ -47,6 +47,9 @@ One screen, pushing itself per subfolder. Every level is identical.
  ───────────────────────────────────────────────
  12 files here · 412 MB · 2 folders · 361 synced   ← footer, this folder only
                                     ⟳ Syncing…    ← tappable → queue
+ To add podcasts, open the ⋯ menu and pick Upload  ← only where writes land
+ from Files — they go into this folder and into
+ your library.
 ```
 
 Leads with what is in the folder *now* (a live `listDirectory`), because that
@@ -55,9 +58,17 @@ is what the list above shows; what this device has synced is the follow-up.
 ```
  ⋯ menu   Last synced: 9 hours ago      ← text, not a control
           ☰ Queue
+          ⬆ Upload from Files            → picker, audio only, multi-select
           ──────────
           🗑 Delete Connection  !        → confirmation dialog
 ```
+
+`Upload from Files` is how episodes get into the library — the picked files are
+written into the folder on screen and each one is queued for import, so they're
+backed up and on every device rather than living in one phone's Files app. The
+row is hidden on a source that doesn't take writes (a read-only key pair). A
+name already in the folder is renamed (`ep-01 2.mp3`), never replaced: an
+episode is the one thing in a bucket this app can't rebuild.
 
 Sync Now and the frequency picker are **not** here — they are decisions about
 a connection, so they live on the source's own row above.
@@ -73,6 +84,9 @@ a connection, so they live on the source's own row above.
  error     ⚠ Couldn't list this folder: <AWS message>
  fallback  Couldn't reach this source, and nothing here has been synced yet.
  tapping   ⟳ on the row while an unknown file is imported before it plays
+ upload    ⟳ Uploading… on the footer line, then "Uploaded 3 episodes —
+           importing in the background." and a re-listing
+ refused   <name>: Refused to write over <name> — that's an episode
 ```
 
 ## Tapping a file, by kind

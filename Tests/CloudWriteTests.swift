@@ -28,6 +28,30 @@ final class CloudWriteTests: XCTestCase {
         XCTAssertThrowsError(try CloudWrite.checked("   ")) { XCTAssertTrue($0 is CloudWrite.EmptyPathError) }
     }
 
+    /// The mirror image: an episode upload has to *be* audio, since the never-overwrite
+    /// promise is kept by `uploadEpisode` checking the key is free — not by refusing audio.
+    func testAnEpisodeUploadMustBeAudio() throws {
+        for path in ["show/ep-01.mp3", "ep.m4a", "loud.WAV"] {
+            XCTAssertEqual(try CloudWrite.checkedEpisode(path), path)
+        }
+        for path in ["show/ep-01.vtt", "cover.jpg", "notes.txt"] {
+            XCTAssertThrowsError(try CloudWrite.checkedEpisode(path), "should refuse \(path)") { error in
+                XCTAssertTrue(error is CloudWrite.NotAnEpisodeError)
+            }
+        }
+        XCTAssertThrowsError(try CloudWrite.checkedEpisode(" ")) { XCTAssertTrue($0 is CloudWrite.EmptyPathError) }
+    }
+
+    func testACollidingNameIsRenamedRatherThanReplaced() {
+        XCTAssertEqual(CloudWrite.availableName(for: "ep-01.mp3", avoiding: []), "ep-01.mp3")
+        XCTAssertEqual(CloudWrite.availableName(for: "ep-01.mp3", avoiding: ["ep-01.mp3"]), "ep-01 2.mp3")
+        XCTAssertEqual(
+            CloudWrite.availableName(for: "ep-01.mp3", avoiding: ["ep-01.mp3", "ep-01 2.mp3"]),
+            "ep-01 3.mp3"
+        )
+        XCTAssertEqual(CloudWrite.availableName(for: "clip", avoiding: ["clip"]), "clip 2")
+    }
+
     /// The check is on the extension, not the folder — a sidecar is *supposed* to sit in
     /// the same directory as the episode it belongs to.
     func testASidecarBesideItsEpisodeIsFine() throws {

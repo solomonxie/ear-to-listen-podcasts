@@ -63,14 +63,19 @@ protocol CloudProvider: Sendable {
     /// provider with a cheaper way of its own would be silently skipped.
     func download(fileID: String) async throws -> Data
 
-    /// Whether this source takes writes. Sidecar transcripts are the only thing the app
-    /// ever puts back, and only where they're wanted.
+    /// Whether this source takes writes — a sidecar transcript, a library archive, or an
+    /// episode the listener uploaded, and only where they're wanted.
     ///
     /// Declared here rather than only in the extension for the same reason
     /// `listDirectory` is: an extension-only member is dispatched statically, so a
     /// provider's own implementation would be silently skipped.
     var isWritable: Bool { get }
-    func upload(_ data: Data, toPath path: String, contentType: String) async throws
+
+    /// The raw put, with no rule attached — implemented per backend, called only by the
+    /// two gates below. Everything else in the app uses `upload`/`uploadEpisode`, so the
+    /// never-overwrite-audio rule is one piece of code rather than a habit five providers
+    /// have to keep.
+    func write(_ data: Data, toPath path: String, contentType: String) async throws
 }
 
 enum CloudProviderError: LocalizedError {
@@ -80,7 +85,7 @@ enum CloudProviderError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .readOnly(let type): return "This \(type) source is read-only, so the transcript stayed on this device."
+        case .readOnly(let type): return "This \(type) source is read-only, so nothing was written to it."
         case .missingSetting(let key): return "Missing setting: \(key)"
         case .missingFile(let path): return "No file at \(path)."
         }
@@ -110,8 +115,26 @@ extension CloudProvider {
         return data
     }
 
-    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+    func write(_ data: Data, toPath path: String, contentType: String) async throws {
         throw CloudProviderError.readOnly(type)
+    }
+
+    /// Anything the app writes by itself: a transcript sidecar, a library archive. Never
+    /// an episode — see `CloudWrite`.
+    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+        try await write(data, toPath: try CloudWrite.checked(path), contentType: contentType)
+    }
+
+    /// An episode the listener picked out of Files. The key has to be free: the caller
+    /// already dodges the names it can see in its listing, and this is what makes
+    /// "never over an episode" true of a folder that changed underneath it.
+    func uploadEpisode(_ data: Data, toPath path: String, contentType: String) async throws {
+        let key = try CloudWrite.checkedEpisode(path)
+        guard isWritable else { throw CloudProviderError.readOnly(type) }
+        if (try? await metadata(forFileID: key)) != nil {
+            throw CloudWrite.WouldOverwriteAudioError(path: key)
+        }
+        try await write(data, toPath: key, contentType: contentType)
     }
 
     /// Fallback for providers with no one-level listing of their own: derive it from the

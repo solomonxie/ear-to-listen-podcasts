@@ -143,9 +143,8 @@ struct AzureBlobProvider: CloudProvider {
 
     var isWritable: Bool { true }
 
-    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
-        let blob = try CloudWrite.checked(path)
-        var request = URLRequest(url: url(blob: blob))
+    func write(_ data: Data, toPath path: String, contentType: String) async throws {
+        var request = URLRequest(url: url(blob: path))
         request.httpMethod = "PUT"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("BlockBlob", forHTTPHeaderField: "x-ms-blob-type")

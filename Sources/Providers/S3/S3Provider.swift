@@ -162,8 +162,7 @@ struct S3Provider: CloudProvider {
 
     /// `path` is a whole key, as `listFiles` hands them out — not relative to the folder
     /// this connection starts at.
-    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
-        let key = try CloudWrite.checked(path)
-        try await client.putObject(key: key, data: data, contentType: contentType)
+    func write(_ data: Data, toPath path: String, contentType: String) async throws {
+        try await client.putObject(key: path, data: data, contentType: contentType)
     }
 }

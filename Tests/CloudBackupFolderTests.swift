@@ -35,7 +35,7 @@ private final class FakeBucket: CloudProvider, @unchecked Sendable {
 
     var isWritable: Bool { true }
 
-    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+    func write(_ data: Data, toPath path: String, contentType: String) async throws {
         uploads.append((path, data))
         files.append(path)
     }

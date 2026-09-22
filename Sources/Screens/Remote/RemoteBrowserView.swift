@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Real folder-style browsing over a remote source, one directory level at a time —
 /// recurses by pushing itself with the tapped subfolder's path. There's no separate
@@ -30,6 +31,10 @@ struct RemoteBrowserView: View {
     @State private var previewingFile: CloudFile?
     @State private var loadingFileID: String?
     @State private var showingQueue = false
+    @State private var showingUploadPicker = false
+    @State private var isUploading = false
+    @State private var uploadMessage: String?
+    @State private var canUpload = false
 
     @State private var frequency: SyncFrequency
     @State private var isSyncing = false
@@ -113,24 +118,39 @@ struct RemoteBrowserView: View {
                 // indicator rides on the same line rather than its own row, since it's just
                 // a transient qualifier on those same numbers.
                 if !isLoadingListing {
-                    HStack(spacing: 4) {
-                        Text(isShowingSyncedFallback ? "Last synced · \(statsSummary)" : statsSummary)
-                            .font(.caption)
-                        if isSyncing || isProviderSyncQueueActive {
-                            // Tappable: "Syncing…" is the moment you want to see what's
-                            // actually being worked, and the queue is otherwise two taps
-                            // away in the More menu.
-                            Button { showingQueue = true } label: {
-                                HStack(spacing: 4) {
-                                    ProgressView().controlSize(.small)
-                                    Text("Syncing…").font(.caption)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 4) {
+                            Text(isShowingSyncedFallback ? "Last synced · \(statsSummary)" : statsSummary)
+                                .font(.caption)
+                            if isSyncing || isProviderSyncQueueActive {
+                                // Tappable: "Syncing…" is the moment you want to see what's
+                                // actually being worked, and the queue is otherwise two taps
+                                // away in the More menu.
+                                Button { showingQueue = true } label: {
+                                    HStack(spacing: 4) {
+                                        ProgressView().controlSize(.small)
+                                        Text("Syncing…").font(.caption)
+                                    }
                                 }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Color.accentColor)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Color.accentColor)
+                            if isUploading {
+                                ProgressView().controlSize(.small)
+                                Text("Uploading…").font(.caption)
+                            }
+                        }
+                        if let uploadMessage {
+                            Text(uploadMessage).font(.caption)
+                        }
+                        // Under the stats rather than in the empty state: a folder with
+                        // forty episodes in it is also where you'd want to add the
+                        // forty-first, and the menu that does it is three dots in a corner.
+                        if canUpload {
+                            Text("To add podcasts, open the ⋯ menu and pick Upload from Files — they go into this folder and into your library.")
+                                .font(.caption)
                         }
                     }
-
                 }
             }
         }
@@ -155,6 +175,17 @@ struct RemoteBrowserView: View {
                         showingQueue = true
                     } label: {
                         Label("Queue", systemImage: "list.bullet.rectangle")
+                    }
+                    // Uploading, not importing-in-place: the episode goes into the folder
+                    // being browsed, so it's backed up and on every other device, and the
+                    // library picks it up from there like anything else in the bucket.
+                    if canUpload {
+                        Button {
+                            showingUploadPicker = true
+                        } label: {
+                            Label("Upload from Files", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(isUploading)
                     }
                     Divider()
                     Button(role: .destructive) {
@@ -190,6 +221,13 @@ struct RemoteBrowserView: View {
         }
         .sheet(isPresented: $showingQueue) {
             NavigationStack { SyncQueueView() }
+        }
+        .fileImporter(
+            isPresented: $showingUploadPicker,
+            allowedContentTypes: [.audio],
+            allowsMultipleSelection: true
+        ) { result in
+            Task { await upload(result) }
         }
     }
 
@@ -347,6 +385,9 @@ struct RemoteBrowserView: View {
             let listing = try await provider.listDirectory(atFolder: folder)
             folders = listing.folders
             files = listing.files
+            // Only offered where a write would actually land: a read-only key pair, or a
+            // source with no folder to write into, doesn't get the menu item.
+            canUpload = provider.isWritable
             isShowingSyncedFallback = false
             errorMessage = nil
             return
@@ -414,6 +455,28 @@ struct RemoteBrowserView: View {
         } else {
             showingFileInfo = file
         }
+    }
+
+    /// Writes the picked episodes into the folder on screen and queues each one, then
+    /// redraws — the new rows come from the bucket's own listing, so what's shown is what
+    /// actually landed.
+    private func upload(_ result: Result<[URL], Error>) async {
+        guard case .success(let urls) = result else {
+            if case .failure(let error) = result { uploadMessage = error.localizedDescription }
+            return
+        }
+        guard let provider = try? ProviderManager.shared.provider(for: record) else {
+            uploadMessage = "Couldn't connect to this source."
+            return
+        }
+        isUploading = true
+        defer { isUploading = false }
+        let outcome = await EpisodeUpload(
+            provider: provider, providerID: record.id, folder: folder
+        ).run(urls, avoiding: Set(files.map(\.name) + folders.map { ($0 as NSString).lastPathComponent }))
+        uploadMessage = outcome.summary
+        await load()
+        loadStats()
     }
 
     private func play(_ file: CloudFile) async {

@@ -9,9 +9,6 @@ struct SettingsSectionView: View {
     @ObservedObject private var transcript = TranscriptRunner.shared
     @EnvironmentObject private var language: AppLanguageStore
     @State private var openPicker: String?
-    @State private var showingFilePicker = false
-    @State private var isScanning = false
-    @State private var importMessage: String?
     @State private var exportDocument: BackupDocument?
     @State private var showingExportPicker = false
     @State private var showingImportPicker = false
@@ -212,8 +209,7 @@ struct SettingsSectionView: View {
             .padding(.horizontal)
 
             // Down here because it's set once and never thought about again, unlike the
-            // groups above it — but above Add Episodes, which is where you go to *do*
-            // something rather than to configure one.
+            // groups above it.
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
                     title: "LANGUAGE",
@@ -232,60 +228,37 @@ struct SettingsSectionView: View {
             }
             .padding(.horizontal)
 
-            // Both ways of putting episodes in the library that aren't a remote source —
-            // your own files, or the samples — as two links, not two sections.
-            VStack(alignment: .leading, spacing: 8) {
-                SectionHeading(
-                    title: "ADD EPISODES",
-                    info: "Files you pick are read where they sit — nothing is copied into the app, and nothing is uploaded. Pick a whole folder and everything under it is scanned; pick episodes one by one and only those are added."
-                )
-
-                Button {
-                    showingFilePicker = true
-                } label: {
-                    if isScanning {
-                        Label { Text("Importing…") } icon: { ProgressView() }
-                    } else {
-                        Text("Import podcasts from Files")
-                    }
-                }
-                .disabled(isScanning)
-                .fileImporter(
-                    isPresented: $showingFilePicker,
-                    allowedContentTypes: [.audio, .folder],
-                    allowsMultipleSelection: true
-                ) { result in
-                    Task { await handleFilePick(result) }
-                }
-                Text("Read where they sit, never copied.")
-                    .sectionHint()
-
-                // Only what's already here: the rows exist to switch a source off or throw
-                // it away, and there's nothing to say when there are none.
-                ForEach(localProviders) { record in
-                    HStack {
-                        Text(record.label)
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { record.isActive },
-                            set: { _ in viewModel.toggleActive(record) }
-                        ))
-                        .labelsHidden()
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            viewModel.delete(record)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+            // No way to add one from here any more: episodes go into a bucket now
+            // ("Upload from Files" in the folder browser), so they're backed up and on
+            // every device instead of living in one phone's Files app. These rows stay for
+            // the sources picked before that, to switch one off or throw it away.
+            if !localProviders.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeading(
+                        title: "FILES ON THIS DEVICE",
+                        info: "Episodes picked out of Files before uploading to a bucket replaced it. They're read where they sit — never copied, never uploaded — so they're only playable on this device, and only while the file stays put."
+                    )
+                    ForEach(localProviders) { record in
+                        HStack {
+                            Text(record.label)
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { record.isActive },
+                                set: { _ in viewModel.toggleActive(record) }
+                            ))
+                            .labelsHidden()
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                viewModel.delete(record)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
                 }
-                if let importMessage {
-                    Text(importMessage)
-                        .sectionHint()
-                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
         }
         .sectionRow()
         // The docked mini player sits over the end of the page, and Settings is the end
@@ -301,31 +274,4 @@ struct SettingsSectionView: View {
         }
     }
 
-    /// One picker for both: a folder becomes a source of its own, while loose episodes all
-    /// join the single "Files" source, so importing twice doesn't split a library in two.
-    private func handleFilePick(_ result: Result<[URL], Error>) async {
-        guard case .success(let urls) = result else {
-            if case .failure(let error) = result { importMessage = error.localizedDescription }
-            return
-        }
-        isScanning = true
-        defer { isScanning = false }
-
-        let folders = urls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
-        let files = urls.filter { !folders.contains($0) }
-        var records = folders.compactMap { viewModel.addLocalProvider(folderURL: $0) }
-        if !files.isEmpty, let record = viewModel.addPickedFiles(files) {
-            records.append(record)
-        }
-        guard !records.isEmpty else {
-            importMessage = "Couldn't read what you picked."
-            return
-        }
-
-        var found = 0
-        for record in records {
-            found += (try? await SyncQueueManager.shared.sync(providerRecord: record))?.totalFiles ?? 0
-        }
-        importMessage = "Found \(found) file\(found == 1 ? "" : "s") — importing in the background."
-    }
 }
