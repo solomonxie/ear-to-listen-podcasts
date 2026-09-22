@@ -118,13 +118,13 @@ struct GoogleCloudStorageProvider: CloudProvider {
 
     var isWritable: Bool { true }
 
-    /// A simple (non-resumable) media upload — a transcript sidecar or a library archive
-    /// is small enough that a restartable upload would only be more moving parts.
-    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
-        let name = try CloudWrite.checked(path)
+    /// A simple (non-resumable) media upload — one request, no restart. An episode is
+    /// bigger than the sidecars and archives this started out carrying, so a dropped
+    /// connection means picking it again rather than resuming.
+    func write(_ data: Data, toPath path: String, contentType: String) async throws {
         var request = URLRequest(url: url(
             base: Self.uploadBase, path: "/b/\(bucket)/o",
-            query: [("uploadType", "media"), ("name", name)]
+            query: [("uploadType", "media"), ("name", path)]
         ))
         request.httpMethod = "POST"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")

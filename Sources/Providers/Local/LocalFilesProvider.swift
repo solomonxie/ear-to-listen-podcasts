@@ -22,14 +22,7 @@ struct LocalFileEntry: Codable, Equatable {
     static let settingsKey = "files"
 
     static func uniquePath(for name: String, avoiding taken: Set<String>) -> String {
-        guard taken.contains(name) else { return name }
-        let base = (name as NSString).deletingPathExtension
-        let ext = (name as NSString).pathExtension
-        for suffix in 2... {
-            let candidate = ext.isEmpty ? "\(base) \(suffix)" : "\(base) \(suffix).\(ext)"
-            if !taken.contains(candidate) { return candidate }
-        }
-        return name
+        CloudWrite.availableName(for: name, avoiding: taken)
     }
 }
 
@@ -170,11 +163,11 @@ struct LocalFilesProvider: CloudProvider {
         return false
     }
 
-    func upload(_ data: Data, toPath path: String, contentType: String) async throws {
+    func write(_ data: Data, toPath path: String, contentType: String) async throws {
         guard case .folder(let baseURL) = source else {
             throw CloudProviderError.readOnly(type)
         }
-        let url = baseURL.appendingPathComponent(try CloudWrite.checked(path))
+        let url = baseURL.appendingPathComponent(path)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )

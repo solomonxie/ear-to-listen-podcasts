@@ -261,25 +261,23 @@ Nothing is written until `Save`, and a saved edit outranks the embedded tags fro
 
 ### Settings
 
-Sections: Sync & Backup · AI Keys · Add Episodes · Language (last: set once, never
+Sections: Sync & Backup · AI Keys · Transcripts · Language (last: set once, never
 thought about again). Each
 carries a short hint under its heading, not a paragraph at the bottom. Row labels say
-what the row does, not what it is: "Import podcasts from Files", not "Add a Folder".
+what the row does, not what it is: "Upload from Files", not "Add a Folder".
 
 Settings holds only what has nowhere better to live. A control belongs beside the thing
 it acts on, not in a settings list that grows a section per feature:
 
-- **Importing** is one link, not a section — picking episodes (or a whole folder) out of
-  Files, read where they sit. Existing sources are listed under it only when there are
-  any, to switch off or delete.
+- **Adding episodes** isn't here at all — it's `Upload from Files` in the bucket folder
+  you want them in (remote.md), so an episode is backed up and on every device instead of
+  readable only on the phone that picked it. Sources picked before that still appear, only
+  when there are any, to switch off or delete.
 - **Downloaded episodes** are managed from the `Downloaded` shelf's own `More` button on
   Home, not a Storage section repeating what the shelf already shows.
 - **Backing app data up to a bucket** is a toggle on that connection's row in Remote,
   next to `Sync Now` and its frequency — same bucket, same question. An ordinary switch
   on its own row: pressed into the pill row beside two buttons, it read as a third button.
-- **Adding episodes** from your own files is the last group, one link, not its own
-  section.
-
 Tapping an AI key opens its own page: every call made with that key, newest first, with
 the model, tokens in and out, and an estimated cost, and the prompt and reply behind a
 tap. A request count is the only thing a key can otherwise show, and it answers none of
