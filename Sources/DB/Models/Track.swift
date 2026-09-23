@@ -39,6 +39,10 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// Filename under `ImageFileStore.artwork`, not a full path, so it survives
     /// reinstalls and travels as-is in a `LibrarySnapshot` backup.
     var artworkFileName: String? = nil
+    /// The title this episode had before `DuplicateTitles` numbered it apart from one it
+    /// collided with — the receipt that makes the numbering reversible. Nil for every
+    /// title the app never renamed, including one that genuinely ends in "(2)".
+    var numberedFrom: String? = nil
     /// Set when the listener saves `EpisodeEditView`. Their title beats the embedded tag
     /// from then on — tags get re-read only for files the library doesn't know yet.
     var metadataEditedAt: Date? = nil

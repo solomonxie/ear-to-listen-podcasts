@@ -292,9 +292,10 @@ struct TrackStore {
             let byAlbum = Dictionary(grouping: try Track.fetchAll(db)) { $0.albumID }
             var renamed = 0
             for (albumID, tracks) in byAlbum where albumID != nil {
-                for (trackID, title) in DuplicateTitles.renumbered(tracks) {
+                for (trackID, change) in DuplicateTitles.renumbered(tracks) {
                     guard var track = try Track.fetchOne(db, key: trackID) else { continue }
-                    track.title = title
+                    track.title = change.title
+                    track.numberedFrom = change.numberedFrom
                     // Deliberately not `metadataEditedAt` — nobody edited this, and
                     // marking it would make the next pass leave the run alone forever.
                     track.updatedAt = Date()
