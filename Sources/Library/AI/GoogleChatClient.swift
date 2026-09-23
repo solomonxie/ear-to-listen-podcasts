@@ -5,7 +5,10 @@ import Foundation
 /// this can't share `OpenAICompatibleChatClient`.
 enum GoogleChatClient {
 
-    static func runChatCompletion(apiKey: String, model: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(
+        apiKey: String, model: String, messages: [ChatMessage],
+        maxTokens: Int = AiRouter.defaultMaxTokens
+    ) async throws -> ChatCompletionResult {
         let systemInstruction = messages
             .filter { $0.role == .system }
             .map(\.content)
@@ -23,7 +26,10 @@ enum GoogleChatClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        var body: [String: Any] = ["contents": contents]
+        var body: [String: Any] = [
+            "contents": contents,
+            "generationConfig": ["maxOutputTokens": maxTokens],
+        ]
         if !systemInstruction.isEmpty {
             body["systemInstruction"] = ["parts": [["text": systemInstruction]]]
         }

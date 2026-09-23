@@ -18,6 +18,9 @@ struct EpisodeDetailsPane: View {
     @State private var artist: Artist?
     @State private var album: Album?
     @State private var topics: [Topic] = []
+    @State private var playlistNames: [String] = []
+    @State private var terms: [TermCount] = []
+    @State private var showingAddToPlaylist = false
     @State private var connectionLabel: String?
     @State private var downloadedBytes: Int64?
 
@@ -45,6 +48,8 @@ struct EpisodeDetailsPane: View {
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let termStore = TermStore()
 
     private var track: Track { latest ?? playingTrack }
 
@@ -57,6 +62,35 @@ struct EpisodeDetailsPane: View {
             }
 
             DetailCard("Episode", accessory: { suggestButton }) { episodeFields }
+
+            // Its own card, under the one whose ✨ produced it: the names an episode
+            // talks about are a different kind of thing from its title and its year, and
+            // there are two dozen of them.
+            // Shown even when empty, now that terms can be added by hand: a card that
+            // only appears once the AI has run can't be used to write the first one in.
+            DetailCard("Terms") {
+                TermsField(terms: terms, open: $openPicker, onAdd: { addTerm($0) }) { term in
+                    NavigationLink(value: PlayerRoute.term(term.term)) {
+                        TermChip(term: term)
+                    }
+                    .buttonStyle(.plain)
+                    // Long press to remove, as everywhere else here — a second glyph
+                    // inside the chip would be a target the size of a full stop, and
+                    // tapping the chip has to keep meaning "go to it".
+                    .contextMenu {
+                        Button("Delete", systemImage: "trash", role: .destructive) {
+                            removeTerm(term)
+                        }
+                    }
+                }
+                // What the number on a chip counts changes with the page it's on —
+                // this episode here, the whole collection on an album, the whole
+                // library on Home — so each says which.
+                Text("Times said in this episode — counted in the transcript, not guessed. Hold a term to remove it.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
             DetailCard("Notes") {
                 TextField("What this episode is about", text: $notes, axis: .vertical)
                     .font(.footnote)
@@ -97,6 +131,11 @@ struct EpisodeDetailsPane: View {
 
         }
         .padding(.horizontal)
+        // The sheet posts nothing when it adds to a hand-made list, so the row reloads
+        // on the way out rather than waiting for the next `libraryDidChange`.
+        .sheet(isPresented: $showingAddToPlaylist, onDismiss: { loadPlaylists() }) {
+            AddToPlaylistSheet(track: track)
+        }
         .task(id: playingTrack.id) { await load() }
         .task(id: playingTrack.id) { readiness = EpisodeMetadataSuggester().readiness(track: track) }
         // Sync and the other editors hold their own copies of these rows; this is what
@@ -167,6 +206,9 @@ struct EpisodeDetailsPane: View {
         )
 
         DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
+        // Above Topics, which belong to the album: this is the one membership that's
+        // about *this episode* and the one you decide while listening to it.
+        PlaylistsRow(names: playlistNames, onAdd: { showingAddToPlaylist = true })
         // Shown even when empty now that it can be added to — an editable row that only
         // appears once it has something in it can't be used to put the first thing in.
         TagField(
@@ -198,6 +240,11 @@ struct EpisodeDetailsPane: View {
             onUse: { data in Task { await saveArtwork(data) } },
             onRemove: { setArtwork(nil) }
         )
+
+        Divider()
+        // Last in the card and the only part of it written in sentences — the fields
+        // above are what the episode *is*, this is what it says.
+        EpisodeSummaryView(track: track, onAnalyzed: { loadTerms() })
     }
 
     /// Up in the card's heading rather than at the foot of the fields it fills in. Down
@@ -246,6 +293,8 @@ struct EpisodeDetailsPane: View {
         album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
         // Topics tag the collection an episode belongs to.
         topics = track.albumID.flatMap { try? libraryStore.topics(forAlbum: $0) } ?? []
+        loadPlaylists()
+        loadTerms()
         connectionLabel = (try? providerStore.all())?.first { $0.id == track.providerID }?.label
         downloadedBytes = await AudioCache.shared.cachedSize(providerID: track.providerID, filePath: track.filePath)
         // Half-typed words outrank whatever the database says — a sync landing mid-edit
@@ -254,6 +303,39 @@ struct EpisodeDetailsPane: View {
         guard draftTrackID != track.id || (focusedField == nil && snapshot == savedSnapshot) else { return }
         if draftTrackID != track.id { focusedField = nil }
         fillFields()
+    }
+
+    /// Listen Later first and named as itself: it's the app's own list, it isn't in the
+    /// playlists table, and "on the queue" is as much an answer to "what lists is this on"
+    /// as any hand-made one.
+    private func loadPlaylists() {
+        let made = ((try? playlistStore.playlists(containingTrack: track.id)) ?? []).map(\.name)
+        playlistNames = (track.listenLater ? ["Listen Later"] : []) + made
+    }
+
+    private func loadTerms() {
+        terms = (try? termStore.terms(forTrack: track.id)) ?? []
+    }
+
+    /// The count comes from the transcript, not from whoever typed the term: one said
+    /// forty times and one the recording never says are different things, and only the
+    /// transcript knows which this is.
+    private func addTerm(_ name: String) {
+        let spoken = ((try? TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
+            .find(trackID: track.id)) ?? [])?
+            .map(\.text).joined(separator: " ") ?? ""
+        try? termStore.add(
+            name: name, mentions: EpisodeSummarizer.occurrences(of: name, in: spoken),
+            forTrack: track.id
+        )
+        loadTerms()
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
+    private func removeTerm(_ term: TermCount) {
+        try? termStore.remove(termID: term.term.id, fromTrack: track.id)
+        loadTerms()
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
     private func fillFields() {
@@ -481,6 +563,44 @@ private struct EditableRow: View {
         }
         .frame(minHeight: DetailLayout.rowHeight)
         .contentShape(Rectangle())
+    }
+}
+
+/// Which lists this episode is on, and the way onto another one. Chips rather than a
+/// line of text: an episode is on none or a few, and "none" has to still be a control —
+/// a row that only appears once it has something in it can't be used to put the first
+/// thing in. Taking it off a list stays on the list's own page, where the rest of that
+/// list is visible to take it out of.
+private struct PlaylistsRow: View {
+    let names: [String]
+    let onAdd: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Playlists")
+                .sectionRowSecondary()
+                .frame(width: DetailLayout.labelWidth, alignment: .leading)
+            FlowLayout(spacing: 6) {
+                ForEach(names, id: \.self) { name in
+                    Text(name)
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
+                }
+                Button(action: onAdd) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minHeight: DetailLayout.rowHeight)
     }
 }
 

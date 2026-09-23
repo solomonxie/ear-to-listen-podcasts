@@ -28,6 +28,7 @@ struct AlbumDetailView: View {
     @State private var openPicker: String?
     @State private var allSpeakers: [Artist] = []
     @State private var bookmarks: [Bookmark] = []
+    @State private var terms: [TermCount] = []
     /// Pushed by the speaker row's icon — see the comment where it's built.
     @State private var openSpeaker: Artist?
     @State private var artworkItem: PhotosPickerItem?
@@ -142,6 +143,27 @@ struct AlbumDetailView: View {
                 )
             }
             .listRowSeparator(.hidden)
+
+            // What this collection keeps coming back to, summed across its episodes —
+            // a different list from any one episode's, and the reason terms are counted
+            // rather than tagged.
+            if !terms.isEmpty {
+                Section {
+                    TermChips(terms: terms) { term in
+                        NavigationLink {
+                            TermDetailView(term: term.term)
+                        } label: {
+                            TermChip(term: term)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("Terms")
+                } footer: {
+                    Text("Times said across this collection's episodes — counted in the transcripts, not guessed.")
+                }
+                .listRowSeparator(.hidden)
+            }
 
             Section("Stats") {
                 LabeledContent("Episodes", value: "\(tracks.count)")
@@ -493,6 +515,7 @@ struct AlbumDetailView: View {
         allSpeakers = (try? libraryStore.artists()) ?? []
         transcribedCount = AlbumMetadataSuggester().partition(tracks: tracks).ready.count
         bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
+        terms = (try? TermStore().terms(forAlbum: album.id)) ?? []
         var downloaded = 0
         for track in tracks where await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil {
             downloaded += 1

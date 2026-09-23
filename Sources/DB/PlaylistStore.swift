@@ -60,6 +60,20 @@ struct PlaylistStore {
         )
     }
 
+    /// Every playlist this episode is on — what the episode page's Playlists row shows.
+    /// The reverse of `tracks(inPlaylist:)`, and the direction anyone looking at one
+    /// episode is asking in.
+    func playlists(containingTrack trackID: String) throws -> [Playlist] {
+        try dbQueue.read { db in
+            try Playlist.fetchAll(db, sql: """
+                SELECT playlists.* FROM playlists
+                JOIN playlistTracks ON playlistTracks.playlistID = playlists.id
+                WHERE playlistTracks.trackID = ?
+                ORDER BY playlists.createdAt
+                """, arguments: [trackID])
+        }
+    }
+
     func tracks(inPlaylist playlistID: String) throws -> [Track] {
         try dbQueue.read { db in
             try Track.fetchAll(db, sql: """

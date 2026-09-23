@@ -32,6 +32,10 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// Free-text episode notes — only ever written by hand or from an AI suggestion the
     /// listener accepted, never from embedded tags.
     var notes: String? = nil
+    /// What the episode says, in a few lines: written by the AI pass over the transcript
+    /// or typed by hand, and editable either way. `[mm:ss]` markers in it are jumpable —
+    /// see `EpisodeSummary`.
+    var summary: String? = nil
     /// Filename under `ImageFileStore.artwork`, not a full path, so it survives
     /// reinstalls and travels as-is in a `LibrarySnapshot` backup.
     var artworkFileName: String? = nil

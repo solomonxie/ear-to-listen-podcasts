@@ -499,6 +499,34 @@ enum Migrations {
             }
         }
 
+        // What an episode is actually about, in three lines and a list — a summary
+        // someone can edit, and the names/terms it mentions with a count each.
+        //
+        // The summary is a column on the episode because it's one editable blob (see
+        // `EpisodeSummary` for the `[mm:ss]` markers that make it jumpable); terms are a
+        // table because they're the one thing in this library that's worth counting
+        // across episodes, and a ranking needs rows.
+        migrator.registerMigration("v30_episode_summary_and_terms") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "summary", .text)
+            }
+            try db.create(table: "terms") { t in
+                t.column("id", .text).primaryKey()
+                t.column("name", .text).notNull()
+            }
+            // Case-insensitive: "Huberman" and "huberman" are one term with one count,
+            // not two bars on the same chart.
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_name ON terms(name COLLATE NOCASE)")
+            try db.create(table: "trackTerms") { t in
+                t.column("trackID", .text).notNull().indexed()
+                    .references("tracks", onDelete: .cascade)
+                t.column("termID", .text).notNull().indexed()
+                    .references("terms", onDelete: .cascade)
+                t.column("mentions", .integer).notNull().defaults(to: 1)
+                t.primaryKey(["trackID", "termID"])
+            }
+        }
+
         return migrator
     }
 }
