@@ -63,8 +63,15 @@ final class ProviderManager: @unchecked Sendable {
 
     /// "s3://bucket/folder/" — and `cos://`, `oss://`, `az://`, `gs://`, each cloud's own
     /// shorthand. Lets two connections into the same bucket (different folders) be told
-    /// apart in a list.
+    /// apart in a list. A folder on this device gets the same treatment under `files://`,
+    /// with enough of the path to tell two folders of the same name apart.
     func displayPath(for record: ProviderRecord) -> String? {
+        if record.type == LocalFilesProvider.providerType {
+            guard let path = settings(for: record.id)?[LocalFilesProvider.folderPathKey],
+                  !path.isEmpty else { return nil }
+            let parts = (path as NSString).pathComponents.filter { $0 != "/" }
+            return "files://" + parts.suffix(2).joined(separator: "/")
+        }
         guard let kind = record.cloudKind,
               let bucket = bucketSettings(for: record)?["bucket"], !bucket.isEmpty else { return nil }
         let folder = rootFolder(for: record)

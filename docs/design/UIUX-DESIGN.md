@@ -270,7 +270,7 @@ Settings holds only what has nowhere better to live. A control belongs beside th
 it acts on, not in a settings list that grows a section per feature:
 
 - **Adding episodes** isn't here at all — it's `Upload from Files` in the bucket folder
-  you want them in (remote.md), so an episode is backed up and on every device instead of
+  you want them in (sources.md), so an episode is backed up and on every device instead of
   readable only on the phone that picked it. Sources picked before that still appear, only
   when there are any, to switch off or delete.
 - **Downloaded episodes** are managed from the `Downloaded` shelf's own `More` button on

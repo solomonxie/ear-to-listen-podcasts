@@ -28,7 +28,7 @@ struct HomeView: View {
                 } else {
                     homeShelves
                     Divider().padding(.horizontal)
-                    RemoteSectionView(viewModel: settings)
+                    SourcesSectionView(viewModel: settings)
                     Divider().padding(.horizontal)
                     SettingsSectionView(viewModel: settings)
                 }

@@ -66,13 +66,15 @@ ProviderManager.swift:provider(for: record)
               ├─ "gcs" ────────────► GoogleCloud/GoogleCloudStorageProvider.swift
               │                         service account → OAuth token, cached
               └─ "local" ──────────► Local/LocalFilesProvider.swift:init(config:)
-                               resolves security-scoped bookmarks: one folder,
-                               or the individual episodes picked from Files
-                               (`LocalFileEntry`, keyed by the path each is
-                               filed under — read-only, no folder for sidecars).
-                               No longer creatable: episodes go into a bucket
-                               now ("Upload from Files"), so this only reads
-                               sources added before that.
+                               resolves security-scoped bookmarks: one folder
+                               (added from the Sources section, and a source on
+                               the same terms as a bucket), or the individual
+                               episodes picked from Files (`LocalFileEntry`,
+                               keyed by the path each is filed under —
+                               read-only, no folder for sidecars).
+                               `isOnDevice` is true, so the offline guards skip
+                               it and the first play *copies* the episode into
+                               Documents/Downloads instead of downloading it.
               │ caches the instance
               ▼
 caller: .listFiles(inFolder:) / .streamURL(forFileID:) / .testConnection()

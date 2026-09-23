@@ -111,8 +111,9 @@ struct SyncEngine {
         // Pause means pause: a scheduled or manual pass mustn't quietly keep importing
         // while the queue it reports into is stopped.
         guard !SyncQueuePolicy.isPaused else { throw SyncEngineError.queuePaused }
-        guard NetworkMonitor.shared.isConnected else { throw SyncEngineError.offline }
         let provider = try ProviderManager.shared.provider(for: record)
+        // A folder on this device is readable with the radios off.
+        guard provider.isOnDevice || NetworkMonitor.shared.isConnected else { throw SyncEngineError.offline }
         // Listed whole, filtered after: the non-audio entries are what say which
         // episodes have a transcript sitting beside them.
         let listing = try await provider.listFiles(inFolder: nil)

@@ -49,9 +49,19 @@ actor AudioCache {
 
     /// Downloads `remoteURL` into the cache, evicting least-recently-used entries first if the
     /// new file would push the cache over budget.
+    ///
+    /// A `file://` source is copied instead — a folder on this device is a source like any
+    /// other, and the copy is the whole point: it's what lets the episode survive the
+    /// original being moved or deleted.
     @discardableResult
     func store(remoteURL: URL, providerID: String, filePath: String) async throws -> URL {
         let destination = fileURL(providerID: providerID, filePath: filePath)
+        guard !remoteURL.isFileURL else {
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.copyItem(at: remoteURL, to: destination)
+            evictIfNeeded()
+            return destination
+        }
         let (tempURL, _) = try await URLSession.shared.download(from: remoteURL)
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: tempURL, to: destination)

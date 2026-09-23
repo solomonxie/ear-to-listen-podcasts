@@ -10,7 +10,7 @@ Spotify/Apple Podcasts lock-in.
 ## Status
 
 No tab bar — one scrollable page (`HomeView`): search up top, then Home/Library
-shelves, then Remote, then Settings. A fresh install starts empty — nothing
+shelves, then Sources, then Settings. A fresh install starts empty — nothing
 appears in the library that the user didn't put there. A sample library for manual
 testing lives in `DemoData/`, outside the app target and not shipped. Everything is wired
 to the real SQLite + Keychain layer (`Sources/DB/`, `Sources/Providers/`): adding/removing cloud and
@@ -32,7 +32,7 @@ ContentView.swift
 │ │ search bar → searchResults                ││──→ inline (same file)
 │ │ shelves: Continue/Albums/Playlists/        ││──→ inline (same file)
 │ │   Favorites/Speakers/Downloaded/Year/Topic ││
-│ │ RemoteSectionView                          ││──→ Sources/Screens/Remote/README.md
+│ │ SourcesSectionView                         ││──→ Sources/Screens/Remote/README.md
 │ │ SettingsSectionView                        ││──→ Sources/Screens/Settings/
 │ └───────────────────────────────────────────┘│
 │ MiniPlayerBar (docked, safeAreaInset bottom) │──→ Sources/Screens/Player/MiniPlayerBar.swift
@@ -75,7 +75,7 @@ in the results: names are what you search when you know what you're after, speec
 you search when you don't. A transcript hit shows the line with its neighbours and plays
 the episode from that second.
 
-Home's shelves/search, Remote and Settings all read the real DB/Provider layers
+Home's shelves/search, Sources and Settings all read the real DB/Provider layers
 (`Sources/DB/README.md`, `Sources/Providers/README.md`) — every shelf is fed by
 synced content, so there's nothing on screen the listener didn't put there.
 
@@ -139,5 +139,5 @@ English + Simplified Chinese from the start, via a String Catalog
 | Home | Browse by speaker, year & topic |
 |:---:|:---:|
 | <img src="docs/screenshots/home-page.png" alt="Home" width="200"> | <img src="docs/screenshots/sections.png" alt="Browse by speaker, year and topic" width="200"> |
-| **Remote & Settings** | **Now Playing** |
-| <img src="docs/screenshots/settings.png" alt="Remote and Settings" width="200"> | <img src="docs/screenshots/player.png" alt="Now Playing" width="200"> |
+| **Sources & Settings** | **Now Playing** |
+| <img src="docs/screenshots/settings.png" alt="Sources and Settings" width="200"> | <img src="docs/screenshots/player.png" alt="Now Playing" width="200"> |

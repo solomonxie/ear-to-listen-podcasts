@@ -35,7 +35,7 @@ page. Reached at launch; nothing pushes back to it but Back.
  Browse by Year   ( 2026 ) ( 2025 ) ( 2024 )  ← capsule chips
  Topics           ( Sleep ) ( Focus ) ( AI )
  ─────────────────────────────────────────── ← Divider
- Remote        → remote.md
+ Sources       → sources.md
  ─────────────────────────────────────────── ← Divider
  Settings      → settings.md
  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
