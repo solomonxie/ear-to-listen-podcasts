@@ -5,7 +5,6 @@ struct RealPlayerView: View {
     @ObservedObject var engine = PlaybackEngine.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingUpNext = false
-    @State private var showingAddToPlaylist = false
     @State private var bookmarks: [Bookmark] = []
     /// The mark just made, lit for a moment so the jump to Notes lands on something the
     /// eye can find.
@@ -31,6 +30,12 @@ struct RealPlayerView: View {
     private static let topAnchor = "player.top"
     private static let transcriptAnchor = "player.transcript"
     private static let notesAnchor = "player.notes"
+
+    /// What the grab handle can reach above the transcript, in the order they appear on
+    /// the page. Named rather than numbered in the bubble: "Top" says where a drag is
+    /// about to land, and a timecode wouldn't — none of these three is a moment.
+    private static let pageAnchors = [topAnchor, notesAnchor, transcriptAnchor]
+    private static let pageAnchorLabels = ["Top", "Notes", "Text"]
     /// How far past the top the page has to come before it goes away. Read off the scroll
     /// view's overscroll, which rubber-bands: the finger travels two to three times this,
     /// so it's well clear of the idle bounce at the top of a long page without asking for
@@ -76,13 +81,24 @@ struct RealPlayerView: View {
                             // The transcript is the long part — forty minutes of speech
                             // is hundreds of lines, and the system indicator gives it a
                             // few points of travel.
+                            // The page's own three landmarks come first, then every
+                            // spoken line. Fed the transcript alone, the handle's top of
+                            // travel was the transcript's first line — the artwork, the
+                            // transport and the details sat above it with no way to drag
+                            // back to them, which reads as a scrollbar that can't reach
+                            // the top of its own page.
                             .scrollHandle(
-                                ids: transcript.lines.map { AnyHashable($0.start) },
+                                ids: Self.pageAnchors.map(AnyHashable.init)
+                                    + transcript.lines.map { AnyHashable($0.start) },
                                 proxy: proxy,
                                 label: { index in
+                                    guard index >= Self.pageAnchors.count else {
+                                        return Self.pageAnchorLabels[index]
+                                    }
                                     let lines = transcript.lines
-                                    guard index < lines.count else { return "" }
-                                    return Scrubber.formatted(lines[index].start)
+                                    let line = index - Self.pageAnchors.count
+                                    guard line < lines.count else { return "" }
+                                    return Scrubber.formatted(lines[line].start)
                                 }
                             )
                             // Pinned: the page is now arbitrarily long, and the transport
@@ -138,11 +154,6 @@ struct RealPlayerView: View {
                 }
                 .sheet(isPresented: $showingUpNext) {
                     UpNextView()
-                }
-                .sheet(isPresented: $showingAddToPlaylist) {
-                    if let track = engine.currentTrack {
-                        AddToPlaylistSheet(track: track)
-                    }
                 }
             }
         }
@@ -270,10 +281,16 @@ struct RealPlayerView: View {
         .padding(.horizontal)
     }
 
-    /// Favourite and "add to a playlist" flank the transport: both are things you do
-    /// *about the episode you're hearing*, and both are one tap with nothing to read.
-    /// Bookmarking moved out of this row — see `queueControls` — because marking a moment
-    /// is the start of writing a note, and the note lives further down the page.
+    /// Favourite and bookmark flank the transport: both are things you do *because of
+    /// what you're hearing right now*, and both are one tap with nothing to read. Moving
+    /// between episodes isn't on this row at all any more; Up Next, right below it, is
+    /// the list that does it, and adding to a playlist — a decision about the episode,
+    /// not about this second of it — moved to the Episode card's Playlists row.
+    ///
+    /// **The mark here doesn't take you to it.** You press it while listening, and being
+    /// thrown down the page to the row it just made is the interruption the mark was
+    /// supposed to avoid. The [ Bookmarks ] pill below is the other half: it goes to the
+    /// marks without making one.
     private func transport(for track: Track, proxy: ScrollViewProxy) -> some View {
         HStack(spacing: 28) {
             Button {
@@ -285,21 +302,55 @@ struct RealPlayerView: View {
             }
             .accessibilityLabel(track.isFavorite ? "Remove from favourites" : "Add to favourites")
 
-            // The bar-and-triangle skip glyph, not the double arrowhead: two arrowheads
-            // read as rewind — hold to scrub — and these move to another episode.
-            Button { engine.skipToPrevious() } label: { Image(systemName: "backward.end.fill").font(.title) }
+            // Ten seconds, not the next episode. Spoken audio is missed a sentence at a
+            // time — "what did they just say" is what anyone reaches for mid-episode,
+            // while moving to another one is a decision made from Up Next, a tap below.
+            // The arrow-round-a-10 glyph says the interval, so neither needs a label.
+            Button { engine.skip(by: -10) } label: { Image(systemName: "gobackward.10").font(.title) }
+                .accessibilityLabel("Back ten seconds")
             Button { engine.togglePlayPause() } label: {
                 Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 56))
             }
-            Button { engine.skipToNext() } label: { Image(systemName: "forward.end.fill").font(.title) }
+            Button { engine.skip(by: 10) } label: { Image(systemName: "goforward.10").font(.title) }
+                .accessibilityLabel("Forward ten seconds")
 
-            Button {
-                showingAddToPlaylist = true
-            } label: {
-                Image(systemName: "text.badge.plus").font(.title3)
+            // Marks and stays put: nothing is asked at the moment of marking — a dialog
+            // over what you're listening to is how a mark gets made too late — and the
+            // note is written afterwards, in the row itself, whenever you go looking.
+            //
+            // The count in the corner is the whole receipt. A button that goes nowhere
+            // and asks nothing otherwise looks like it did nothing, and the number going
+            // up is both "that worked" and "this is your fourth" — which is the thing
+            // worth knowing before you mark the same minute twice.
+            Button { markMoment(track) } label: {
+                Image(systemName: "bookmark.fill")
+                    .font(.title3)
+                    .overlay(alignment: .topTrailing) { markCount }
             }
-            .accessibilityLabel("Add to a playlist")
+            .accessibilityLabel("Bookmark this moment")
+            .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
+        }
+    }
+
+    /// How many marks this episode has, on the shoulder of the button that makes them.
+    /// Drawn outside the glyph rather than beside it: a number next to the bookmark would
+    /// be a second thing in a row of five evenly spaced controls, and shove the transport
+    /// off centre every time it reached double figures.
+    @ViewBuilder
+    private var markCount: some View {
+        if !bookmarks.isEmpty {
+            Text("\(bookmarks.count)")
+                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Color.accentColor, in: Capsule())
+                .offset(x: 11, y: -7)
+                // The digit rolls rather than blinks — the point is that it went *up*.
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.2), value: bookmarks.count)
+                .fixedSize()
         }
     }
 
@@ -324,9 +375,9 @@ struct RealPlayerView: View {
                 Label("Up Next", systemImage: "list.bullet")
                     .pillLabel()
             }
-            // Takes the page to the marks rather than making one: the button that
-            // *creates* a mark lives in that section, where what it made is visible. A
-            // create button up here made marks nobody could find.
+            // Takes the page to the marks without making one — the transport's bookmark
+            // is what makes them. Two buttons because they're two different wants: one
+            // happens while you're listening, the other when you've stopped to read.
             Button {
                 withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.notesAnchor, anchor: .top) }
             } label: {
@@ -356,29 +407,30 @@ struct RealPlayerView: View {
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
-    /// Saves the mark and then shows it: the page goes to Notes, the new row lights up,
-    /// and its pencil is the way in to saying why. Nothing is asked for at the moment of
-    /// marking — a dialog over the thing you're listening to is how a mark gets made too
-    /// late.
-    private func addBookmark(to track: Track, proxy: ScrollViewProxy) {
-        // The line being spoken travels with the mark: what was said there is the reason
-        // it was marked, and a re-transcribe shouldn't be able to rewrite that.
-        let spoken = transcript.currentLine(at: engine.currentTime)?.text
-        guard let saved = try? bookmarkStore.add(
-            trackID: track.id, positionMs: Int(engine.currentTime * 1000), transcriptText: spoken
-        ) else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
-
+    /// Marks and stays put. Nothing is asked for at the moment of marking — a dialog over
+    /// the thing you're listening to is how a mark gets made too late — and the mark is
+    /// left lit for whenever the Notes section is next reached.
+    @discardableResult
+    private func markMoment(_ track: Track) -> Bookmark? {
+        guard let saved = MomentMark.add(to: track, at: engine.currentTime) else { return nil }
         refreshBookmarks(track)
-        isFollowingTranscript = false
         highlightedBookmark = saved.id
-        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(saved.id, anchor: .center) }
         Task {
             try? await Task.sleep(for: .seconds(3))
             guard highlightedBookmark == saved.id else { return }
             withAnimation(.easeInOut(duration: 0.4)) { highlightedBookmark = nil }
         }
+        return saved
+    }
+
+    /// Saves the mark and then shows it: the page goes to Notes, the new row lights up,
+    /// and its pencil is the way in to saying why. Only for the button that already lives
+    /// in Notes — pressed from deep inside the transcript, going to the mark means leaving
+    /// the line that was worth marking.
+    private func addBookmark(to track: Track, proxy: ScrollViewProxy) {
+        guard let saved = markMoment(track) else { return }
+        isFollowingTranscript = false
+        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(saved.id, anchor: .center) }
     }
 
     private func refreshBookmarks(_ track: Track) {
@@ -406,10 +458,15 @@ struct RealPlayerView: View {
         }
     }
 
-    /// The two things you want from deep inside a 40-minute transcript: back to the
-    /// artwork and the transport, and back to the line being spoken. Both are a reach
-    /// away from the bottom of the page, where the thumb already is — the copies at the
-    /// top of the transcript are a scroll away by the time you need them.
+    /// The two places you want to get to from deep inside a 40-minute transcript: the
+    /// artwork and the transport, and the line being spoken. Both are a reach away from
+    /// the bottom of the page, where the thumb already is — the copies at the top are a
+    /// scroll away by the time you need them.
+    ///
+    /// **Both only move the page.** Making a mark belongs to the transport, the docked
+    /// bar's bookmark and the hold-a-line menu; a button that changes something sitting
+    /// among ones that don't is the one that gets pressed by accident. Getting *to* the
+    /// marks is the docked bar's job now — it's already on screen whenever this row is.
     ///
     /// "Back to top" also stops the page moving itself: following and reading the top of
     /// the page are contradictory things to want.
@@ -520,8 +577,16 @@ struct RealPlayerView: View {
                     albumName: album?.name,
                     subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
                     isPlaying: engine.isPlaying,
+                    onSkipBack: { engine.skip(by: -10) },
                     onTogglePlay: { engine.togglePlayPause() },
-                    onTapBar: { path.removeAll() }
+                    onTapBar: { path.removeAll() },
+                    // A speaker's page is read while the episode keeps playing, so the
+                    // moment worth marking arrives here as often as it does on the
+                    // player. The bar is the same bar; it marks the same way.
+                    onBookmark: engine.currentTrack.map { track in
+                        { markMoment(track) }
+                    },
+                    bookmarkCount: bookmarks.count
                 )
             }
             .background(.ultraThinMaterial)
@@ -541,12 +606,19 @@ struct RealPlayerView: View {
                 albumName: album?.name,
                 subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
                 isPlaying: engine.isPlaying,
+                onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
                 // Already on this page, so the bar's job is the way back up rather than
                 // a screen transition to where you already are.
                 onTapBar: {
                     withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                }
+                },
+                // Never reveals: pressed from deep in the transcript, going to the mark
+                // means leaving the line that was worth marking.
+                onBookmark: engine.currentTrack.map { track in
+                    { markMoment(track) }
+                },
+                bookmarkCount: bookmarks.count
             )
         }
         .background(.ultraThinMaterial)
@@ -560,9 +632,13 @@ struct RealPlayerView: View {
 /// the episode, who is speaking, and which collection it came from. One line of title over
 /// a filename answered none of them.
 ///
-/// **Play/pause is the only button, and it's on the right.** Skip was the far-right
-/// control, which put the destructive-ish action under the thumb that reaches furthest and
-/// left pause — the thing anyone actually reaches for in a hurry — on the far side.
+/// **On the right: bookmark, back ten seconds, then play/pause.** Pause keeps the
+/// far-right seat — it's the one anyone reaches for in a hurry, often without looking —
+/// and the rewind sits inside it, drawn a size smaller so the two don't read as a pair of
+/// equals. The bookmark sits outside both, smaller again: it's the one of the three you
+/// press while listening rather than to change what you're hearing. Skipping to another
+/// episode was the control that used to be out here; it went because it's the one mistap
+/// on this bar you can't undo by tapping again.
 struct NowPlayingBarContent: View {
     let track: Track?
     let artistName: String?
@@ -570,8 +646,14 @@ struct NowPlayingBarContent: View {
     /// The second line under the title: a timecode on the player, the file elsewhere.
     var subtitle: String?
     let isPlaying: Bool
+    let onSkipBack: () -> Void
     let onTogglePlay: () -> Void
     let onTapBar: () -> Void
+    /// Marks this moment and stays put, like the big transport's bookmark. On every page
+    /// the bar appears on, not just the player's: the episode goes on playing while you
+    /// browse, and a moment worth keeping doesn't wait for the player to be opened first.
+    var onBookmark: (() -> Void)?
+    var bookmarkCount: Int = 0
 
     /// Bigger than the `.title2` it was: it's the one control on the bar and the one
     /// reached for in a hurry — often without looking — so it's sized for that rather
@@ -608,6 +690,28 @@ struct NowPlayingBarContent: View {
                 }
                 .buttonStyle(.plain)
 
+                if let onBookmark {
+                    Button(action: onBookmark) {
+                        Image(systemName: "bookmark.fill")
+                            .font(.system(size: glyphSize - 8))
+                            .frame(width: 36, height: 52)
+                            .overlay(alignment: .topTrailing) { barMarkCount }
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Bookmark this moment")
+                    .accessibilityValue(bookmarkCount == 0 ? "No marks yet" : "\(bookmarkCount) marks")
+                }
+
+                Button(action: onSkipBack) {
+                    Image(systemName: "gobackward.10")
+                        .font(.system(size: glyphSize - 5))
+                        .frame(width: 44, height: 52)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back ten seconds")
+
                 Button(action: onTogglePlay) {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: glyphSize))
@@ -622,6 +726,24 @@ struct NowPlayingBarContent: View {
             // floating off the bottom of the screen.
             .padding(.top, 8)
             .padding(.bottom, 2)
+        }
+    }
+
+    /// The count on the bar's bookmark, same receipt as the big transport's: a button that
+    /// goes nowhere and asks nothing otherwise looks like it did nothing.
+    @ViewBuilder
+    private var barMarkCount: some View {
+        if bookmarkCount > 0 {
+            Text("\(bookmarkCount)")
+                .font(.system(size: 9, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 3.5)
+                .padding(.vertical, 1)
+                .background(Color.accentColor, in: Capsule())
+                .offset(x: 6, y: 8)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.2), value: bookmarkCount)
+                .fixedSize()
         }
     }
 }
