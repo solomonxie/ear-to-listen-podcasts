@@ -6,12 +6,12 @@ import XCTest
 /// a number off a title that is the only one of its kind.
 final class DuplicateTitlesTests: XCTestCase {
     private func track(
-        _ id: String, title: String, path: String, editedAt: Date? = nil
+        _ id: String, title: String, path: String, editedAt: Date? = nil, numberedFrom: String? = nil
     ) -> Track {
         Track(
             id: id, providerID: "p1", artistID: nil, albumID: "a1", filePath: path,
             title: title, trackNumber: nil, durationMs: nil, updatedAt: Date(),
-            metadataEditedAt: editedAt
+            numberedFrom: numberedFrom, metadataEditedAt: editedAt
         )
     }
 
@@ -22,9 +22,11 @@ final class DuplicateTitlesTests: XCTestCase {
             track("b", title: "唯独恩典", path: "show/ep-002.mp3"),
         ])
 
-        XCTAssertEqual(renamed["a"], "唯独恩典 (1)")
-        XCTAssertEqual(renamed["b"], "唯独恩典 (2)")
-        XCTAssertEqual(renamed["c"], "唯独恩典 (3)")
+        XCTAssertEqual(renamed["a"]?.title, "唯独恩典 (1)")
+        XCTAssertEqual(renamed["b"]?.title, "唯独恩典 (2)")
+        XCTAssertEqual(renamed["c"]?.title, "唯独恩典 (3)")
+        // The receipt that makes it reversible.
+        XCTAssertEqual(renamed["a"]?.numberedFrom, "唯独恩典")
     }
 
     func testTitlesThatAlreadyDifferAreLeftAlone() {
@@ -44,8 +46,8 @@ final class DuplicateTitlesTests: XCTestCase {
         ]
         let renamed = DuplicateTitles.renumbered(first)
         let settled = [
-            track("a", title: renamed["a"]!, path: "show/ep-001.mp3"),
-            track("b", title: renamed["b"]!, path: "show/ep-002.mp3"),
+            track("a", title: renamed["a"]!.title, path: "show/ep-001.mp3", numberedFrom: "Talk"),
+            track("b", title: renamed["b"]!.title, path: "show/ep-002.mp3", numberedFrom: "Talk"),
         ]
 
         XCTAssertTrue(DuplicateTitles.renumbered(settled).isEmpty)
@@ -60,7 +62,7 @@ final class DuplicateTitlesTests: XCTestCase {
             track("c", title: "Talk", path: "show/ep-003.mp3"),
         ])
 
-        XCTAssertEqual(renamed["c"], "Talk (3)")
+        XCTAssertEqual(renamed["c"]?.title, "Talk (3)")
         XCTAssertNil(renamed["a"], "already correct")
         XCTAssertNil(renamed["b"], "already correct")
     }
@@ -75,6 +77,28 @@ final class DuplicateTitlesTests: XCTestCase {
         ])
 
         XCTAssertTrue(renamed.isEmpty)
+    }
+
+    /// The bug this column exists for: a second source disconnected, and every episode it
+    /// had collided with was left reading "(2)" forever.
+    func testANumberComesOffOnceThereIsNothingToTellApart() {
+        let renamed = DuplicateTitles.renumbered([
+            track("a", title: "唯独恩典 (2)", path: "show/ep-002.mp3", numberedFrom: "唯独恩典"),
+        ])
+
+        XCTAssertEqual(renamed["a"], DuplicateTitles.Renumbering(title: "唯独恩典", numberedFrom: nil))
+    }
+
+    /// Losing one of three renumbers the two left rather than leaving a gap, and keeps
+    /// the receipt so they can still be un-numbered later.
+    func testASurvivingRunIsRenumberedFromOne() {
+        let renamed = DuplicateTitles.renumbered([
+            track("b", title: "Talk (2)", path: "show/ep-002.mp3", numberedFrom: "Talk"),
+            track("c", title: "Talk (3)", path: "show/ep-010.mp3", numberedFrom: "Talk"),
+        ])
+
+        XCTAssertEqual(renamed["b"], DuplicateTitles.Renumbering(title: "Talk (1)", numberedFrom: "Talk"))
+        XCTAssertEqual(renamed["c"], DuplicateTitles.Renumbering(title: "Talk (2)", numberedFrom: "Talk"))
     }
 
     /// A title someone typed is an answer, not a collision — touching any of the run
