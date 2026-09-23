@@ -1,8 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Embeddable "Settings" section for the single-page root layout. Remote (cloud) sources
-/// live in `RemoteSectionView`; this covers on-device storage and app-wide settings.
+/// Embeddable "Settings" section for the single-page root layout. Everywhere episodes
+/// come from — buckets and folders off this device alike — lives in
+/// `SourcesSectionView`; this covers backups, AI keys and app-wide settings.
 struct SettingsSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var autoBackup = AutoBackup.shared
@@ -36,10 +37,6 @@ struct SettingsSectionView: View {
             return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current())"
         }
         return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current()) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
-    }
-
-    private var localProviders: [ProviderRecord] {
-        viewModel.providers.filter { $0.type == LocalFilesProvider.providerType }
     }
 
     var body: some View {
@@ -220,33 +217,6 @@ struct SettingsSectionView: View {
             // ("Upload from Files" in the folder browser), so they're backed up and on
             // every device instead of living in one phone's Files app. These rows stay for
             // the sources picked before that, to switch one off or throw it away.
-            if !localProviders.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    SectionHeading(
-                        title: "FILES ON THIS DEVICE",
-                        info: "Episodes picked out of Files before uploading to a bucket replaced it. They're read where they sit — never copied, never uploaded — so they're only playable on this device, and only while the file stays put."
-                    )
-                    ForEach(localProviders) { record in
-                        HStack {
-                            Text(record.label)
-                            Spacer()
-                            Toggle("", isOn: Binding(
-                                get: { record.isActive },
-                                set: { _ in viewModel.toggleActive(record) }
-                            ))
-                            .labelsHidden()
-                        }
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                viewModel.delete(record)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
         }
         .sectionRow()
         // The docked mini player sits over the end of the page, and Settings is the end

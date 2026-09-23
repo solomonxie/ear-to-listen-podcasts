@@ -26,13 +26,24 @@ struct LocalFileEntry: Codable, Equatable {
     }
 }
 
-/// Reads episodes straight out of Files, in place — nothing is copied into the app's own
-/// storage. Either a whole folder the listener picked, or the individual episodes they
-/// picked; both persist across launches as security-scoped bookmarks stored alongside the
-/// other provider settings.
+/// A folder on this device, connected the same way a bucket is: browsed, synced, queued
+/// and played through exactly the paths every other source uses. Either a whole folder
+/// the listener picked, or the individual episodes they picked; both persist across
+/// launches as security-scoped bookmarks stored alongside the other provider settings.
+///
+/// **Listing is in place; playing is not.** The folder is read where it sits, but the
+/// first play copies the episode into `Documents/Downloads` like any download, so what's
+/// in the library outlives the file being moved, renamed or deleted out from under it —
+/// which is what made a local source untrustworthy when it was only ever read in place.
 struct LocalFilesProvider: CloudProvider {
     static let providerType = "local"
     let type = LocalFilesProvider.providerType
+
+    /// Where the picked folder sits, for a source row to show. Kept beside the bookmark
+    /// because resolving one costs a filesystem call, and a list of sources may not.
+    static let folderPathKey = "folderPath"
+
+    var isOnDevice: Bool { true }
 
     private enum Source {
         case folder(URL)
@@ -154,6 +165,12 @@ struct LocalFilesProvider: CloudProvider {
 
     func streamURL(forFileID fileID: String) async throws -> URL {
         try url(forPath: fileID)
+    }
+
+    /// Read off the disk rather than through `URLSession`, which the default
+    /// implementation would hand a `file://` URL.
+    func download(fileID: String) async throws -> Data {
+        try Data(contentsOf: try url(forPath: fileID))
     }
 
     /// Picked files are individual grants, not a folder — there's nowhere to put a

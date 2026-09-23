@@ -1,16 +1,25 @@
-# Remote — sources and folder browser
+# Sources — where episodes come from, and the folder browser
 
-## Section on Home  `Sources/Screens/Remote/RemoteSectionView.swift`
+## Section on Home  `Sources/Screens/Remote/SourcesSectionView.swift`
 
 ```
- Remote                                        ⊕   → Add Cloud Storage sheet
+ Sources                                       ⊕   → menu: Cloud bucket… |
+                                                   Folder on this device…
  Sync only fetches metadata — episodes download when you listen.
  ┌───────────────────────────────────────────────┐
  │ S3  slmx-archives2                         ›  │ long-press → Delete !
  │ 44 s3://slmx-archives2/bible-audio/           │ ← tells two connections to
  │    Active · synced 9 hours ago                │   the same bucket apart
-   ↑ the tile says which cloud: S3 · COS · OSS · Azure · GCS, since five
-     backends look identical in a list and the path only names the bucket
+   ↑ the tile says which cloud: S3 · COS · OSS · Azure · GCS · FILES, since
+     five backends look identical in a list and the path only names the bucket
+ ┌───────────────────────────────────────────────┐
+ │ FILES  Podcasts                            ›  │ a folder off this device,
+ │ 44 files://Downloads/Podcasts                 │ connected on the same terms
+ │    Active · synced 2 minutes ago              │ — listed, queued, browsed
+ └───────────────────────────────────────────────┘
+   ↑ no app-data switch on this one: a folder on this phone is no place to
+     keep a backup of this phone. Playing copies the episode into Downloads,
+     so it outlives the file being moved or deleted.
  └───────────────────────────────────────────────┘
  [ ⟳ Sync Now ] [ 🕐 Manual ▾ ] [ 📥 Queue (12) ]
    ↑ spinner replaces the icon, label stays "Syncing" — a button that
@@ -20,8 +29,9 @@
  Added 42, 0 missing, 1,226 files found.        ← after a manual sync
  ─────────────────────────────────────── (inset 68pt, between sources)
 
- empty   No remote sources yet. Add a bucket — S3, Tencent COS, Alibaba
-         OSS, Azure or Google Cloud — to browse and sync episodes from.
+ empty   No sources yet. Add a bucket — S3, Tencent COS, Alibaba OSS,
+         Azure or Google Cloud — or a folder off this device, to browse
+         and sync episodes from.
 ```
 
 App-data hint, all four readings:

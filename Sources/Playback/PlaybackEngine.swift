@@ -83,7 +83,7 @@ final class PlaybackEngine: ObservableObject {
             }
             let provider = try ProviderManager.shared.provider(for: record)
             let isCached = await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil
-            guard NetworkMonitor.shared.isConnected || isCached else {
+            guard provider.isOnDevice || NetworkMonitor.shared.isConnected || isCached else {
                 lastError = "You're offline. Connect to the internet to stream this track."
                 return
             }
@@ -144,15 +144,15 @@ final class PlaybackEngine: ObservableObject {
         await loadAndPlay(track: track)
     }
 
-    /// Cache hit plays straight from disk. On a miss, streams from the provider immediately
-    /// (no playback delay) and downloads a copy in the background for next time — local
-    /// files are already on-disk, so those are never cached.
+    /// Cache hit plays straight from disk. On a miss, plays from the provider immediately
+    /// (no playback delay) and puts a copy in `Documents/Downloads` in the background for
+    /// next time — including from a folder on this device, where the copy is what makes
+    /// the episode outlive the file being moved or deleted.
     private func resolvedStreamURL(track: Track, provider: CloudProvider) async throws -> URL {
         if let cached = await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) {
             return cached
         }
         let remote = try await provider.streamURL(forFileID: track.filePath)
-        guard !remote.isFileURL else { return remote }
         Task.detached {
             try? await AudioCache.shared.store(remoteURL: remote, providerID: track.providerID, filePath: track.filePath)
         }

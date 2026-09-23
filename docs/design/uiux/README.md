@@ -21,7 +21,7 @@ primary · `[ x ]` secondary · `( x )` text button · `›` pushes · `⟳` wor
    │          ──▶ ShowDetail · PlaylistDetail ──▶ [AddTracks]    │
    │          ──▶ EpisodeList (year / topic)                     │
    │          ──▶ [Downloads]   [BookmarkEditor]                 │
-   │  ── Remote ──▶ RemoteBrowser ─▶ RemoteBrowser (deeper) ─┐   │
+   │  ── Sources ─▶ RemoteBrowser ─▶ RemoteBrowser (deeper) ─┐   │
    │                   └─▶ [SyncQueue] [FileInfo] [Preview]  │   │
    │  ── Settings ──▶ AiKeyDetail   [AddS3] [AddAiKey]       │   │
    │                                [Files picker · OS]      │   │
@@ -44,7 +44,7 @@ primary · `[ x ]` secondary · `( x )` text button · `›` pushes · `⟳` wor
 | `transcript.md` | transcript controls, lines, corrections, editor page |
 | `details.md` | episode detail cards, episode edit, bookmarks |
 | `collections.md` | album / speaker / show / playlist / list screens |
-| `remote.md` | Remote section, folder browser, file sheets |
+| `sources.md` | Sources section (buckets + local folders), folder browser, file sheets |
 | `queue.md` | global sync queue |
 | `settings.md` | Settings section and its sheets |
 | `components.md` | rows, cards, artwork, section typography |
