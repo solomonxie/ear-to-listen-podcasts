@@ -99,7 +99,7 @@ nothing new and skips, indefinitely.
   in a free-team build it reads nil and is indistinguishable from a signed-out
   account.
 - **The bucket** — switched on when a connection is added (an explicit "off"
-  is respected), toggled from the connection's own row in `RemoteSectionView`.
+  is respected), toggled from the bucket's own row in `SourcesSectionView`.
   Key: `ear-to-listen-podcasts/20260918-ear-to-listen.zip`. Restore lists that folder
   and takes the newest date (a device back from a reinstall hasn't written
   today's yet), then falls back to the keys older builds wrote.

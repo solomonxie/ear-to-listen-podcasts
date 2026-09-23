@@ -63,6 +63,14 @@ protocol CloudProvider: Sendable {
     /// provider with a cheaper way of its own would be silently skipped.
     func download(fileID: String) async throws -> Data
 
+    /// Whether this source's files are already on this device — a folder picked out of
+    /// Files rather than a bucket. It changes two things only: the offline guards don't
+    /// apply to it, and playing from it copies rather than downloads.
+    ///
+    /// Declared here rather than only in the extension for the same reason
+    /// `listDirectory` is: an extension-only member is dispatched statically.
+    var isOnDevice: Bool { get }
+
     /// Whether this source takes writes — a sidecar transcript, a library archive, or an
     /// episode the listener uploaded, and only where they're wanted.
     ///
@@ -102,6 +110,8 @@ func describeCloudError(_ error: Error) -> String {
 
 extension CloudProvider {
     var isWritable: Bool { false }
+
+    var isOnDevice: Bool { false }
 
     var rootFolder: String? { nil }
 

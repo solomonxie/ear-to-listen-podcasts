@@ -1,14 +1,23 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Embeddable "Remote" section for the single-page root layout — real cloud sources,
-/// each linking to `RemoteBrowserView` for browsing/syncing/playing. "Continue
-/// Listening" lives at the top of Home instead of here, since it's about the library
-/// as a whole, not specifically about remote connections.
-struct RemoteSectionView: View {
+/// Embeddable "Sources" section for the single-page root layout — every place episodes
+/// come from, each linking to `RemoteBrowserView` for browsing/syncing/playing.
+/// "Continue Listening" lives at the top of Home instead of here, since it's about the
+/// library as a whole, not about where any of it came from.
+///
+/// **"Sources", not "Remote".** A folder picked out of Files is connected here on the
+/// same terms as a bucket — listed, synced, queued, browsed — and an episode played from
+/// one is copied into the app's own Downloads first, so it survives the file being moved
+/// or deleted. The section can't be named after where the files are when every row but
+/// one is somewhere different.
+struct SourcesSectionView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject private var syncQueue = SyncQueueManager.shared
     @ObservedObject private var autoBackup = AutoBackup.shared
     @State private var showingAddSource = false
+    @State private var showingFolderPicker = false
+    @State private var addFolderError: String?
     @State private var showingSyncQueue = false
     @State private var syncingProviderIDs: Set<String> = []
     @State private var syncMessages: [String: String] = [:]
@@ -16,19 +25,33 @@ struct RemoteSectionView: View {
 
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
 
-    /// Every bucket, whichever cloud it's in — local files and the demo content have
-    /// their own homes in Settings.
-    private var remoteProviders: [ProviderRecord] {
-        viewModel.providers.filter { $0.cloudKind != nil }
+    /// Every bucket, whichever cloud it's in, plus every folder picked off this device.
+    private var sources: [ProviderRecord] {
+        viewModel.providers.filter { $0.cloudKind != nil || $0.type == LocalFilesProvider.providerType }
     }
 
     var body: some View {
         // Rows inherit `.sectionRow()`; headings and hints opt out explicitly.
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Remote").sectionTitle()
+                Text("Sources").sectionTitle()
                 Spacer()
-                Button { showingAddSource = true } label: { Image(systemName: "plus.circle.fill") }
+                // A menu rather than a second button: adding is one idea with two answers,
+                // and the picked folder needs no screen of its own to fill in.
+                Menu {
+                    Button {
+                        showingAddSource = true
+                    } label: {
+                        Label("Cloud bucket", systemImage: "externaldrive.badge.icloud")
+                    }
+                    Button {
+                        showingFolderPicker = true
+                    } label: {
+                        Label("Folder on this device", systemImage: "folder.badge.plus")
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
             }
             .padding(.horizontal)
 
@@ -38,13 +61,17 @@ struct RemoteSectionView: View {
                 .sectionHint()
                 .padding(.horizontal)
 
-            if remoteProviders.isEmpty {
-                Text("No remote sources yet. Add a bucket — S3, Tencent COS, Alibaba OSS, Azure or Google Cloud — to browse and sync episodes from.")
+            if let addFolderError {
+                Text(addFolderError).sectionHint().foregroundStyle(.orange).padding(.horizontal)
+            }
+
+            if sources.isEmpty {
+                Text("No sources yet. Add a bucket — S3, Tencent COS, Alibaba OSS, Azure or Google Cloud — or a folder off this device, to browse and sync episodes from.")
                     .sectionHint()
                     .padding(.horizontal)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(remoteProviders) { record in
+                    ForEach(sources) { record in
                         VStack(alignment: .leading, spacing: 8) {
                             NavigationLink {
                                 RemoteBrowserView(record: record, viewModel: viewModel)
@@ -65,7 +92,7 @@ struct RemoteSectionView: View {
                             syncControls(for: record)
                         }
                         .padding(.bottom, 6)
-                        if record.id != remoteProviders.last?.id {
+                        if record.id != sources.last?.id {
                             Divider().padding(.leading, 68)
                         }
                     }
@@ -76,6 +103,9 @@ struct RemoteSectionView: View {
         }
         .sheet(isPresented: $showingAddSource) {
             NavigationStack { AddCloudSourceView(viewModel: viewModel) }
+        }
+        .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
+            addFolder(result)
         }
         .sheet(isPresented: $showingSyncQueue) {
             NavigationStack { SyncQueueView() }
@@ -175,8 +205,9 @@ struct RemoteSectionView: View {
             }
 
             // A row of its own with an ordinary switch: pressed into the pill row beside
-            // two buttons, an on/off setting read as a third button.
-            if record.isActive {
+            // two buttons, an on/off setting read as a third button. Buckets only — a
+            // folder on this phone is no place to keep a backup of this phone.
+            if record.isActive, record.cloudKind != nil {
                 Toggle("Auto sync app data to this bucket", isOn: $autoBackup.isEnabled)
                     .font(.subheadline)
                 Text(appDataHint).sectionHint()
@@ -214,6 +245,31 @@ struct RemoteSectionView: View {
         )
     }
 
+    /// Connects the picked folder and lists it straight away, the way saving a bucket
+    /// does. The bookmark is made while the grant is still open — it's what survives the
+    /// relaunch, and without it the folder is unreadable the next time the app starts.
+    private func addFolder(_ result: Result<URL, Error>) {
+        addFolderError = nil
+        guard case .success(let url) = result else {
+            if case .failure(let error) = result { addFolderError = error.localizedDescription }
+            return
+        }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let settings = [
+                "bookmark": try url.bookmarkData().base64EncodedString(),
+                LocalFilesProvider.folderPathKey: url.path,
+            ]
+            guard let record = viewModel.addLocalFolder(
+                label: url.lastPathComponent.nilIfEmpty ?? "Files", settings: settings
+            ) else { return }
+            Task { await syncQueue.enqueueConnection(providerID: record.id) }
+        } catch {
+            addFolderError = "Couldn't keep access to that folder: \(error.localizedDescription)"
+        }
+    }
+
     private func syncNow(_ record: ProviderRecord) async {
         syncingProviderIDs.insert(record.id)
         defer { syncingProviderIDs.remove(record.id) }
@@ -248,7 +304,7 @@ private struct RemoteSourceRow: View {
                 // Which cloud, not just "a cloud": five backends look identical in a list
                 // otherwise, and the folder path below only names the bucket.
                 .overlay {
-                    Text(record.cloudKind?.shortName ?? "")
+                    Text(record.cloudKind?.shortName ?? "FILES")
                         .font(.caption2.weight(.bold))
                         .minimumScaleFactor(0.7)
                         .foregroundStyle(.white)

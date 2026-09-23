@@ -34,10 +34,10 @@ opens the long one), never a paragraph at the bottom.
 Settings holds only what has nowhere better to live:
 
 ```
- adding episodes → the bucket folder's ⋯ menu            (remote.md)
+ adding episodes → the bucket folder's ⋯ menu           (sources.md)
  downloads      → the Downloaded shelf's own ( More )
- backup to a bucket → that connection's row in Remote  (remote.md)
- sync frequency → the source's row                      (remote.md)
+ backup to a bucket → that bucket's row in Sources     (sources.md)
+ sync frequency → the source's row                     (sources.md)
  per-episode transcribing → the episode's own page      (transcript.md)
 ```
 

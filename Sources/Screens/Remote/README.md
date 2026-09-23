@@ -1,9 +1,14 @@
-# Remote Section
+# Sources Section
 
 Embedded in the single-page root (`HomeView`), not a standalone tab. Backed by
-the real `ProviderStore`/`SyncEngine` — `RemoteSectionView` lists actual bucket
-`ProviderRecord`s, whichever cloud each one is in (shared `SettingsViewModel`
-with the Settings section).
+the real `ProviderStore`/`SyncEngine` — `SourcesSectionView` lists every
+`ProviderRecord` episodes can come from (shared `SettingsViewModel` with the
+Settings section): a bucket in any of the five clouds, and a folder picked off
+this device.
+
+**Named "Sources", not "Remote".** A local folder is connected here on the same
+terms as a bucket — listed, queued, synced, browsed, played — so the section
+can't be named after where the files are.
 Tapping a connection goes into `RemoteBrowserView` (no separate detail
 screen), which recursively browses one directory level at a time. Every
 level — root or subfolder — carries the exact same "More" menu (queue,
@@ -35,6 +40,8 @@ scheme (`s3://`, `cos://`, `oss://`, `az://`, `gs://`), with its short name
 
 ## Adding a connection
 
+The ⊕ is a menu with two answers: a cloud bucket, or a folder on this device.
+
 `AddCloudSourceView` — one screen for all five clouds, differing only in what
 `CloudSourceKind` says each calls its credential and whether the region is
 detected (AWS) or picked (COS, OSS) or not addressed at all (Azure, Google).
@@ -43,6 +50,25 @@ It validates the bucket/credentials, saves the
 to queue the whole bucket (recursively) rather than running one opaque
 background sync — so the new source's progress (and any per-file errors)
 shows up in the sync queue right away instead of only once everything's done.
+
+## A folder on this device
+
+Picked straight from the ⊕ menu — no screen to fill in, since the folder *is*
+the whole connection. The grant is kept as a security-scoped bookmark
+(`LocalFilesProvider`), alongside the folder's path for the row's `files://…`
+subtitle, and the pick queues the folder the same way saving a bucket does.
+
+It differs from a bucket in exactly three places, all of them behind
+`CloudProvider.isOnDevice`:
+
+- the offline guards (`SyncEngine.sync`, `PlaybackEngine.loadAndPlay`) don't
+  apply — the files are right here;
+- the first play **copies** the episode into `Documents/Downloads` rather than
+  downloading it (`AudioCache.store` takes a `file://` source), so what's in
+  the library outlives the original being moved, renamed or deleted — the thing
+  that made a read-in-place local source untrustworthy;
+- app-data backup isn't offered to it: a folder on this phone is no place to
+  keep a backup of this phone.
 
 ## Adding episodes
 
@@ -56,9 +82,8 @@ work here, and a 60 MB episode never holds the screen it was picked from. The
 bookmark rather than a copy, so ten queued episodes aren't ten files on the disk
 twice.
 
-Settings no longer imports from Files at all: a local source is readable on one
-phone only, while an episode in the bucket is backed up and on every device, and
-the sync path that already exists imports it.
+Uploading beats connecting the folder it came from when the episode should exist
+anywhere but here: an episode in the bucket is backed up and on every device.
 
 `CloudWrite` is what makes that safe. The rule was "never write audio"; it is
 now "never write *over* audio", which is the rule it was always standing in for:
@@ -103,7 +128,7 @@ queue drains empty, those connections are re-listed and the next batch queued,
 repeating until the bucket is done — so a large bucket finishes on its own
 rather than needing a Sync Now per hundred files. Pausing stops both halves.
 
-The queue is global across every source, not per-bucket. `RemoteSectionView`
+The queue is global across every source, not per-bucket. `SourcesSectionView`
 shows a "Queue (N)" pill below the
 connections list; each connection's own "More" menu also links straight to
 `SyncQueueView` for the full list, pause/resume, speed, and clear controls
@@ -112,11 +137,12 @@ connections list; each connection's own "More" menu also links straight to
 ## Screen Composition
 
 ```
-RemoteSectionView.swift (embedded in HomeView, not a tab)
+SourcesSectionView.swift (embedded in HomeView, not a tab)
 ┌─────────────────────────────────────────┐
-│ "Remote" header + add button            │──→ inline; opens AddCloudSourceView sheet
+│ "Sources" header + add menu             │──→ AddCloudSourceView sheet, or the
+│                                         │    OS folder picker
 │ ┌─────────────────────────────────────┐ │
-│ │ RemoteSourceRow (label + cloud path) │ │──→ tap → RemoteBrowserView.swift
+│ │ RemoteSourceRow (label + path)       │ │──→ tap → RemoteBrowserView.swift
 │ │   long-press → Delete                │ │──→ SettingsViewModel.delete(_:)
 │ └─────────────────────────────────────┘ │
 │ [ Queue (N) ] (pill button)             │──→ tap → SyncQueueView.swift

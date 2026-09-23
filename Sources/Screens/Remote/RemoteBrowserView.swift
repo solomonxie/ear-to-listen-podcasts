@@ -154,6 +154,10 @@ struct RemoteBrowserView: View {
             }
         }
         .listStyle(.plain)
+        // The page draws its own grab handle, so the system's hairline would be a second
+        // scrollbar down the same edge — two indicators of different lengths, only one of
+        // which can be grabbed. Same call the player page makes for the same reason.
+        .scrollIndicators(.hidden)
         // Room to scroll the stats line clear of the docked now-playing bar. As scroll
         // content rather than row padding: padding the footer stretched the *row*, and a
         // list draws a separator at the bottom of a row — which put a hairline across
@@ -167,7 +171,7 @@ struct RemoteBrowserView: View {
                 Menu {
                     // Sync Now and the frequency picker used to live here. They're
                     // decisions about a *connection*, not about the folder you happen to
-                    // have open, so they sit on the source's own row in the Remote
+                    // have open, so they sit on the source's own row in the Sources
                     // section — visible without opening anything.
                     Text("Last synced: \(record.lastSyncedAt.map(formattedDate) ?? "Never")")
                     Button {

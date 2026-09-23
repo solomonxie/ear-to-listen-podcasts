@@ -87,26 +87,41 @@ final class SettingsViewModel: ObservableObject {
     /// Keychain — the database row holds nothing secret.
     @discardableResult
     func addCloudProvider(kind: CloudSourceKind, label: String, settings: [String: String]) -> ProviderRecord? {
+        guard let record = addProvider(type: kind.providerType, label: label, settings: settings) else {
+            return nil
+        }
+        // A bucket is where this user's data lives, so the app's own data starts
+        // going there too — transcripts and hand edits are expensive to lose and
+        // aren't rebuilt by a resync.
+        AutoBackup.shared.enableForNewRemote()
+        // Connecting a bucket to a device with nothing on it is the other half of the
+        // reinstall story: the app data may be sitting in that bucket too.
+        Task { await FirstRunRestore.runAfterConnectingRemote() }
+        return record
+    }
+
+    /// A folder picked out of Files, connected as a source in its own right. Neither of
+    /// the two things a new bucket triggers applies: a folder on this phone is no place
+    /// to keep a backup of the phone, and there's nothing in it to restore from.
+    @discardableResult
+    func addLocalFolder(label: String, settings: [String: String]) -> ProviderRecord? {
+        addProvider(type: LocalFilesProvider.providerType, label: label, settings: settings)
+    }
+
+    private func addProvider(type: String, label: String, settings: [String: String]) -> ProviderRecord? {
         let id = UUID().uuidString
         do {
             try ProviderManager.shared.saveSettings(settings, forProviderID: id)
             let record = ProviderRecord(
                 id: id,
-                type: kind.providerType,
+                type: type,
                 label: label,
                 configJSON: "",
                 isActive: true,
                 createdAt: Date()
             )
             try providerStore.upsert(record)
-            // A bucket is where this user's data lives, so the app's own data starts
-            // going there too — transcripts and hand edits are expensive to lose and
-            // aren't rebuilt by a resync.
-            AutoBackup.shared.enableForNewRemote()
             load()
-            // Connecting a bucket to a device with nothing on it is the other half of the
-            // reinstall story: the app data may be sitting in that bucket too.
-            Task { await FirstRunRestore.runAfterConnectingRemote() }
             return record
         } catch {
             errorMessage = error.localizedDescription
