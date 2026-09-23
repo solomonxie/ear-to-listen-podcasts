@@ -3,7 +3,7 @@ import UIKit
 
 /// Lyric-style transcript: the line being spoken is the only bright one, it scrolls
 /// itself, tapping a line plays from there and reads along, and holding a line down
-/// offers to correct it.
+/// offers to mark it, copy it or correct it.
 ///
 /// Two buttons above it, one per recogniser: each transcribes the whole episode in the
 /// background, storing each window as it lands — so leaving the app costs the window in
@@ -341,6 +341,23 @@ struct TranscriptPane: View {
         isFollowing = true
     }
 
+    /// Marks the moment this line starts, with the line itself as the mark's text — the
+    /// most accurate a mark ever gets, since it's the sentence you were looking at rather
+    /// than whatever was playing when your thumb landed.
+    ///
+    /// **It doesn't go anywhere.** The mark is made while you're reading; being thrown up
+    /// the page to the Notes section would lose the line you marked it for. It's in the
+    /// list when you next look, and the haptic is the receipt.
+    private func bookmark(_ segment: TranscriptSegment) {
+        guard let track = transcript.track else { return }
+        let store = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
+        guard (try? store.add(
+            trackID: track.id, positionMs: Int(segment.start * 1000), transcriptText: segment.text
+        )) != nil else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
+    }
+
     /// A tap plays from the line *and* shows what else can be done with it. Tapping the
     /// same line again puts the buttons away.
     /// A tap back, because a pasteboard write is otherwise completely silent — there is
@@ -402,6 +419,7 @@ struct TranscriptPane: View {
                                 segment: segment,
                                 isCurrent: segment.start == spokenStart,
                                 onPlay: { play(from: segment) },
+                                onBookmark: { bookmark(segment) },
                                 onCopy: { copy(segment) },
                                 onEdit: { edit(segment) }
                             )
@@ -433,6 +451,7 @@ private struct TranscriptLine: View, Equatable {
     let segment: TranscriptSegment
     let isCurrent: Bool
     let onPlay: () -> Void
+    let onBookmark: () -> Void
     let onCopy: () -> Void
     let onEdit: () -> Void
 
@@ -466,6 +485,9 @@ private struct TranscriptLine: View, Equatable {
         .buttonStyle(.plain)
         .contextMenu {
             Button("Play from here", systemImage: "play.fill", action: onPlay)
+            // Second, under Play: holding a line is how you say "this one", and the two
+            // things anyone means by it are hear it again and keep it.
+            Button("Add bookmark", systemImage: "bookmark.fill", action: onBookmark)
             Button("Copy", systemImage: "doc.on.doc", action: onCopy)
             Button("Edit", systemImage: "pencil", action: onEdit)
         }
