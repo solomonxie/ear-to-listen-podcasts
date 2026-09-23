@@ -14,6 +14,15 @@ struct NoAiKeyError: Error, LocalizedError {
 /// falls through to the next configured key before giving up, so one dead key doesn't
 /// take AI features down entirely.
 enum AiRouter {
+    /// What a reply is allowed to be, in tokens, unless the caller says otherwise.
+    ///
+    /// Every other pass here asks for a handful of fields and answers in a sentence or
+    /// two. A summary doesn't: it's a paragraph, eight timed points and a list of terms,
+    /// and at this ceiling the JSON stopped mid-object — which arrives as "the response
+    /// wasn't in a form the app could read", a parsing error with a spending cause.
+    /// Callers that ask for more pass their own.
+    static let defaultMaxTokens = 300
+
     private static let strategyDefaultsKey = "aiKeys.strategy"
     private static let cursorDefaultsKey = "aiKeys.cursor"
 
@@ -28,7 +37,8 @@ enum AiRouter {
     }
 
     static func runChatCompletion(
-        messages: [ChatMessage], dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue
+        messages: [ChatMessage], dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue,
+        maxTokens: Int = defaultMaxTokens
     ) async throws -> String {
         let store = AiKeyStore(dbQueue: dbQueue)
         let keys = try store.all()
@@ -50,7 +60,8 @@ enum AiRouter {
             try? store.bumpRequestCount(id: key.id)
             do {
                 let result = try await runChatCompletion(
-                    vendor: key.vendor, apiKey: secret, model: key.resolvedModel, messages: messages
+                    vendor: key.vendor, apiKey: secret, model: key.resolvedModel,
+                    messages: messages, maxTokens: maxTokens
                 )
                 try? queryStore.record(keyID: key.id, vendor: key.vendor, prompt: prompt, result: result)
                 return result.text
@@ -75,21 +86,25 @@ enum AiRouter {
 
     /// Used both by the router above and by "test then save" when adding a key.
     static func runChatCompletion(
-        vendor: AiVendor, apiKey: String, model: String? = nil, messages: [ChatMessage]
+        vendor: AiVendor, apiKey: String, model: String? = nil, messages: [ChatMessage],
+        maxTokens: Int = defaultMaxTokens
     ) async throws -> ChatCompletionResult {
         let model = model?.nilIfEmpty ?? vendor.defaultModel
         switch vendor {
-        case .openAI: return try await OpenAIChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages)
-        case .anthropic: return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages)
-        case .google: return try await GoogleChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages)
+        case .openAI:
+            return try await OpenAIChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
+        case .anthropic:
+            return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
+        case .google:
+            return try await GoogleChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
         case .groq:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .groq, apiKey: apiKey, model: model, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .groq, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
         case .mistral:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .mistral, apiKey: apiKey, model: model, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .mistral, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
         case .deepSeek:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .deepSeek, apiKey: apiKey, model: model, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .deepSeek, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
         case .xai:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .xai, apiKey: apiKey, model: model, messages: messages)
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: .xai, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
         }
     }
 }

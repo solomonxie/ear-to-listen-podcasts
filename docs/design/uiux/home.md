@@ -34,6 +34,10 @@ page. Reached at launch; nothing pushes back to it but Back.
  Saved Shows
  Browse by Year   ( 2026 ) ( 2025 ) ( 2024 )  ← capsule chips
  Topics           ( Sleep ) ( Focus ) ( AI )
+ Terms                                    ( All 128 )
+   ▁▂▃▄▅▆▇█ ← bars, tallest first, one per term
+   melatonin · 42 in 7 episodes          ›  ← the bar under the finger;
+                                            lifting leaves it here
  ─────────────────────────────────────────── ← Divider
  Sources       → sources.md
  ─────────────────────────────────────────── ← Divider
@@ -85,6 +89,14 @@ in the Playlists row, always present, never deletable. They're computed
 sync. Both show at zero on purpose: a listener who has favourited nothing still
 needs telling where favourites will appear, and a shelf that only materialises
 once you've found the feature teaches nobody.
+
+**Terms are a chart, not another shelf of chips.** They're the one thing on this
+page with a number attached, and forty chips sorted by a count you can't see
+claim an order they never show. Bars show it at a glance. The finger *slides*
+rather than taps — twenty-odd bars across a phone are four points wide, which is
+a target nobody hits on purpose — and lifting leaves the readout on the last bar
+it passed, so reading the answer doesn't mean keeping a thumb over it. That line
+opens the term's own page: which episodes say it, and how often.
 
 **Bookmarks sit below Playlists**, because they're marks made *inside* episodes
 rather than a collection of episodes. They're grouped by episode and numbered by

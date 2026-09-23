@@ -10,9 +10,12 @@ enum OpenAIChatClient {
         model: AiVendor.openAI.defaultModel
     )
 
-    static func runChatCompletion(apiKey: String, model: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(
+        apiKey: String, model: String, messages: [ChatMessage],
+        maxTokens: Int = AiRouter.defaultMaxTokens
+    ) async throws -> ChatCompletionResult {
         try await OpenAICompatibleChatClient.runChatCompletion(
-            config: config, apiKey: apiKey, model: model, messages: messages
+            config: config, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens
         )
     }
 }

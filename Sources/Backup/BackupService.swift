@@ -40,6 +40,7 @@ struct BackupService {
     let dbQueue: DatabaseQueue
     private var playlistStore: PlaylistStore { PlaylistStore(dbQueue: dbQueue) }
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
+    private var termStore: TermStore { TermStore(dbQueue: dbQueue) }
     private var importSourceStore: ImportSourceStore { ImportSourceStore(dbQueue: dbQueue) }
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
@@ -87,7 +88,9 @@ struct BackupService {
         // and marked moments all count as by hand.
         let episodes = try trackStore.all(includingLost: true).compactMap { track -> LibrarySnapshot.EpisodeEntry? in
             let bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
-            guard track.metadataEditedAt != nil || track.isFavorite || !bookmarks.isEmpty else { return nil }
+            let terms = (try? termStore.terms(forTrack: track.id)) ?? []
+            guard track.metadataEditedAt != nil || track.isFavorite || !bookmarks.isEmpty
+                    || track.summary != nil || !terms.isEmpty else { return nil }
             return LibrarySnapshot.EpisodeEntry(
                 providerID: track.providerID,
                 filePath: track.filePath,
@@ -97,6 +100,8 @@ struct BackupService {
                 year: track.year,
                 trackNumber: track.trackNumber,
                 notes: track.notes,
+                summary: track.summary,
+                terms: Dictionary(uniqueKeysWithValues: terms.map { ($0.name, $0.mentions) }),
                 artworkFileName: track.artworkFileName,
                 isFavorite: track.isFavorite,
                 bookmarks: bookmarks.map {
@@ -254,11 +259,13 @@ struct BackupService {
             track.year = entry.year
             track.trackNumber = entry.trackNumber
             track.notes = entry.notes
+            track.summary = entry.summary ?? track.summary
             track.artworkFileName = entry.artworkFileName
             track.isFavorite = track.isFavorite || entry.isFavorite
             track.metadataEditedAt = entry.editedAt
             try trackStore.upsert(track, artistName: artist?.name, albumName: album?.name)
             try restore(entry.bookmarks, on: track.id)
+            if !entry.terms.isEmpty { try termStore.setTerms(entry.terms, forTrack: track.id) }
         }
 
         // Like episode edits, a transcript needs its file already synced — there's no row

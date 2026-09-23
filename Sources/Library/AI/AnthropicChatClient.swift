@@ -8,7 +8,10 @@ enum AnthropicChatClient {
     private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
     private static let apiVersion = "2023-06-01"
 
-    static func runChatCompletion(apiKey: String, model: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(
+        apiKey: String, model: String, messages: [ChatMessage],
+        maxTokens: Int = AiRouter.defaultMaxTokens
+    ) async throws -> ChatCompletionResult {
         let system = messages
             .filter { $0.role == .system }
             .map(\.content)
@@ -22,7 +25,7 @@ enum AnthropicChatClient {
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue(apiVersion, forHTTPHeaderField: "anthropic-version")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        var body: [String: Any] = ["model": model, "max_tokens": 300, "messages": userMessages]
+        var body: [String: Any] = ["model": model, "max_tokens": maxTokens, "messages": userMessages]
         if !system.isEmpty { body["system"] = system }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 

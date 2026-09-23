@@ -18,6 +18,16 @@ the vocabulary hint handed to the next transcription pass
 (`Sources/Library/Transcription/`). A corrected line is marked `isEdited`, which is what
 keeps the next pass from merging its own version back over it.
 
+`tracks.summary` is what the episode is about, in a few lines — written by the
+AI pass over the transcript (`EpisodeSummarizer`) or typed by hand, with
+`[12:34]` markers that the card turns into taps that play from there
+(`EpisodeSummary`). `terms`/`trackTerms` hold the names and terms that pass
+pulled out, with a **count per episode taken by the app** rather than by the
+model: a frequency ranking built on a model's own guess at how often it said
+something ranks nothing. A term is not a `Topic` — a topic is hand-typed and
+belongs to a collection, a term is extracted, belongs to an episode, and there
+are dozens per episode.
+
 ## Sync Workflow
 
 The one real workflow that touches every store here — a scheduled tick,

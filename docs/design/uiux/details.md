@@ -25,7 +25,18 @@ as two unrelated lists rather than rows:
  │ Track no.  4                               │   placeholder; type to override
  │ 🌐 Language: English ▾                     │ ← Inherit (speaker) first
  │ Duration   41 min                          │
- │ ( Sleep ) ( Focus )                        │ ← topic chips, if any
+ │ Playlists  ( Listen Later ) ( Bible ) ( ＋ )│ ← ＋ opens Add to Playlist
+ │ Topics     ( Sleep ) ( Focus ) ( ＋ )       │ ← the album's, not this one's
+ │ ───────────────────────────────────────    │
+ │ SUMMARY                          Edit  ✨  │ ← Edit only once expanded
+ │ Two sentences about what this episode is…  │   ✨ greyed out until there
+ │ • [2:05] Light in the morning.             │   is a transcript
+ │ • [12:14] Caffeine has a half-life…        │
+ │ ( More )                                   │ ← 3 lines until asked
+ └────────────────────────────────────────────┘
+ ┌ TERMS ─────────────────────────────────────┐  (only when analysed)
+ │ ( melatonin 9 ) ( cortisol 5 ) ( Stanford 2 )│ ← tap → that term's page
+ └────────────────────────────────────────────┘
  │ ───────────────────────────────────────    │
  │ ✨ Suggest with AI            ⟳            │
  │ Only 40% of this episode is transcribed…   │ ← blocked reason in place
@@ -96,6 +107,35 @@ long-press on any row (`Edit Details`).
 `Suggest with AI` is disabled until the transcript is **complete**, with the
 reason in its place. A partial transcript names the whole episode after its
 first ten minutes, and a confident wrong title is worse than a generic tag.
+
+Above Topics sits **Playlists** — chips for every list this episode is on
+(Listen Later first, then the hand-made ones), and a `＋` chip that opens the
+same "Add to Playlist" sheet the transport used to. Shown even at none: a row
+that appears only once it has something in it can't be used to put the first
+thing in. Taking an episode *off* a list stays on that list's own page.
+
+## Summary and terms
+
+One ✨, one call, two answers: the summary and the terms come off the same read
+of the transcript, since a second call pays for the same tokens to ask a smaller
+question. The transcript goes in **with its timestamps**, which is the whole
+difference between a summary and a useful one — every `[12:34]` in the text is a
+tap that plays from there, in a generated summary and a hand-typed one alike.
+
+```
+ brief        two or three sentences: what this is, who it's for
+ points       up to eight, in order, each carrying the time it starts
+ conclusion   only when the episode lands somewhere; null when it just ends
+```
+
+Three lines until More; Edit appears only once it's open — a pencil beside three
+clipped lines edits something you can't see. ✨ is a small glyph rather than the
+thing your thumb lands on: it writes over what's there, and a summary someone
+typed shouldn't be one tap from a model's.
+
+Counts on the term chips are the **app's own**, taken by scanning the transcript
+for whole words. A model asked how often it said something guesses, and a
+frequency ranking built on guesses ranks nothing.
 
 ## Bookmarks
 

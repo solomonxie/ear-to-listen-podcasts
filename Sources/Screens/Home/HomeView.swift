@@ -175,6 +175,28 @@ struct HomeView: View {
             }
         }
 
+        // Chips like every other shelf, because that's what a shelf is here — the
+        // counting is what makes terms different, and the place to *show* a count is a
+        // page with room for a chart, not a row of capsules.
+        if !homeData.terms.isEmpty {
+            shelf("Terms", trailing: {
+                NavigationLink {
+                    TermsPageView(terms: homeData.terms)
+                } label: {
+                    Text("More").font(.footnote)
+                }
+            }) {
+                ForEach(homeData.terms.prefix(24)) { term in
+                    NavigationLink {
+                        TermDetailView(term: term.term)
+                    } label: {
+                        ChipCard(title: term.name, color: LibraryArt.color(for: term.id))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+
         if !homeData.topics.isEmpty {
             shelf("Topics") {
                 ForEach(homeData.topics) { topic in
