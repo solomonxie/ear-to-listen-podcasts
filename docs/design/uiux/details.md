@@ -144,25 +144,18 @@ frequency ranking built on guesses ranks nothing.
 ```
  row     12:14   "…once you pipe in personal data"        ✎
          Saved moment            ← when no transcript text was captured
+   ↑ the row plays from the moment; ✎ opens the note. A saved moment is saved
+     to go back to, so going back to it is the whole row.
 
- editor  Cancel          Bookmark             Save
-         At        12:14
-         Episode   Sleep Toolkit — Part 2
-         Saved     Sep 16, 2026 4:13 PM
-         ┌ NOTE ──────────────────────────────┐
-         │ Why this moment matters            │
-         ├ TAGS ──────────────────────────────┤
-         │ Comma separated                    │
-         │ Your own words for finding this    │
-         │ again — "quote", "to check", a     │
-         │ person's name.                     │
-         ├ TRANSCRIPT ────────────────────────┤
-         │ What was said here                 │
-         │ Copied from the transcript when the│
-         │ mark was made. Correcting it here  │
-         │ changes the bookmark only.         │
+ editor  card over whatever opened it, keyboard closed until you tap the box
+         ┌────────────────────────────────────┐
+         │ 12:14  Sleep Toolkit — Part 2   🗑! │ ← trash as far from Save as
+         │ "…once you pipe in personal data"  │   the card is wide
+         │ ┌────────────────────────────────┐ │
+         │ │ Why this moment matters        │ │ grows 1→10 lines
+         │ └────────────────────────────────┘ │
+         │ ( Cancel )            [[ Save ]]   │
          └────────────────────────────────────┘
-         [ Delete Bookmark ]!
 ```
 
 The spoken line travels with the mark: what was said there is the reason it

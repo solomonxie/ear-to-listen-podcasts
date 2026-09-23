@@ -191,10 +191,10 @@ private struct BookmarkGroupRow: View {
     }
 
     private func row(_ bookmark: Bookmark, number: Int) -> some View {
-        // The row reads and edits the note; the glyph at its end jumps the player. Same
+        // The row plays from the moment; the glyph at its end opens the note. Same
         // division as `BookmarkRow`, for the same reason.
         Button {
-            onEdit(bookmark)
+            onPlay(group.track, bookmark)
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 // The ordinal within its episode, not a global one — it's what makes a
@@ -227,14 +227,14 @@ private struct BookmarkGroupRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Button { onPlay(group.track, bookmark) } label: {
-                    Image(systemName: "play.circle")
+                Button { onEdit(bookmark) } label: {
+                    Image(systemName: "pencil.circle")
                         .font(.title3)
                         .foregroundStyle(Color.accentColor)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Play from this moment")
+                .accessibilityLabel("Write a note on this moment")
             }
             .padding(.vertical, 7)
             .contentShape(Rectangle())
