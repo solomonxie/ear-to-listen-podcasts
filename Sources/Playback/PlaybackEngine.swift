@@ -208,6 +208,15 @@ final class PlaybackEngine: ObservableObject {
         pushNowPlayingProgress(force: true)
     }
 
+    /// Ten seconds back or on — the transport's two side buttons. Clamped at both ends:
+    /// a seek past the end leaves the player sitting on a finished item rather than
+    /// rolling into the next episode.
+    func skip(by seconds: TimeInterval) {
+        let target = currentTime + seconds
+        guard duration > 0 else { return seek(to: max(target, 0)) }
+        seek(to: min(max(target, 0), max(duration - 0.5, 0)))
+    }
+
     func skipToNext() {
         guard let current = currentTrack,
               let index = queue.firstIndex(where: { $0.id == current.id }),

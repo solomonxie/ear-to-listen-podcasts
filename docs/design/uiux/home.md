@@ -158,10 +158,16 @@ speaker do that while being worth reading, which a file path never was.
 
 ```
  ▁▂▃ progress hairline, 1.5pt, accent ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
- ▢  Sleep Toolkit                                       ▶
- 36 Andrew Huberman · ep-004.mp3                        ⏸
+ ▢  Sleep Toolkit                            🔖③ ⏪10  ⏸
+ 36 Andrew Huberman · ep-004.mp3
     ← filename only; the bar is too narrow for a path
 ```
 
-Tap anywhere but the play button → Now Playing (sheet). Hidden entirely when
+Tap anywhere but the buttons → Now Playing (sheet). Hidden entirely when
 nothing is loaded.
+
+🔖 is on the bar wherever the bar is — Home, a shelf page, a page pushed off
+the player — not only on the player itself. The episode keeps playing while you
+browse, so the moment worth keeping arrives off the player as often as on it,
+and having to open the player first is how a mark gets made too late. Marks and
+stays put, count on its shoulder, same dedupe as the transport's.
