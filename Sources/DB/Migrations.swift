@@ -527,6 +527,27 @@ enum Migrations {
             }
         }
 
+        // The receipt behind `DuplicateTitles`: which titles the app numbered, and what
+        // they read before it did. Without it, numbering could only ever be added — a
+        // source disconnected left every episode it had collided with stuck as "(2)",
+        // with no way to tell those apart from an episode really called "Encore (2)".
+        migrator.registerMigration("v31_numbered_title_receipts") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "numberedFrom", .text)
+            }
+            // Backfill for libraries numbered before the column existed: a bracketed
+            // number on a title nobody edited is this pass's work in every case anyone
+            // has actually hit. The rare episode genuinely named "Encore (2)" loses its
+            // number the next time it's alone in its album — and renaming it back by hand
+            // marks it edited, which puts it beyond this pass for good.
+            for var track in try Track.filter(sql: "metadataEditedAt IS NULL").fetchAll(db) {
+                let base = DuplicateTitles.base(of: track.title)
+                guard base != track.title else { continue }
+                track.numberedFrom = base
+                try track.update(db)
+            }
+        }
+
         return migrator
     }
 }
