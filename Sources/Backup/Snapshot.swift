@@ -9,9 +9,10 @@ import Foundation
 /// the bucket), and credentials (stay in Keychain — re-enter them after restoring on a
 /// new device).
 struct LibrarySnapshot: Codable {
-    /// v2 added `transcripts`; v3 added favourites and bookmarks to each episode. Older
-    /// files still decode — every field added after v1 defaults rather than demanding a key.
-    static let currentVersion = 3
+    /// v2 added `transcripts`; v3 added favourites and bookmarks to each episode; v4
+    /// added the AI summary and the terms it pulled out. Older files still decode — every
+    /// field added after v1 defaults rather than demanding a key.
+    static let currentVersion = 4
 
     /// Identifies a track by (providerID, filePath) rather than its local DB id,
     /// since that id is a fresh UUID per device/install — stable across a resync,
@@ -83,6 +84,11 @@ struct LibrarySnapshot: Codable {
         var year: Int?
         var trackNumber: Int?
         var notes: String?
+        /// Carried for the same reason a transcript is: it cost an AI call, it can't be
+        /// re-derived for free, and it may have been rewritten by hand afterwards.
+        var summary: String?
+        /// Term → mentions in this episode. Cheap to carry, another call to rebuild.
+        var terms: [String: Int] = [:]
         /// References an entry under `artwork/` in the same zip archive, not a device path.
         var artworkFileName: String?
         var isFavorite: Bool = false
@@ -104,6 +110,8 @@ struct LibrarySnapshot: Codable {
             year = try container.decodeIfPresent(Int.self, forKey: .year)
             trackNumber = try container.decodeIfPresent(Int.self, forKey: .trackNumber)
             notes = try container.decodeIfPresent(String.self, forKey: .notes)
+            summary = try container.decodeIfPresent(String.self, forKey: .summary)
+            terms = try container.decodeIfPresent([String: Int].self, forKey: .terms) ?? [:]
             artworkFileName = try container.decodeIfPresent(String.self, forKey: .artworkFileName)
             isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
             bookmarks = try container.decodeIfPresent([BookmarkEntry].self, forKey: .bookmarks) ?? []
@@ -112,7 +120,8 @@ struct LibrarySnapshot: Codable {
 
         init(
             providerID: String, filePath: String, title: String, artistName: String?, albumName: String?,
-            year: Int?, trackNumber: Int?, notes: String?, artworkFileName: String?,
+            year: Int?, trackNumber: Int?, notes: String?, summary: String? = nil,
+            terms: [String: Int] = [:], artworkFileName: String?,
             isFavorite: Bool = false, bookmarks: [BookmarkEntry] = [], editedAt: Date?
         ) {
             self.providerID = providerID
@@ -123,6 +132,8 @@ struct LibrarySnapshot: Codable {
             self.year = year
             self.trackNumber = trackNumber
             self.notes = notes
+            self.summary = summary
+            self.terms = terms
             self.artworkFileName = artworkFileName
             self.isFavorite = isFavorite
             self.bookmarks = bookmarks

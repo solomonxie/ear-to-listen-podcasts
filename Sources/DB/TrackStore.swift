@@ -60,6 +60,25 @@ struct TrackStore {
         try dbQueue.read { db in try Track.fetchOne(db, key: id) }
     }
 
+    /// What the episode is about, however it got written — the AI pass and the text
+    /// field it lands in both come through here, so an edit and a generated one are the
+    /// same kind of change.
+    func setSummary(id: String, summary: String?) throws {
+        let was: String?? = try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return nil }
+            let was = track.summary
+            track.summary = summary?.nilIfEmpty
+            try track.update(db)
+            return was
+        }
+        guard let was else { return }
+        ChangeLog.record(
+            "episodes", key: id,
+            old: ["summary": was.map { $0.count } ?? 0], new: ["summary": summary?.count ?? 0],
+            in: dbQueue
+        )
+    }
+
     /// The episode's own language, which outranks its album's and its speaker's.
     func setLanguage(id: String, language: String?) throws {
         try dbQueue.write { db in

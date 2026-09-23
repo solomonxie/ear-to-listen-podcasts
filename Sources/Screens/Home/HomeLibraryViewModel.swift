@@ -11,6 +11,8 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var albums: [Album] = []
     @Published private(set) var artists: [Artist] = []
     @Published private(set) var topics: [Topic] = []
+    /// Whatever the library talks about most, biggest first — Home's Terms chart.
+    @Published private(set) var terms: [TermCount] = []
     @Published private(set) var playlists: [Playlist] = []
     @Published private(set) var years: [Int] = []
     @Published private(set) var bookmarks: [Bookmark] = []
@@ -25,6 +27,7 @@ final class HomeLibraryViewModel: ObservableObject {
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let playlistStore = PlaylistStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let termStore = TermStore()
     private var refreshTask: Task<Void, Never>?
 
     func refresh() async {
@@ -33,6 +36,7 @@ final class HomeLibraryViewModel: ObservableObject {
         albums = (try? libraryStore.albums()) ?? []
         artists = (try? libraryStore.artists()) ?? []
         topics = (try? libraryStore.topics()) ?? []
+        terms = (try? termStore.topTerms()) ?? []
         playlists = (try? playlistStore.all()) ?? []
         years = (try? trackStore.years()) ?? []
         bookmarks = (try? bookmarkStore.recent()) ?? []

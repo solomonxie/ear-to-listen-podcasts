@@ -490,6 +490,8 @@ struct RealPlayerView: View {
             if let album = (try? libraryStore.album(id: id)) ?? nil {
                 AlbumDetailView(album: album)
             }
+        case .term(let term):
+            TermDetailView(term: term)
         case .browse(let providerID, let folder, let highlight):
             if let record = (try? providerStore.all())?.first(where: { $0.id == providerID }) {
                 RemoteBrowserView(
@@ -788,6 +790,9 @@ private extension View {
 enum PlayerRoute: Hashable {
     case speaker(String)
     case album(String)
+    /// A name or term the episode mentions — carried whole rather than by id, so the
+    /// page it opens has a title before it has read anything.
+    case term(Term)
     /// The bucket browser, opened at the folder this episode sits in. `highlight` is the
     /// file to scroll to and mark once it's there.
     case browse(providerID: String, folder: String?, highlight: String?)

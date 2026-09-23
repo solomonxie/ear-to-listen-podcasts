@@ -12,14 +12,17 @@ enum OpenAICompatibleChatClient {
         var model: String
     }
 
-    static func runChatCompletion(config: Config, apiKey: String, model: String, messages: [ChatMessage]) async throws -> ChatCompletionResult {
+    static func runChatCompletion(
+        config: Config, apiKey: String, model: String, messages: [ChatMessage],
+        maxTokens: Int = AiRouter.defaultMaxTokens
+    ) async throws -> ChatCompletionResult {
         var request = URLRequest(url: config.endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
             "model": model,
-            "max_tokens": 300,
+            "max_tokens": maxTokens,
             "messages": messages.map { ["role": $0.role.rawValue, "content": $0.content] },
         ])
 
