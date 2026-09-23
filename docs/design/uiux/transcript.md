@@ -15,8 +15,19 @@ Playing, lyric-style. Controls flat above the lines, never in a menu.
   …so the model runs entirely locally.       ← dim
   Which matters once you pipe in personal    ← BRIGHT: the spoken line,
   data.                                        scrolls itself to centre
-  12:14  ✎ edited                             ← hold a line to correct it
+  12:14  ✎ edited                             ← hold a line for its menu
 ```
+
+```
+ hold a line   ( ▶ Play from here )  ( 🔖 Add bookmark )
+               ( ⧉ Copy )            ( ✎ Edit )
+```
+
+Add bookmark marks where that line starts and keeps the line itself as the
+mark's text — the most accurate a mark ever gets, since it's the sentence you
+were looking at rather than whatever was playing when your thumb landed. It
+doesn't scroll anywhere: the mark is made while you're reading, and being thrown
+up to the Notes section would lose the line you marked it for.
 
 One button per recogniser and nothing else. Each transcribes the **whole
 episode** in the background, filling in the stretches that have nothing yet,

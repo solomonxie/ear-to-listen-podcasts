@@ -4,12 +4,10 @@ import SwiftUI
 /// timestamp is the anchor: a bookmark with nothing typed into it is still useful, so
 /// the row never looks empty for want of a note.
 ///
-/// **The row opens the note in a sheet; the play glyph at its end jumps to the moment.**
-/// Reading and
-/// writing what a mark says is what a list of marks is scrolled for, and that's the whole
-/// row. Jumping the player is the sharper action and the rarer one, so it gets a target
-/// of its own rather than the whole row — and a mistap costs an unfolded note instead of
-/// losing your place in what's playing.
+/// **The row plays from the moment; the pencil at its end opens the note.** A saved
+/// moment is saved to go back to, so going back to it is the whole row — tapping what a
+/// mark says and being shown a form to edit it in was answering a question nobody asked.
+/// Writing the note is the rarer action and gets a target of its own.
 struct BookmarkRow: View {
     let bookmark: Bookmark
     /// Shown where the list spans more than one episode.
@@ -22,7 +20,7 @@ struct BookmarkRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Button(action: onEdit) {
+            Button(action: onPlay) {
                 HStack(alignment: .top, spacing: 10) {
                     Text(Scrubber.formatted(bookmark.position))
                         .font(.caption.monospacedDigit().weight(.semibold))
@@ -63,15 +61,15 @@ struct BookmarkRow: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: onPlay) {
-                Image(systemName: "play.circle")
+            Button(action: onEdit) {
+                Image(systemName: "pencil.circle")
                     .font(.title3)
                     .padding(4)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
-            .accessibilityLabel("Play from this moment")
+            .accessibilityLabel("Write a note on this moment")
         }
         .contextMenu {
             if let onDelete {
@@ -262,7 +260,6 @@ struct BookmarkEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var note: String
-    @FocusState private var isTyping: Bool
 
     private let store = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -313,7 +310,6 @@ struct BookmarkEditorView: View {
                 // whole.
                 TextField("Why this moment matters", text: $note, axis: .vertical)
                     .lineLimit(1...10)
-                    .focused($isTyping)
                     .padding(10)
                     .background(Color.appBackground, in: RoundedRectangle(cornerRadius: 10))
 
@@ -333,7 +329,6 @@ struct BookmarkEditorView: View {
             .padding(.horizontal, 20)
         }
         .presentationBackground(.clear)
-        .onAppear { isTyping = true }
     }
 
     private func save() {
