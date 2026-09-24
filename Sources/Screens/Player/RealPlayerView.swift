@@ -326,7 +326,7 @@ struct RealPlayerView: View {
             Button { markMoment(track) } label: {
                 Image(systemName: "bookmark.fill")
                     .font(.title3)
-                    .overlay(alignment: .topTrailing) { markCount }
+                    .overlay(alignment: .topTrailing) { markCount() }
             }
             .accessibilityLabel("Bookmark this moment")
             .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
@@ -337,8 +337,12 @@ struct RealPlayerView: View {
     /// Drawn outside the glyph rather than beside it: a number next to the bookmark would
     /// be a second thing in a row of five evenly spaced controls, and shove the transport
     /// off centre every time it reached double figures.
+    ///
+    /// The offset is the caller's because the two buttons that carry this are different
+    /// shapes — a bare symbol in the transport, a capsule in the floating row — and the
+    /// shoulder of one is the middle of the other.
     @ViewBuilder
-    private var markCount: some View {
+    private func markCount(offset: CGSize = CGSize(width: 11, height: -7)) -> some View {
         if !bookmarks.isEmpty {
             Text("\(bookmarks.count)")
                 .font(.system(size: 10, weight: .bold).monospacedDigit())
@@ -346,7 +350,7 @@ struct RealPlayerView: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
                 .background(Color.accentColor, in: Capsule())
-                .offset(x: 11, y: -7)
+                .offset(x: offset.width, y: offset.height)
                 // The digit rolls rather than blinks — the point is that it went *up*.
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.2), value: bookmarks.count)
@@ -493,17 +497,14 @@ struct RealPlayerView: View {
                 }
                 if let track = engine.currentTrack {
                     // Glyph only: it sits at the end of a row whose other two carry words,
-                    // and the bookmark is the one shape that needs none. The count on its
-                    // shoulder is the same receipt the transport's gives — the page doesn't
-                    // move, so the number going up is all there is to say it worked.
+                    // and the bookmark is the one shape that needs none. The count rides on
+                    // the pill's corner, not the glyph's — the transport's sits on a bare
+                    // symbol, and the offset that puts it on that shoulder drops it inside
+                    // the capsule here.
                     Button { markMoment(track) } label: {
                         Image(systemName: "bookmark.fill")
-                            .font(.footnote.weight(.semibold))
-                            .overlay(alignment: .topTrailing) { markCount }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .background(Material.ultraThin, in: Capsule())
-                            .overlay(Capsule().stroke(HierarchicalShapeStyle.quaternary))
+                            .floatingPill(isOn: false)
+                            .overlay(alignment: .topTrailing) { markCount(offset: CGSize(width: 5, height: -3)) }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Bookmark this moment")
@@ -522,16 +523,7 @@ struct RealPlayerView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.primary))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(isOn ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(Material.ultraThin),
-                            in: Capsule())
-                .overlay(
-                    Capsule().stroke(isOn ? AnyShapeStyle(Color.accentColor.opacity(0.6)) : AnyShapeStyle(HierarchicalShapeStyle.quaternary))
-                )
+            Label(title, systemImage: systemImage).floatingPill(isOn: isOn)
         }
         .buttonStyle(.plain)
     }
@@ -939,4 +931,28 @@ enum PlayerRoute: Hashable {
     /// The bucket browser, opened at the folder this episode sits in. `highlight` is the
     /// file to scroll to and mark once it's there.
     case browse(providerID: String, folder: String?, highlight: String?)
+}
+
+/// The chrome every control in the floating row wears.
+///
+/// Shared rather than written out at each call site: the row's two labelled pills and its
+/// one glyph have to read as one set of controls, and the first version of the bookmark
+/// carried its own copy of the padding and the capsule — which is a drift waiting to
+/// happen the next time any of it is adjusted.
+private extension View {
+    func floatingPill(isOn: Bool) -> some View {
+        font(.footnote.weight(.semibold))
+            .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.primary))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(
+                isOn ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(Material.ultraThin),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().stroke(
+                    isOn ? AnyShapeStyle(Color.accentColor.opacity(0.6)) : AnyShapeStyle(HierarchicalShapeStyle.quaternary)
+                )
+            )
+    }
 }
