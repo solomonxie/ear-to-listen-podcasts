@@ -356,6 +356,26 @@ final class TranscriptRunner: ObservableObject {
         progress = 0
         thaw()
         endBackgroundAssertion()
+        recountTerms()
+    }
+
+    /// Term counts are taken against the transcript, so they're wrong the moment the
+    /// transcript grows — and an episode is routinely analysed while it's still being
+    /// transcribed. Once per pass, not once per window: `store` lands a window every few
+    /// seconds and this would be the same scan forty times over.
+    ///
+    /// The scan is of text already in memory, and the write only happens when a number
+    /// actually moved, so the notification that redraws every shelf fires only when
+    /// there's something new to draw.
+    private func recountTerms() {
+        guard let track, !segments.isEmpty else { return }
+        let trackID = track.id
+        let spoken = segments.map(\.text).joined(separator: " ")
+        let dbQueue = self.transcriptStore.dbQueue
+        Task.detached(priority: .utility) {
+            guard (try? TermStore(dbQueue: dbQueue).recount(forTrack: trackID, in: spoken)) == true else { return }
+            await MainActor.run { NotificationCenter.default.post(name: .libraryDidChange, object: nil) }
+        }
     }
 
     /// The pass is over, one way or another — the page shows what's actually stored again,
@@ -485,6 +505,9 @@ final class TranscriptRunner: ObservableObject {
         )) ?? segments
         edits = (try? transcriptStore.edits(trackID: track.id)) ?? edits
         needsSidecarExport = true
+        // A correction can put a name into the transcript that was mis-heard everywhere
+        // it was said, which is exactly the term someone is correcting it for.
+        recountTerms()
         // A correction is hand-typed and can't be regenerated, so it goes back out at once
         // rather than waiting for the loop to settle.
         exportSidecar()

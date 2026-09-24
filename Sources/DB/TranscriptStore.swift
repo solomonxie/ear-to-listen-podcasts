@@ -92,6 +92,26 @@ struct TranscriptStore {
         }
     }
 
+    /// Many transcripts in one query, for the screens that need to scan a handful of
+    /// episodes at once. A `find` per track is five round trips to answer one question —
+    /// the shape of bug this app keeps having.
+    func find(trackIDs: [String]) throws -> [String: [TranscriptSegment]] {
+        guard !trackIDs.isEmpty else { return [:] }
+        return try dbQueue.read { db in
+            let placeholders = databaseQuestionMarks(count: trackIDs.count)
+            let records = try TranscriptRecord.fetchAll(
+                db, sql: "SELECT * FROM transcripts WHERE trackID IN (\(placeholders))",
+                arguments: StatementArguments(trackIDs)
+            )
+            return records.reduce(into: [:]) { result, record in
+                guard let segments = try? JSONDecoder().decode(
+                    [TranscriptSegment].self, from: Data(record.segmentsJSON.utf8)
+                ) else { return }
+                result[record.trackID] = TranscriptSegment.normalized(segments)
+            }
+        }
+    }
+
     /// Every stored transcript, for backup. Returns the raw rows rather than segments so
     /// the caller keeps the engine/updatedAt alongside them.
     func allRecords() throws -> [TranscriptRecord] {

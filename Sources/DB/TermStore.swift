@@ -80,6 +80,43 @@ struct TermStore {
         }
     }
 
+    /// Recounts every term this episode already carries against the transcript as it
+    /// stands now, and says whether anything moved.
+    ///
+    /// **A count is a claim about a transcript, and transcripts grow.** The counting
+    /// happens once, during the analysis pass, against however much had been transcribed
+    /// by then — which for an episode analysed while it was still being transcribed is
+    /// almost none of it. Every number downstream is a sum of these, so one stale row
+    /// quietly wrongs the episode list, the album's terms and the library chart at the
+    /// same time. Re-running the AI pass would fix it and cost a call; the transcript is
+    /// right there and costs a scan.
+    ///
+    /// Terms are not added or removed here. What this episode is *about* is the model's
+    /// answer and stays its answer — this only corrects the arithmetic underneath it, so
+    /// a term it found but the recording paraphrases still holds its floor of one.
+    @discardableResult
+    func recount(forTrack trackID: String, in spoken: String) throws -> Bool {
+        guard !spoken.isEmpty else { return false }
+        return try dbQueue.write { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT terms.id AS termID, terms.name AS name, trackTerms.mentions AS mentions
+                FROM trackTerms JOIN terms ON terms.id = trackTerms.termID
+                WHERE trackTerms.trackID = ?
+                """, arguments: [trackID])
+            var changed = false
+            for row in rows {
+                let termID: String = row["termID"]
+                let name: String = row["name"]
+                let stored: Int = row["mentions"] ?? 0
+                let said = max(1, EpisodeSummarizer.occurrences(of: name, in: spoken))
+                guard said != stored else { continue }
+                try TrackTerm(trackID: trackID, termID: termID, mentions: said).save(db)
+                changed = true
+            }
+            return changed
+        }
+    }
+
     func terms(forTrack trackID: String) throws -> [TermCount] {
         try counts(sql: """
             SELECT terms.id, terms.name, SUM(trackTerms.mentions) AS mentions, COUNT(*) AS episodes
