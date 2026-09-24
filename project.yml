@@ -34,6 +34,13 @@ targets:
           UIColorName: LaunchBackground
         UIBackgroundModes:
           - audio
+        # Every screen is a portrait column and the store listing is portrait-only.
+        # Delete these two lines to let the phone rotate.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # HTTPS, Keychain and HMAC-SHA256 request signing only — all Apple-exempt. Saying
+        # so here answers export compliance at upload instead of per-build in TestFlight.
+        ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         # Makes the app's iCloud folder show up in Files under its own name, so a backup
