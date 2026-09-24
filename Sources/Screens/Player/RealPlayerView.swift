@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The app's one now-playing screen, over real synced `Track`s via `PlaybackEngine`.
 struct RealPlayerView: View {
@@ -244,6 +245,41 @@ struct RealPlayerView: View {
     }
 
     /// Jumps to the line being spoken and keeps up from there. Asked for, never assumed —
+    /// The marks, without making one — the other half of what the floating bookmark is
+    /// for, on a hold because tapping is the thing done far more often and mid-episode.
+    ///
+    /// Following goes off for the same reason Back to top turns it off: this is a move made
+    /// to read something, and a page that scrolls itself is a page you can't read.
+    ///
+    /// The haptic is doing real work here. A tap and a hold on one control have to feel
+    /// different at the moment the thumb lifts, or a hold that was meant to jump and
+    /// instead left a mark is indistinguishable from one that worked.
+    private func showBookmarks(_ proxy: ScrollViewProxy) {
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        isFollowingTranscript = false
+        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.notesAnchor, anchor: .top) }
+    }
+
+    /// Takes the page to the text — and to the *line being spoken*, following on, so it
+    /// keeps up from there.
+    ///
+    /// Landing on the section heading and stopping was only right for an episode nobody
+    /// had started. Forty minutes in it put the reader at the top of forty minutes of
+    /// transcript, with the part they were actually listening to somewhere below, to be
+    /// found by hand — while the page sat there scrolling itself away from them if
+    /// following happened to be on.
+    ///
+    /// The heading is still the answer when there is no line to jump to: at 0 nothing has
+    /// been spoken yet, and a part-transcribed episode played past the end of its own text
+    /// has nothing at that second either.
+    private func showTranscript(_ proxy: ScrollViewProxy) {
+        guard engine.currentTime > 0, transcript.currentLine(at: engine.currentTime) != nil else {
+            withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.transcriptAnchor, anchor: .top) }
+            return
+        }
+        follow(proxy)
+    }
+
     /// see `isFollowingTranscript`.
     private func follow(_ proxy: ScrollViewProxy) {
         guard let start = transcript.currentLine(at: engine.currentTime)?.start else { return }
@@ -379,19 +415,10 @@ struct RealPlayerView: View {
                 Label("Up Next", systemImage: "list.bullet")
                     .pillLabel()
             }
-            // Takes the page to the marks without making one — the transport's bookmark
-            // is what makes them. Two buttons because they're two different wants: one
-            // happens while you're listening, the other when you've stopped to read.
-            Button {
-                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.notesAnchor, anchor: .top) }
-            } label: {
-                Label("Bookmarks", systemImage: bookmarks.isEmpty ? "bookmark" : "bookmark.fill")
-                    .pillLabel()
-            }
             // The details card sits between the transport and the text, so on an episode
             // with a transcript this saves a long scroll past everything you already know.
             Button {
-                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.transcriptAnchor, anchor: .top) }
+                showTranscript(proxy)
             } label: {
                 Label("Transcript", systemImage: "captions.bubble")
                     .pillLabel()
@@ -501,14 +528,26 @@ struct RealPlayerView: View {
                     // the pill's corner, not the glyph's — the transport's sits on a bare
                     // symbol, and the offset that puts it on that shoulder drops it inside
                     // the capsule here.
-                    Button { markMoment(track) } label: {
-                        Image(systemName: "bookmark.fill")
-                            .floatingPill(isOn: false)
-                            .overlay(alignment: .topTrailing) { markCount(offset: CGSize(width: 5, height: -3)) }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Bookmark this moment")
-                    .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
+                    //
+                    // Tap marks, hold goes to the marks — one control for both halves of
+                    // the same subject, which is what let the [ Bookmarks ] pill come off
+                    // the row under the transport. Gestures rather than a `Button` with a
+                    // `contextMenu`: a menu makes "go to the marks" a press and then a
+                    // second tap on a one-item list, and the repo's rule about those two
+                    // fighting is about `onTapGesture` + `contextMenu`, which this isn't.
+                    Image(systemName: "bookmark.fill")
+                        .floatingPill(isOn: false)
+                        .overlay(alignment: .topTrailing) { markCount(offset: CGSize(width: 5, height: -3)) }
+                        .contentShape(Capsule())
+                        .onTapGesture { markMoment(track) }
+                        .onLongPressGesture(minimumDuration: 0.4) { showBookmarks(proxy) }
+                        .accessibilityElement()
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel("Bookmark this moment")
+                        .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
+                        // A hold is invisible to VoiceOver, and this is the only way to the
+                        // marks now that the pill has gone.
+                        .accessibilityAction(named: "Go to bookmarks") { showBookmarks(proxy) }
                 }
             }
             .padding(.bottom, 12)
