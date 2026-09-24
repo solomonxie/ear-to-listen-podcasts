@@ -27,6 +27,9 @@ struct RealPlayerView: View {
     /// Whether the big transport has scrolled out of sight. The docked bar is a stand-in
     /// for it, so showing both at once is just clutter.
     @State private var isTransportOffscreen = false
+    /// Set by the transcript pane while a line is open for correction. Everything that sits
+    /// over the bottom of the page gets out of the way for it.
+    @State private var isEditingLine = false
     /// Held rather than implicit, so the bar at the bottom knows whether it's standing on
     /// the player itself or on a page pushed from it — and can pop back rather than
     /// scroll.
@@ -114,12 +117,18 @@ struct RealPlayerView: View {
                             // Pinned: the page is now arbitrarily long, and the transport
                             // shouldn't be a scroll away at the bottom of a 40-minute
                             // transcript.
+                            // Not while a line is being corrected: it is an inset rather than
+                            // an overlay, so it doesn't cover the field — but it takes a bar's
+                            // height out of a screen the keyboard has already taken a third
+                            // of, and editing pauses playback anyway, so a transport is the
+                            // one thing certainly not wanted.
                             .safeAreaInset(edge: .bottom) {
-                                if isTransportOffscreen {
+                                if isTransportOffscreen, !isEditingLine {
                                     bottomBar(proxy).transition(.move(edge: .bottom))
                                 }
                             }
                             .animation(.easeInOut(duration: 0.2), value: isTransportOffscreen)
+                            .animation(.easeInOut(duration: 0.2), value: isEditingLine)
                             .navigationDestination(for: PlayerRoute.self) { route in
                                 destination(route)
                             }
@@ -222,7 +231,8 @@ struct RealPlayerView: View {
                     scrollProxy: proxy,
                     isFollowing: $isFollowingTranscript,
                     onFollow: { follow(proxy) },
-                    onPause: { if engine.isPlaying { engine.pause() } }
+                    onPause: { if engine.isPlaying { engine.pause() } },
+                    isEditingLine: $isEditingLine
                 ) { engine.seek(to: $0) }
 
             }
@@ -530,7 +540,9 @@ struct RealPlayerView: View {
     /// leave it. It saves, the count ticks up, and the page stays exactly where it was.
     @ViewBuilder
     private func floatingControls(_ proxy: ScrollViewProxy) -> some View {
-        if isTransportOffscreen {
+        // Gone while a line is open for correction: this row is an overlay, so it sits *on*
+        // the text, and the field is the one piece of text that must not be sat on.
+        if isTransportOffscreen, !isEditingLine {
             HStack(spacing: 10) {
                 if let track = engine.currentTrack {
                     // Captioned like the two beside it. A lone glyph in a row of labelled
