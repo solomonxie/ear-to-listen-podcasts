@@ -15,6 +15,19 @@ import Foundation
 /// what `maxSizeBytes` and the Downloaded playlist's swipe-to-delete are for. They're
 /// excluded from iCloud backup: a gigabyte of re-downloadable audio has no business in
 /// someone's iCloud quota, and the app's own backup has always refused to carry audio.
+/// A fetch the storage service refused. Carried rather than flattened to a bool so the
+/// player can say which refusal it was — "AccessDenied" and "NoSuchKey" are one symptom
+/// and two entirely different things to go and fix.
+struct CacheDownloadError: Error, LocalizedError {
+    var status: Int
+    var code: String?
+    var message: String?
+
+    var errorDescription: String? {
+        [code ?? "HTTP \(status)", message].compactMap { $0 }.joined(separator: " — ")
+    }
+}
+
 actor AudioCache {
     static let shared = AudioCache()
 
@@ -62,7 +75,19 @@ actor AudioCache {
             evictIfNeeded()
             return destination
         }
-        let (tempURL, _) = try await URLSession.shared.download(from: remoteURL)
+        let (tempURL, response) = try await URLSession.shared.download(from: remoteURL)
+        // `download` succeeds on a 403 as readily as on a 200 — what it hands back is then
+        // the service's XML explaining the refusal, and moving that into place files a
+        // 200-byte apology under `episode.mp3`. It reads as downloaded ever after: the
+        // cache is checked before the network, so every later play finds it, fails to
+        // decode it, and never asks the bucket again. Expired credentials, a key that
+        // moved, an object in Glacier — all of them poison the download this way, and the
+        // episode looks corrupt rather than unauthorised.
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            let parsed = StorageErrorXML.parse((try? Data(contentsOf: tempURL)) ?? Data())
+            try? FileManager.default.removeItem(at: tempURL)
+            throw CacheDownloadError(status: http.statusCode, code: parsed.code, message: parsed.message)
+        }
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: tempURL, to: destination)
         evictIfNeeded()
