@@ -27,7 +27,7 @@ the scroll view alone asks for a stroke longer than the screen.
                                                 the transport; ③ = marks on
                                                 this episode, and the receipt
                                                 for the press
-      [ ☰ Up Next ] [ 🔖 Bookmarks ] [ 💬 Transcript ]
+      [ ☰ Up Next ] [ 💬 Transcript ]
       ⚠ You're offline. Connect to the        ← engine.lastError, orange
         internet to stream this track.
  ─────────── details cards → details.md ────
@@ -41,7 +41,7 @@ they are read together.
 ## Once the transport scrolls off
 
 ```
- ( ⌖ Follow ) ( ↑ Back to top ) ( 🔖③ )             centred, thumb reach
+ ( ⌖ Follow ) ( ↑ Back to top ) ( 🔖③ )             tap marks · hold → marks
  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂  progress, 60% height
  ▦ Sleep Toolkit · Huberman      🔖③  ⏪10   ⏸   docked bar, appears only
    12:14 / 41:02                                 when the big transport is gone
@@ -63,19 +63,39 @@ the page because that is the whole request, and stops the page moving itself
 while it's at it — following and reading the top of the page are contradictory
 things to want.
 
-🔖 marks and stays put. It does **not** jump to the marks: the reason to mark
-from here is that the line worth marking is on screen, and going to the mark
-would leave it. Glyph only, at the right end of a row whose other two carry
-words — the bookmark is the one shape that needs none. The count on its
-shoulder is the whole receipt, the same one the transport's bookmark gives:
-nothing moves, so the number going up is all there is to say it worked, and it
-is also the thing worth knowing before marking the same minute twice.
+**🔖 is both halves of the subject, split by how long you hold it.**
 
-Getting *to* the marks stays the docked bar's job — it is on screen whenever
-this row is. That bar carries its own 🔖 left of ⏪10, smaller again than the
-rewind, marking without jumping, since the bar is standing in for the transport.
-Over Home the bar has no 🔖: there the bar is the way *in*, and a mark made from
-there is one made without hearing what's being marked.
+*Tap* marks and stays put. It does **not** jump to the marks: the reason to mark
+from here is that the line worth marking is on screen, and going to the mark
+would leave it. *Hold* goes to the marks and makes none.
+
+One control, because they are two halves of one subject and the row has three
+places in it. That is what let the `[ 🔖 Bookmarks ]` pill come off the row under
+the transport — it existed only to go to the marks, from a row you have to scroll
+back up to reach, while this row is already under the thumb.
+
+Tap is the far commoner action and gets the shorter gesture. A hold is invisible
+to VoiceOver, so the jump is also an accessibility action on the same element —
+it is the only way to the marks now.
+
+Gestures, not a `Button` with a `contextMenu`: a menu turns "go to the marks"
+into a hold and then a second tap on a one-item list. The repo's rule about
+those two fighting is about `onTapGesture` + `contextMenu`, which this isn't.
+
+The haptic on the hold is load-bearing. A tap and a hold on one control have to
+feel different as the thumb lifts, or a hold that was meant to jump and instead
+left a mark is indistinguishable from one that worked.
+
+Glyph only, at the right end of a row whose other two carry words — the bookmark
+is the one shape that needs none. The count on its shoulder is the receipt for a
+tap, the same one the transport's bookmark gives: nothing moves, so the number
+going up is all there is to say it worked, and it is also worth knowing before
+marking the same minute twice.
+
+The docked bar keeps its own 🔖 left of ⏪10, smaller again than the rewind,
+marking without jumping, since the bar is standing in for the transport. Over
+Home the bar has no 🔖: there the bar is the way *in*, and a mark made from there
+is one made without hearing what's being marked.
 
 ## Moving through a book: by chapter, not by scrollbar
 
@@ -111,10 +131,10 @@ is how you reach the transcript, and that belongs to the scroll view.
 - ⏪10 / ⏩10, not ⏮ / ⏭: spoken audio is missed a sentence at a time, and "what
   did they just say" is what anyone reaches for mid-episode. Moving to another
   episode is a decision made from Up Next, a tap below.
-- 🔖 in the transport, on the docked bar and in the floating row **marks and
-  stays put** — being thrown down the page while listening is the interruption
-  the mark was supposed to avoid. The [ 🔖 Bookmarks ] pill is the other half: it
-  goes to the marks without making one. Two wants, two buttons.
+- 🔖 in the transport, on the docked bar and tapped in the floating row **marks
+  and stays put** — being thrown down the page while listening is the
+  interruption the mark was supposed to avoid. Going *to* the marks is the same
+  button held. Two wants, one control, told apart by the length of the press.
 - Every marking button carries the count. A button that goes nowhere and asks
   nothing otherwise looks like it did nothing, and the number going up says both
   "that worked" and "this is your fourth". Same second twice is still one mark —

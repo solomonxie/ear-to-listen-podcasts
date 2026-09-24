@@ -433,8 +433,12 @@ struct TranscriptPane: View {
                 }
             }
             .padding(.horizontal)
+            // Never while a line is open for correction. `edit` turns following off, but
+            // it can come back on under the keyboard — tapping another line to hear it
+            // again mid-correction does exactly that — and the next line spoken then
+            // scrolls the field being typed in off the screen.
             .onChange(of: transcript.currentLine(at: currentTime)?.start) { _, start in
-                guard isFollowing, let start else { return }
+                guard isFollowing, editingStart == nil, let start else { return }
                 withAnimation(.easeOut(duration: 0.25)) { scrollProxy.scrollTo(start, anchor: .center) }
             }
         }

@@ -67,6 +67,14 @@ cent reads as "under $0.01" rather than "$0.00", which would look free.
 
 Pressing the running one stops it; the other is disabled while a pass runs —
 two passes over the same audio is twice the battery for one transcript.
+`[ 💬 Transcript ]` under the transport lands on the line **being spoken**, with
+following on, so the page keeps up from there. Landing on the section heading was
+only ever right for an episode nobody had started; forty minutes in it put the
+reader at the top of forty minutes of text with their place somewhere below it.
+The heading is still the answer when there is no line to jump to — at 0 nothing
+has been spoken, and an episode played past the end of a part-finished transcript
+has nothing at that second either.
+
 `Follow` is disabled while already following or with no lines — it also floats
 beside "Back to top" once the transport scrolls off, as a toggle (see
 `player.md`).
