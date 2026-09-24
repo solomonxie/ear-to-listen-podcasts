@@ -14,6 +14,8 @@ struct SettingsSectionView: View {
     @State private var showingImportPicker = false
     @State private var pendingImport: URL?
     @State private var showingAddAiKey = false
+    @State private var showingRemoveAllConfirmation = false
+    @State private var pendingRemoveAllExport = false
 
     /// Says which of the four reasons an iCloud folder can be unusable applies, because
     /// they need four different things said — and the explanation *replaces* the location
@@ -217,6 +219,34 @@ struct SettingsSectionView: View {
             // ("Upload from Files" in the folder browser), so they're backed up and on
             // every device instead of living in one phone's Files app. These rows stay for
             // the sources picked before that, to switch one off or throw it away.
+
+            Button("Remove All App Data", role: .destructive) {
+                showingRemoveAllConfirmation = true
+            }
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .confirmationDialog("Remove all app data?", isPresented: $showingRemoveAllConfirmation) {
+                Button("Export and Remove", role: .destructive) {
+                    exportDocument = viewModel.makeExportDocument()
+                    pendingRemoveAllExport = exportDocument != nil
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This deletes everything stored by the app on this device. First, you will be asked to export your library data to a local folder.")
+            }
+            .fileExporter(
+                isPresented: $pendingRemoveAllExport,
+                document: exportDocument,
+                contentType: .zip,
+                defaultFilename: BackupArchiveName.base()
+            ) { result in
+                exportDocument = nil
+                if case .success = result {
+                    Task { await viewModel.removeAllAppData() }
+                }
+            }
         }
         .sectionRow()
         // The docked mini player sits over the end of the page, and Settings is the end
