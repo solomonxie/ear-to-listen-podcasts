@@ -61,6 +61,11 @@ enum LocalBackups {
         write(archive, named: BackupArchiveName.beforeOperation(operation))
     }
 
+    @discardableResult
+    static func writeBeforeRemovingAllData(_ archive: Data, named name: String) -> URL? {
+        write(archive, named: name)
+    }
+
     /// The live database file, kept aside under its own name — how a restore is undone.
     @discardableResult
     static func copyDatabase(named name: String) -> URL? {

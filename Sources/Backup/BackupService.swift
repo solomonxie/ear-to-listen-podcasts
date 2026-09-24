@@ -352,6 +352,10 @@ struct BackupService {
         try await activeRemoteProvider().uploadBackup(archive)
     }
 
+    func uploadBeforeRemovingAllData(_ archive: Data, named name: String) async throws {
+        try await activeRemoteProvider().uploadBackup(archive, named: name)
+    }
+
     /// The archive as the bucket holds it. Nothing applies it on its own — restoring is
     /// `FirstRunRestore`'s call, and it wants the bytes so it can keep them for
     /// `PendingRestore`.

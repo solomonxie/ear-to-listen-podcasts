@@ -47,6 +47,13 @@ enum BackupArchiveName {
         )
     }
 
+    /// The copy made immediately before erasing this installation. It deliberately does
+    /// not look like a daily archive, so a later backup of the empty library cannot
+    /// replace it.
+    static func beforeRemovingAllData(at date: Date = Date(), calendar: Calendar = .current) -> String {
+        beforeOperation("remove-all-data", at: date, calendar: calendar)
+    }
+
     static func matches(_ name: String) -> Bool {
         rank(of: name) != nil
     }
@@ -55,7 +62,9 @@ enum BackupArchiveName {
     /// aren't dated archives (including the single-file backups older builds wrote, and
     /// the copies a large operation leaves behind) are left to the caller's own fallback.
     static func newest<Names: Sequence<String>>(among names: Names) -> String? {
-        names.filter(matches).max { left, right in rank(of: left)! < rank(of: right)! }
+        let names = Array(names)
+        if let recovery = names.filter(isBeforeRemovingAllData).max() { return recovery }
+        return names.filter(matches).max { left, right in rank(of: left)! < rank(of: right)! }
     }
 
     /// Oldest first, for a destination that keeps a fixed number of them.
@@ -75,5 +84,9 @@ enum BackupArchiveName {
         case 6: return stamp + "00"
         default: return nil
         }
+    }
+
+    private static func isBeforeRemovingAllData(_ name: String) -> Bool {
+        name.split(separator: "/").last.map(String.init)?.contains("-before-remove-all-data-") ?? false
     }
 }
