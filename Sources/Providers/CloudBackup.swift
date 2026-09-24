@@ -31,8 +31,12 @@ extension CloudProvider {
     /// Today's archive — see `BackupArchiveName`. Derived rather than picked, so backing
     /// up and restoring still need no picker.
     func uploadBackup(_ data: Data) async throws {
+        try await uploadBackup(data, named: BackupArchiveName.current())
+    }
+
+    func uploadBackup(_ data: Data, named name: String) async throws {
         try await upload(
-            data, toPath: backupFolder + BackupArchiveName.current(), contentType: "application/zip"
+            data, toPath: backupFolder + name, contentType: "application/zip"
         )
     }
 

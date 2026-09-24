@@ -193,6 +193,7 @@ final class SettingsViewModel: ObservableObject {
     /// not affected by this cleanup.
     func removeAllAppData() async {
         do {
+            try await AutoBackup.shared.backUpBeforeRemovingAllData()
             let stagingURL = URL.applicationSupportDirectory.appending(path: "empty-library.sqlite")
             removeDatabase(at: stagingURL)
             defer { removeDatabase(at: stagingURL) }
