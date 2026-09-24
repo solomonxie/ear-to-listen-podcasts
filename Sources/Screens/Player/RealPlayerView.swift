@@ -531,16 +531,29 @@ struct RealPlayerView: View {
                         if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
                     }
                 }
-                floatingButton("Back to top", systemImage: "arrow.up", isOn: false) {
+                // "Top", not "Back to top": three labelled pills have to fit a phone, and
+                // not "Back" — in iOS that means leaving the screen, which this sheet's
+                // Close chevron already does. The arrow carries the rest of the meaning.
+                // VoiceOver still hears the long form, where there's no width to save.
+                floatingButton("Top", systemImage: "arrow.up", isOn: false) {
                     isFollowingTranscript = false
                     withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
                 }
+                .accessibilityLabel("Back to top")
                 if let track = engine.currentTrack {
-                    // Glyph only: it sits at the end of a row whose other two carry words,
-                    // and the bookmark is the one shape that needs none. The count rides on
-                    // the pill's corner, not the glyph's — the transport's sits on a bare
-                    // symbol, and the offset that puts it on that shoulder drops it inside
-                    // the capsule here.
+                    // Captioned like the two beside it. A lone glyph in a row of labelled
+                    // pills reads as a different kind of control, and this is the only one
+                    // of the three that changes something — the last place to be coy about
+                    // what it does.
+                    //
+                    // "Mark" rather than "Bookmark": it's the verb, and it keeps this
+                    // button distinct from the [ 🔖 Bookmarks ] pill under the transport,
+                    // which is the noun and goes to them. It's also the word the rest of
+                    // the app uses — `markMoment`, "saved moment", "marks and stays put".
+                    //
+                    // The count rides on the pill's corner, not the glyph's — the
+                    // transport's sits on a bare symbol, and the offset that puts it on
+                    // that shoulder drops it inside the capsule here.
                     //
                     // Tap marks, hold goes to the marks — one control for both halves of
                     // the same subject, which is what let the [ Bookmarks ] pill come off
@@ -548,7 +561,7 @@ struct RealPlayerView: View {
                     // `contextMenu`: a menu makes "go to the marks" a press and then a
                     // second tap on a one-item list, and the repo's rule about those two
                     // fighting is about `onTapGesture` + `contextMenu`, which this isn't.
-                    Image(systemName: "bookmark.fill")
+                    Label("Mark", systemImage: "bookmark.fill")
                         .floatingPill(isOn: false)
                         .overlay(alignment: .topTrailing) { markCount(offset: CGSize(width: 5, height: -3)) }
                         .contentShape(Capsule())
@@ -680,13 +693,12 @@ struct RealPlayerView: View {
                 // a screen transition to where you already are.
                 onTapBar: {
                     withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                },
-                // Never reveals: pressed from deep in the transcript, going to the mark
-                // means leaving the line that was worth marking.
-                onBookmark: engine.currentTrack.map { track in
-                    { markMoment(track) }
-                },
-                bookmarkCount: bookmarks.count
+                }
+                // No bookmark on this bar. The floating row sits directly above it with a
+                // labelled Mark pill, so the two were a hand's width apart doing the same
+                // thing — and the unlabelled one was the easier to hit by accident while
+                // reaching for play. Over Home the bar keeps its bookmark: there is no
+                // floating row there, and the episode plays on while you browse.
             )
         }
         .background(.ultraThinMaterial)
@@ -700,13 +712,16 @@ struct RealPlayerView: View {
 /// the episode, who is speaking, and which collection it came from. One line of title over
 /// a filename answered none of them.
 ///
-/// **On the right: bookmark, back ten seconds, then play/pause.** Pause keeps the
-/// far-right seat — it's the one anyone reaches for in a hurry, often without looking —
-/// and the rewind sits inside it, drawn a size smaller so the two don't read as a pair of
-/// equals. The bookmark sits outside both, smaller again: it's the one of the three you
-/// press while listening rather than to change what you're hearing. Skipping to another
-/// episode was the control that used to be out here; it went because it's the one mistap
-/// on this bar you can't undo by tapping again.
+/// **On the right: back ten seconds, then play/pause.** Pause keeps the far-right seat —
+/// it's the one anyone reaches for in a hurry, often without looking — and the rewind sits
+/// inside it, drawn a size smaller so the two don't read as a pair of equals. Skipping to
+/// another episode was the control that used to be out here; it went because it's the one
+/// mistap on this bar you can't undo by tapping again.
+///
+/// A bookmark joins them where one is passed in, smaller again: it's the one control here
+/// you press because of what you're hearing rather than to change it. Over Home that's the
+/// only way to mark a moment without opening the player, so it's there; on the player's own
+/// docked bar it isn't, because the floating Mark pill sits directly above it.
 struct NowPlayingBarContent: View {
     let track: Track?
     let artistName: String?
