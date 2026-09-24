@@ -45,6 +45,15 @@ from, not a card you put down. It used to leave by being pulled down past its ow
 top, with a ⌄ in the corner — a card dismissal on a screen that is otherwise
 navigated, pointing the opposite way from every other back button in the app.
 
+**It moves sideways, in and out.** Not a `fullScreenCover`: a cover's transition
+is always vertical, so the page went on sliding *downwards* out of view however it
+had been left — which read as a card being put down a moment after swiping right
+to leave it. A cover cannot be given a different transition, so it isn't one. It
+is a sibling view in a `ZStack` over Home, entering and leaving by the trailing
+edge, which is what both the swipe and the ‹ promise. Closing is a flag on the
+engine rather than `@Environment(\.dismiss)`, since there is no presentation to
+dismiss.
+
 Edge-only, in the same strip iOS reserves for its own back gesture. The page is
 full of things that answer a horizontal drag — the scrubber above all — and a
 swipe recognised anywhere would compete with all of them for every stroke. The
@@ -58,11 +67,18 @@ somebody meant to step back one screen from.
 ## Once the transport scrolls off
 
 ```
- ( ⌖ Follow ) ( ↑ Top ) ( 🔖 Mark ③ )              tap marks · hold → marks
+ ( 🔖 Mark ③ ) ( ↑ Top ) ( ⌖ Follow )              tap marks · hold → marks
  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂  progress, 60% height
  ▦ Sleep Toolkit · Huberman           ⏪10   ⏸   docked bar, appears only
    12:14 / 41:02                                 when the big transport is gone
 ```
+
+**No 🔖 on the bar, anywhere.** It used to carry one on every page but the
+player's, which made the bar a different control depending where you met it — and
+on the player it sat a hand's width under the floating Mark pill doing the same job
+unlabelled, right beside play, where it was the easier of the two to hit by
+mistake. Marking belongs to the places that are about one moment: the transport,
+the floating row, and holding a transcript line.
 
 **One bar, assembled once.** `NowPlayingBarContent` owns the progress strip, the
 timecode line and the background; a page supplies only what differs — what
@@ -77,9 +93,11 @@ Two thresholds, not one (`edge < 0` to show, `edge > 96` to hide): the bar
 shortens the scroller, which would otherwise push the transport back into view
 and flicker.
 
-**Follow leads.** It is the one pressed over and over, mid-read, by a thumb that
-has just scrolled off the spoken line; the other two are occasional. Left is
-where that thumb lands.
+**Mark leads.** It is the only one of the three with a deadline: it is pressed
+because of something just heard, and the sentence worth keeping is a few seconds
+wide. Follow and Top can both be pressed at leisure — the line being spoken will
+still be the line being spoken — so the one that cannot wait gets the end of the
+row the thumb is already resting on.
 
 **All three carry a caption.** A lone glyph among labelled pills reads as a
 different kind of control, and the bookmark is the only one of the three that
@@ -171,8 +189,7 @@ is how you reach the transcript, and that belongs to the scroll view.
 - ⏪10 / ⏩10, not ⏮ / ⏭: spoken audio is missed a sentence at a time, and "what
   did they just say" is what anyone reaches for mid-episode. Moving to another
   episode is a decision made from Up Next, a tap below.
-- 🔖 in the transport, on Home's bar and tapped in the floating row **marks
-  and stays put** — being thrown down the page while listening is the
+- 🔖 in the transport and tapped in the floating row **marks and stays put** — being thrown down the page while listening is the
   interruption the mark was supposed to avoid. Going *to* the marks is the
   [ 🔖 Bookmarks ] pill while the transport is up, and the same floating button
   held once it isn't. Two wants, never confused for each other.
@@ -184,12 +201,10 @@ is how you reach the transcript, and that belongs to the scroll view.
   a decision about the episode, not about this second of it.
 - Any deliberate 12pt drag turns transcript following off — the reader wins
   over the auto-scroll.
-- The bar carries ⏪10 and play/pause: pause keeps the far-right seat it's reached
-  for without looking, and the rewind is drawn a size smaller so the two don't
-  read as equals. 🔖 joins them, smaller again, only where nothing else on screen
-  can mark a moment — over Home and on a page pushed off the player. Docked on the
-  player it would sit a hand's width under the floating Mark pill, doing the same
-  job unlabelled and right beside play.
+- The bar carries ⏪10 and play/pause and nothing else: pause keeps the far-right
+  seat it's reached for without looking, and the rewind is drawn a size smaller so
+  the two don't read as equals. Identical on every page it appears on — the whole
+  point of assembling it once.
 - Scrubber holds the finger's position locally while dragging, so the engine's
   0.5s time publishing cannot yank the thumb back.
 
