@@ -38,6 +38,23 @@ The whole page is one scroller: artwork and transport scroll away under a
 40-minute transcript. No segmented control between details and transcript —
 they are read together.
 
+## Leaving it
+
+**Swipe in from the left edge, or the ‹ at top left.** It is a page you go back
+from, not a card you put down. It used to leave by being pulled down past its own
+top, with a ⌄ in the corner — a card dismissal on a screen that is otherwise
+navigated, pointing the opposite way from every other back button in the app.
+
+Edge-only, in the same strip iOS reserves for its own back gesture. The page is
+full of things that answer a horizontal drag — the scrubber above all — and a
+swipe recognised anywhere would compete with all of them for every stroke. The
+page slides with the finger and springs back if the stroke is too short, so the
+gesture is answered as it happens.
+
+Only at the stack root: a pushed page has the system's own back swipe, and letting
+this one through as well would take the whole player out from under a speaker page
+somebody meant to step back one screen from.
+
 ## Once the transport scrolls off
 
 ```
@@ -46,6 +63,15 @@ they are read together.
  ▦ Sleep Toolkit · Huberman           ⏪10   ⏸   docked bar, appears only
    12:14 / 41:02                                 when the big transport is gone
 ```
+
+**One bar, assembled once.** `NowPlayingBarContent` owns the progress strip, the
+timecode line and the background; a page supplies only what differs — what
+tapping it does, and whether anything else on that page can mark a moment. Three
+call sites used to add their own: Home overlaid a 1.5pt strip, a pushed page
+stacked a squashed one above it, the player's docked copy had no strip at all, and
+only two of the three showed the timecode. Position and length go in as numbers
+rather than a formatted string plus a ratio, because three places formatting the
+same two values is three chances to disagree — and they took all three.
 
 Two thresholds, not one (`edge < 0` to show, `edge > 96` to hide): the bar
 shortens the scroller, which would otherwise push the transport back into view
