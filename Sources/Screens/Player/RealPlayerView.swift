@@ -458,26 +458,25 @@ struct RealPlayerView: View {
         }
     }
 
-    /// The two places you want to get to from deep inside a 40-minute transcript: the
-    /// artwork and the transport, and the line being spoken. Both are a reach away from
-    /// the bottom of the page, where the thumb already is — the copies at the top are a
-    /// scroll away by the time you need them.
+    /// What you want from deep inside a 40-minute transcript, in the order you want it:
+    /// the line being spoken, the top of the page, and a mark on the second you just
+    /// heard. All three are a reach from the bottom of the page, where the thumb already
+    /// is — the copies at the top are a scroll away by the time you need them.
     ///
-    /// **Both only move the page.** Making a mark belongs to the transport, the docked
-    /// bar's bookmark and the hold-a-line menu; a button that changes something sitting
-    /// among ones that don't is the one that gets pressed by accident. Getting *to* the
-    /// marks is the docked bar's job now — it's already on screen whenever this row is.
+    /// **Follow leads.** It's the one pressed mid-read, over and over, by a thumb that
+    /// scrolled off the spoken line; the other two are occasional. Left is where that
+    /// thumb lands.
     ///
-    /// "Back to top" also stops the page moving itself: following and reading the top of
-    /// the page are contradictory things to want.
+    /// **None of them takes you anywhere you didn't ask for.** "Back to top" moves the
+    /// page because that is the whole request, and it stops the page moving itself while
+    /// it's at it: following and reading the top of the page are contradictory things to
+    /// want. The mark deliberately does *not* jump to Notes — the reason to mark from
+    /// here is that the line worth marking is on screen, and going to the mark would
+    /// leave it. It saves, the count ticks up, and the page stays exactly where it was.
     @ViewBuilder
     private func floatingControls(_ proxy: ScrollViewProxy) -> some View {
         if isTransportOffscreen {
             HStack(spacing: 10) {
-                floatingButton("Back to top", systemImage: "arrow.up", isOn: false) {
-                    isFollowingTranscript = false
-                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                }
                 if !transcript.lines.isEmpty {
                     // A toggle here, where the one above the transcript only turns it on:
                     // this one is in reach of the thumb that just scrolled away from the
@@ -487,6 +486,28 @@ struct RealPlayerView: View {
                     floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
                         if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
                     }
+                }
+                floatingButton("Back to top", systemImage: "arrow.up", isOn: false) {
+                    isFollowingTranscript = false
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
+                }
+                if let track = engine.currentTrack {
+                    // Glyph only: it sits at the end of a row whose other two carry words,
+                    // and the bookmark is the one shape that needs none. The count on its
+                    // shoulder is the same receipt the transport's gives — the page doesn't
+                    // move, so the number going up is all there is to say it worked.
+                    Button { markMoment(track) } label: {
+                        Image(systemName: "bookmark.fill")
+                            .font(.footnote.weight(.semibold))
+                            .overlay(alignment: .topTrailing) { markCount }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(Material.ultraThin, in: Capsule())
+                            .overlay(Capsule().stroke(HierarchicalShapeStyle.quaternary))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Bookmark this moment")
+                    .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
                 }
             }
             .padding(.bottom, 12)
