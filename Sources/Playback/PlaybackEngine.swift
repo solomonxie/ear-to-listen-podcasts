@@ -30,6 +30,8 @@ final class PlaybackEngine: ObservableObject {
     private var lastPublishedElapsed: TimeInterval = 0
     private var lastPublishedDuration: TimeInterval = 0
     private var itemStatusObservation: NSKeyValueObservation?
+    /// Registered against one `AVPlayerItem` at a time — see `observeEnd(of:track:)`.
+    private var endOfItemObserver: NSObjectProtocol?
     private var hasRetriedCurrentTrack = false
     private var lastPersistedProgressAt = Date.distantPast
 
@@ -90,6 +92,7 @@ final class PlaybackEngine: ObservableObject {
             let url = try await resolvedStreamURL(track: track, provider: provider)
             let item = AVPlayerItem(url: url)
             observeStatus(of: item, track: track)
+            observeEnd(of: item, track: track)
             player.removeAllItems()
             player.insert(item, after: nil)
             seekToStart(of: track)
@@ -130,18 +133,92 @@ final class PlaybackEngine: ObservableObject {
         }
     }
 
+    /// Rolling into the next episode when this one runs out. `AVQueuePlayer` only ever
+    /// holds the one item here (a queue of presigned URLs would have half of them expired
+    /// by the time they played), so nothing advances by itself — without this, finishing an
+    /// episode left the player sitting on a stopped item.
+    ///
+    /// Registered against the item rather than watching every notification: a failed load
+    /// can leave an older item alive long enough to reach its own end, and "the episode
+    /// that just finished" is the only one whose ending means anything.
+    private func observeEnd(of item: AVPlayerItem, track: Track) {
+        if let endOfItemObserver { NotificationCenter.default.removeObserver(endOfItemObserver) }
+        endOfItemObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.finishedPlaying(track) }
+        }
+    }
+
+    /// Marks the episode done and plays the next one. Through `play`, not `open`: an
+    /// episode ending is not someone asking to be shown the player, and throwing it over
+    /// whatever they were reading is how an auto-advance becomes an interruption.
+    ///
+    /// Last in the queue stops, rather than wrapping round to the first — a podcast queue
+    /// that loops is one that plays all night.
+    private func finishedPlaying(_ track: Track) {
+        guard currentTrack?.id == track.id else { return }
+        markFinished(track)
+        guard let index = queue.firstIndex(where: { $0.id == track.id }), index + 1 < queue.count else {
+            isPlaying = false
+            updateNowPlayingPlaybackState()
+            return
+        }
+        play(track: queue[index + 1], queue: queue)
+    }
+
+    /// Writes the playhead to the end, which is what `seekToResumePosition` reads to
+    /// decide an episode is finished and start the next play from the top. Without it a
+    /// finished episode resumes half a second from its own end.
+    private func markFinished(_ track: Track) {
+        let endMs = track.durationMs ?? (duration.isFinite && duration > 0 ? Int(duration * 1000) : nil)
+        guard let endMs else { return }
+        try? trackStore.recordProgress(id: track.id, positionMs: endMs)
+    }
+
     private func handlePlaybackFailure(track: Track) async {
         guard currentTrack?.id == track.id else { return }
         guard !hasRetriedCurrentTrack else {
             isPlaying = false
-            lastError = NetworkMonitor.shared.isConnected
-                ? "Playback failed: couldn't load this track."
-                : "You're offline. Connect to the internet to stream this track."
+            guard NetworkMonitor.shared.isConnected else {
+                lastError = "You're offline. Connect to the internet to stream this track."
+                return
+            }
+            lastError = "Playback failed: couldn't load this track."
+            if let reason = await storageReason(for: track), currentTrack?.id == track.id {
+                lastError = "Playback failed — \(reason)"
+            }
             return
         }
         hasRetriedCurrentTrack = true
         await AudioCache.shared.invalidate(providerID: track.providerID, filePath: track.filePath)
         await loadAndPlay(track: track)
+    }
+
+    /// Why it failed, in the storage service's own words.
+    ///
+    /// `AVPlayer` reports a failed item and almost nothing about why, so an episode that
+    /// the bucket is refusing looks exactly like a corrupt file. One byte is enough to
+    /// find out: the same signed URL, a `Range` of `0-0`, and the reply body names it —
+    /// `NoSuchKey` for a file that moved, `AccessDenied` for a key that lost its
+    /// permissions, `InvalidObjectState` for one archived off to Glacier. Three different
+    /// things to go and do, and none of them is "re-download the episode".
+    ///
+    /// Only on the way to giving up, never on the retry path: it's a second request for an
+    /// episode that has already failed twice, bought to make the error worth reading.
+    private func storageReason(for track: Track) async -> String? {
+        guard let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
+              let provider = try? ProviderManager.shared.provider(for: record),
+              !provider.isOnDevice,
+              let url = try? await provider.streamURL(forFileID: track.filePath) else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              !(200..<300).contains(http.statusCode) else { return nil }
+        let parsed = StorageErrorXML.parse(data)
+        let described = [parsed.code, parsed.message].compactMap { $0 }.joined(separator: ": ")
+        return described.isEmpty ? "the storage returned HTTP \(http.statusCode)" : described
     }
 
     /// Cache hit plays straight from disk. On a miss, plays from the provider immediately
