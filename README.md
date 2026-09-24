@@ -103,29 +103,24 @@ xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
   -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build
 ```
 
-## Release (TestFlight)
+## Release
 
-Signing is automatic against the team in `project.yml`
-(`DEVELOPMENT_TEAM`) — change that one line to your own Apple Developer Team
-ID. Simulator builds don't need one. iCloud backup needs the
-`iCloud.com.solomonxie.eartolisten` container entitlement
-(`Sources/App/EarToListen.entitlements`), which needs a paid developer
-account — a free-team build still builds and runs, and the iCloud row in
-Settings reports itself unavailable instead of pretending:
+Signing is automatic against `DEVELOPMENT_TEAM` — kept out of git, read from the
+environment or a gitignored `.env.local`. Simulator builds don't need one. iCloud backup
+needs the `iCloud.com.solomonxie.eartolisten` container entitlement
+(`Sources/App/EarToListen.entitlements`), which needs a paid developer account; a
+free-team build still builds and runs, and the iCloud row in Settings reports itself
+unavailable instead of pretending.
 
 ```sh
-xcodegen generate
-xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
-  -configuration Release -archivePath build/EarToListen.xcarchive \
-  -skipPackagePluginValidation archive
-xcodebuild -exportArchive -archivePath build/EarToListen.xcarchive \
-  -exportOptionsPlist ExportOptions.plist -exportPath build/export
+echo 'DEVELOPMENT_TEAM=YOURTEAMID' > .env.local
+make ios          # onto the paired iPhone
+make release      # test → archive → .ipa → App Store Connect
+make help         # everything else, and the upload credentials it wants
 ```
 
-Fill in your team ID in `ExportOptions.plist` before exporting, then upload
-`build/export/EarToListen.ipa` via Transporter or `xcrun altool`.
-Xcode Cloud is a no-repo-changes alternative — configure it in App Store
-Connect instead of running the commands above.
+Everything about shipping it — App Store Connect fields, screenshots, privacy policy — is
+in [`docs/release/`](docs/release/README.md).
 
 ## Localization
 
