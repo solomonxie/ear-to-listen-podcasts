@@ -53,10 +53,7 @@ struct TranscriptPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Replaces the recogniser row rather than stacking under it: the two have
-            // nothing to do with each other, and offering to start a new pass over the
-            // lines someone is halfway through rearranging is offering to destroy them.
-            if selection.isEmpty { controls } else { selectionBar }
+            controls
             if let status {
                 Text(status).sectionRowSecondary().padding(.horizontal)
             }
@@ -146,6 +143,11 @@ struct TranscriptPane: View {
                 ForEach(TranscriptionEngineKind.allCases, id: \.self) { engine in
                     engineButton(engine)
                 }
+                // The selection bar used to replace this whole row, which kept these out of
+                // reach for free. Now that it sits down among the lines instead, they need
+                // saying no to explicitly: starting a fresh pass over lines somebody is
+                // halfway through rearranging is offering to destroy them.
+                .disabled(!selection.isEmpty)
 
                 TranscriptControlButton(
                     title: isFollowing ? "Following" : "Follow",
@@ -385,9 +387,19 @@ struct TranscriptPane: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
-    /// What can be done with the picked lines, and the way out. Counting is the first
-    /// thing said: in a list of near-identical short lines, how many are held is the thing
-    /// most easily lost track of.
+    /// What can be done with the picked lines, and the way out.
+    ///
+    /// **It sits immediately above the first picked line**, inside the list, rather than at
+    /// the top of the section. Pinned up there it was usually off screen entirely: lines
+    /// are picked in the middle of a forty-minute transcript, and the actions were a
+    /// scroll away from the thing they acted on — with no way to tell, while scrolling to
+    /// find them, that anything was still selected.
+    ///
+    /// Above and not below because a merge grows downward from the first line: the bar
+    /// stays put as the selection extends, instead of being pushed along by it.
+    ///
+    /// Counting is the first thing said. In a list of near-identical short lines, how many
+    /// are held is what's most easily lost track of.
     private var selectionBar: some View {
         HStack(spacing: 10) {
             Text("\(selection.count) selected")
@@ -395,18 +407,16 @@ struct TranscriptPane: View {
                 .monospacedDigit()
             Spacer(minLength: 0)
             Button("Merge") { merge() }.disabled(!canMerge)
-            Button("Split") { splitting = selectedLine }.disabled(selectedLine == nil)
             Button("Done") { selection = [] }
         }
         .font(.footnote)
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        // Reads as a bar laid over the text rather than another line of it.
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
         .padding(.horizontal)
-    }
-
-    private var selectedLine: TranscriptSegment? {
-        guard selection.count == 1, let start = selection.first else { return nil }
-        return transcript.lines.first { $0.start == start }
     }
 
     /// Two or more, and adjacent. Merging across a gap would either throw the lines
@@ -451,13 +461,25 @@ struct TranscriptPane: View {
         editingStart = segment.start
     }
 
-    /// **Playback stops here too.** Picking lines out to join or cut is reading work, and
-    /// the audio running on underneath it does nothing but move the highlight onto a line
-    /// nobody is looking at — and, at the end of the episode, start the next one over the
-    /// top of what you were in the middle of.
+    /// **Playback stops here too.** Picking lines out to join is reading work, and the audio
+    /// running on underneath it does nothing but move the highlight onto a line nobody is
+    /// looking at — and, at the end of the episode, start the next one over the top of what
+    /// you were in the middle of.
     private func beginSelecting(_ segment: TranscriptSegment) {
         onPause()
         selection = [segment.start]
+    }
+
+    /// Splitting is straight off the hold menu, not through select mode.
+    ///
+    /// It only ever applies to the line you are holding — there is no such thing as
+    /// splitting two — so making you enter a mode, watch a bar appear, and press a second
+    /// button was three steps to reach a decision already made by the hold. Select mode is
+    /// now merge and nothing else, which is the one operation that genuinely needs more
+    /// than one line picked.
+    private func beginSplit(_ segment: TranscriptSegment) {
+        onPause()
+        splitting = segment
     }
 
     private func save(_ segment: TranscriptSegment) {
@@ -482,8 +504,13 @@ struct TranscriptPane: View {
             // being spoken?" asked per row was the difference between a page that scrolls
             // and a page that stutters.
             let spokenStart = transcript.currentLine(at: currentTime)?.start
+            // Hoisted for the same reason as `spokenStart`: asked per row it's a scan of the
+            // selection against every line, on a list that redraws several times a second
+            // while a pass is running.
+            let barStart = transcript.lines.first { selection.contains($0.start) }?.start
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(transcript.lines) { segment in
+                    if segment.start == barStart { selectionBar }
                     // One `.id` for the row, outside the branch. With the same id on both
                     // arms of the if/else, SwiftUI reads them as one identity and keeps
                     // showing the arm it already had: tapping Edit built the field on
@@ -510,7 +537,8 @@ struct TranscriptPane: View {
                                 onBookmark: { bookmark(segment) },
                                 onCopy: { copy(segment) },
                                 onEdit: { edit(segment) },
-                                onSelect: { beginSelecting(segment) }
+                                onSelect: { beginSelecting(segment) },
+                                onSplit: { beginSplit(segment) }
                             )
                             // Nothing but the text, the highlight and the "still being
                             // revised" flag can change a row, so a redraw of the list
@@ -554,6 +582,7 @@ private struct TranscriptLine: View, Equatable {
     let onCopy: () -> Void
     let onEdit: () -> Void
     let onSelect: () -> Void
+    let onSplit: () -> Void
 
     /// Text and timestamp, and nothing drawn on top of them. Copy and Edit were capsules
     /// that appeared on the tapped row: they sat under the page's scroll handle, took
@@ -604,6 +633,10 @@ private struct TranscriptLine: View, Equatable {
                 Button("Add bookmark", systemImage: "bookmark.fill", action: onBookmark)
                 Button("Copy", systemImage: "doc.on.doc", action: onCopy)
                 Button("Edit", systemImage: "pencil", action: onEdit)
+                // Both line-boundary fixes, together at the end. Split needs only this
+                // line, so it goes straight to the sheet; Select is for merging, which
+                // needs a second line picked before there is anything to do.
+                Button("Split…", systemImage: "scissors", action: onSplit)
                 Button("Select", systemImage: "checkmark.circle", action: onSelect)
             }
         }

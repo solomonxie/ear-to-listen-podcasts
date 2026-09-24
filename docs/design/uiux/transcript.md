@@ -21,7 +21,7 @@ Playing, lyric-style. Controls flat above the lines, never in a menu.
 ```
  hold a line   ( ▶ Play from here )  ( 🔖 Add bookmark )
                ( ⧉ Copy )            ( ✎ Edit )
-               ( ✓ Select )
+               ( ✂ Split… )          ( ✓ Select )
 ```
 
 Add bookmark marks where that line starts and keeps the line itself as the
@@ -229,21 +229,34 @@ directions: a pause mid-sentence becomes two lines, and a speaker who doesn't
 pause becomes one line holding three sentences. Neither is correctable by editing
 text — the boundary itself is the mistake.
 
-`✓ Select` off the hold menu turns the list into a picker.
+**Split is straight off the hold menu; Select is for merging.** Splitting only ever
+applies to the line under your thumb — there is no splitting two — so routing it
+through a mode, a bar and a second button was three steps to reach a decision the
+hold had already made. Merge is the one operation that genuinely needs a second
+line picked, so it is the only thing select mode does.
 
 ```
- ○  12:14  We were talking about                 tap toggles
- ●  12:19  the default configuration             ← two picked, adjacent
- ○  12:23  which nobody changes
+ ○  12:09  and that is the default               tap toggles
 
- [ 2 selected ]                    ( Merge ) ( Split ) ( Done )
+ [ 2 selected ]              ( Merge ) ( Done )   ← above the first picked line
+ ●  12:14  We were talking about
+ ●  12:19  the default configuration
+ ○  12:23  which nobody changes
 ```
 
 - **A non-empty selection *is* the mode.** No separate flag: a mode with nothing
   picked has no actions, nothing to say, and needs its own way out.
-- **The bar replaces the recogniser row** rather than stacking under it. Offering
-  to start a fresh pass over lines somebody is halfway through rearranging is
-  offering to destroy them.
+- **The bar sits immediately above the first picked line**, in the list, not
+  pinned to the top of the section. Pinned there it was usually off screen
+  entirely — lines get picked in the middle of a forty-minute transcript, so the
+  actions were a scroll away from the thing they act on, with no way to tell while
+  hunting for them that anything was still selected. *Above* rather than below
+  because a merge grows downward from the first line: the bar stays put as the
+  selection extends instead of being shoved along by it.
+- **The recogniser buttons go dim while anything is picked.** The bar used to
+  replace that row, which kept them out of reach for free; now that it sits down
+  among the lines they need refusing explicitly, because starting a fresh pass
+  over lines somebody is halfway through rearranging is offering to destroy them.
 - **The tick column appears only while picking.** A permanent one would indent
   every line of every transcript for a mode almost nobody is in.
 - **Nothing on hold while picking.** Every item in that menu acts on a single
@@ -253,7 +266,7 @@ text — the boundary itself is the mistake.
   instead of choosing one of those for you. The store refuses it too — a store
   that trusts callers to have checked corrupts a transcript the first time one
   doesn't.
-- **Split wants exactly one**, and asks two questions about it.
+- **Split** asks two questions about the line it was held on.
 
 ```
  Split line
