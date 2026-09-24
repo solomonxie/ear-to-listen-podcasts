@@ -513,6 +513,29 @@ final class TranscriptRunner: ObservableObject {
         exportSidecar()
     }
 
+    /// Joins the selected lines. Same follow-up as a correction: the sidecar beside the
+    /// episode is rewritten, and the terms are recounted because joining two lines can put
+    /// a name back together that was split across them and counted as neither.
+    func mergeLines(starts: Set<Double>) {
+        guard let track, starts.count > 1 else { return }
+        segments = (try? transcriptStore.merge(trackID: track.id, starts: starts)) ?? segments
+        needsSidecarExport = true
+        exportSidecar()
+        recountTerms()
+    }
+
+    /// Cuts one line in two. `offset` is a character index into the line's text; `time` is
+    /// where the second half starts being spoken.
+    func splitLine(_ segment: TranscriptSegment, atCharacter offset: Int, atTime time: Double) {
+        guard let track else { return }
+        segments = (try? transcriptStore.split(
+            trackID: track.id, start: segment.start, atCharacter: offset, atTime: time
+        )) ?? segments
+        needsSidecarExport = true
+        exportSidecar()
+        recountTerms()
+    }
+
     nonisolated private static func transcribe(
         window: TimeWindow,
         of sourceURL: URL,
