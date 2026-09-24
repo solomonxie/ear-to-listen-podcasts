@@ -30,7 +30,7 @@ gen:
 test: gen
 	$(XCB) -destination 'platform=iOS Simulator,name=$(SIMULATOR)' test
 
-install-ios:
+ios:
 	scripts/install-ios-device.sh
 
 # Replaces Product > Archive > Distribute App. Build number is a timestamp, so
