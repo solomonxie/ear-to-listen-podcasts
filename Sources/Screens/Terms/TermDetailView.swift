@@ -52,7 +52,10 @@ struct TermDetailView: View {
         .contentMargins(.bottom, 72, for: .scrollContent)
         .navigationTitle(term.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task { load() }
+        .task {
+            load()
+            await healCounts()
+        }
     }
 
     /// Episodes and speakers both, because a term spanning two speakers is the answer to a
@@ -159,24 +162,46 @@ struct TermDetailView: View {
         Task {
             let name = term.name
             let segments = (try? transcriptStore.find(trackID: track.id)).flatMap { $0 } ?? []
-            let (found, said) = await Task.detached(priority: .userInitiated) {
-                (
-                    EpisodeSummarizer.mentions(of: name, in: segments),
-                    EpisodeSummarizer.occurrences(of: name, in: segments.map(\.text).joined(separator: " "))
-                )
+            // Lines only. The count beside the row was corrected for every episode when the
+            // page opened (`healCounts`) — recounting it again here, one row at a time, is
+            // what made the number look like it only became true once you tapped it.
+            mentions[track.id] = await Task.detached(priority: .userInitiated) {
+                EpisodeSummarizer.mentions(of: name, in: segments)
             }.value
-            mentions[track.id] = found
-            // The transcript is the evidence; a stored count that disagrees with it was
-            // taken by an older version of the counting and has just been outvoted.
-            if said > 0, said != entryMentions(for: track.id) {
-                try? termStore.setMentions(said, forTrack: track.id, termID: term.id)
-                load()
-            }
         }
     }
 
-    private func entryMentions(for trackID: String) -> Int? {
-        episodes.first { $0.track.id == trackID }?.mentions
+    /// Brings every listed count back in line with the transcript behind it, once, when
+    /// the page opens.
+    ///
+    /// **This used to happen only when a row was expanded**, which meant the number beside
+    /// an episode was whatever the analysis pass guessed against a transcript that was
+    /// still being written — usually one — until someone happened to tap that exact row.
+    /// The list is a ranking; a ranking of numbers that are corrected only when looked at
+    /// is not a ranking. The same staleness was being summed into the Terms shelf and the
+    /// library chart, so correcting it here fixes those too, which is why it ends with the
+    /// notification that redraws them.
+    ///
+    /// One query for every transcript on the page and the counting off the main actor: the
+    /// per-row version was a database round trip per episode, fired from a view body's tap
+    /// handler.
+    private func healCounts() async {
+        let trackIDs = episodes.map(\.track.id)
+        guard !trackIDs.isEmpty else { return }
+        let transcriptStore = self.transcriptStore
+        let termStore = self.termStore
+        let changed = await Task.detached(priority: .userInitiated) {
+            let byTrack = (try? transcriptStore.find(trackIDs: trackIDs)) ?? [:]
+            var changed = false
+            for (trackID, segments) in byTrack {
+                let spoken = segments.map(\.text).joined(separator: " ")
+                if (try? termStore.recount(forTrack: trackID, in: spoken)) == true { changed = true }
+            }
+            return changed
+        }.value
+        guard changed else { return }
+        load()
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
     private func load() {
