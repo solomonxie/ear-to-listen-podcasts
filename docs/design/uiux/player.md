@@ -41,7 +41,7 @@ they are read together.
 ## Once the transport scrolls off
 
 ```
- ( ↑ Back to top ) ( ⌖ Follow )                     centred, thumb reach
+ ( ⌖ Follow ) ( ↑ Back to top ) ( 🔖③ )             centred, thumb reach
  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂  progress, 60% height
  ▦ Sleep Toolkit · Huberman      🔖③  ⏪10   ⏸   docked bar, appears only
    12:14 / 41:02                                 when the big transport is gone
@@ -51,21 +51,31 @@ Two thresholds, not one (`edge < 0` to show, `edge > 96` to hide): the bar
 shortens the scroller, which would otherwise push the transport back into view
 and flicker.
 
-Both floating pills only **move the page** — making a mark is the transport's
-bookmark, the docked bar's, and the hold-a-line menu. A button that changes
-something, sitting among ones that don't, is the one pressed by accident.
+**Follow leads.** It is the one pressed over and over, mid-read, by a thumb that
+has just scrolled off the spoken line; the other two are occasional. Left is
+where that thumb lands. The copy above the transcript only turns following on —
+this one toggles, because stopping is as likely to be the ask as starting. One
+label and one icon either way: colour alone says whether it's on, so the button
+doesn't change shape under the thumb that just pressed it.
 
-The mark you want to make while listening lives on the docked bar instead:
-🔖 left of ⏪10, smaller again than the rewind, marking without jumping — same
-as the transport's, since this bar is standing in for it. It's the only control
-there that doesn't change what you hear, so it sits outside both of those. Over
-Home the bar has no 🔖: there the bar is the way *in*, and a mark made from
+**None of the three takes you anywhere you didn't ask for.** Back to top moves
+the page because that is the whole request, and stops the page moving itself
+while it's at it — following and reading the top of the page are contradictory
+things to want.
+
+🔖 marks and stays put. It does **not** jump to the marks: the reason to mark
+from here is that the line worth marking is on screen, and going to the mark
+would leave it. Glyph only, at the right end of a row whose other two carry
+words — the bookmark is the one shape that needs none. The count on its
+shoulder is the whole receipt, the same one the transport's bookmark gives:
+nothing moves, so the number going up is all there is to say it worked, and it
+is also the thing worth knowing before marking the same minute twice.
+
+Getting *to* the marks stays the docked bar's job — it is on screen whenever
+this row is. That bar carries its own 🔖 left of ⏪10, smaller again than the
+rewind, marking without jumping, since the bar is standing in for the transport.
+Over Home the bar has no 🔖: there the bar is the way *in*, and a mark made from
 there is one made without hearing what's being marked.
-
-Follow floats beside Back to top because that is where the thumb is when you
-have just scrolled off the spoken line; the copy above the transcript only
-turns it on, this one toggles. One label and one icon either way — colour
-alone says whether it's on, so the button doesn't change under the thumb.
 
 ## Moving through a book: by chapter, not by scrollbar
 
@@ -101,10 +111,10 @@ is how you reach the transcript, and that belongs to the scroll view.
 - ⏪10 / ⏩10, not ⏮ / ⏭: spoken audio is missed a sentence at a time, and "what
   did they just say" is what anyone reaches for mid-episode. Moving to another
   episode is a decision made from Up Next, a tap below.
-- 🔖 in the transport and on the docked bar **marks and stays put** — being
-  thrown down the page while listening is the interruption the mark was supposed
-  to avoid. The [ 🔖 Bookmarks ] pill is the other half: it goes to the marks
-  without making one. Two wants, two buttons.
+- 🔖 in the transport, on the docked bar and in the floating row **marks and
+  stays put** — being thrown down the page while listening is the interruption
+  the mark was supposed to avoid. The [ 🔖 Bookmarks ] pill is the other half: it
+  goes to the marks without making one. Two wants, two buttons.
 - Every marking button carries the count. A button that goes nowhere and asks
   nothing otherwise looks like it did nothing, and the number going up says both
   "that worked" and "this is your fourth". Same second twice is still one mark —
