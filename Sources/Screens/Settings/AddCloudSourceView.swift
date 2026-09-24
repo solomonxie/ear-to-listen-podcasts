@@ -24,7 +24,7 @@ struct AddCloudSourceView: View {
     @State private var isValidating = false
     @State private var validationError: String?
 
-    private static let setupGuideURL = URL(string: "https://github.com/solomonxie/ear-to-listen-podcasts/blob/main/docs/guides/s3-bucket-setup.md")!
+    private static let setupGuideURL = URL(string: "https://github.com/solomonxie/ear-to-listen-podcasts/blob/master/docs/guides/s3-bucket-setup.md")!
 
     /// Only connections to the same cloud — a COS SecretId doesn't prefill an Azure form.
     private var sameKindProviders: [ProviderRecord] {
