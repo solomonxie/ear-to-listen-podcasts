@@ -147,6 +147,82 @@ struct TranscriptStore {
         return TranscriptSegment.normalized(segments)
     }
 
+    /// Folds a run of lines into one: the text joined, the span from the first line's
+    /// start to the last line's end.
+    ///
+    /// **A contiguous run only.** Merging lines 3 and 7 has two possible meanings — throw
+    /// 4 to 6 away, or quietly swallow them into a line nobody selected — and both are
+    /// worse than refusing. A transcript also has to come out of here sorted and
+    /// non-overlapping, which a merge across a gap cannot promise. The caller disables the
+    /// action rather than relying on this, but it returns the transcript untouched anyway:
+    /// a store that trusts its callers to have checked is a store that corrupts a
+    /// transcript the first time one doesn't.
+    ///
+    /// `isEdited` on the result, so the next pass can't merge its own version of the span
+    /// back over a join somebody made by hand.
+    @discardableResult
+    func merge(trackID: String, starts: Set<Double>) throws -> [TranscriptSegment] {
+        var segments = (try find(trackID: trackID)) ?? []
+        let indices = segments.indices.filter { starts.contains(segments[$0].start) }.sorted()
+        guard let first = indices.first, let last = indices.last, indices.count > 1,
+              last - first == indices.count - 1 else { return TranscriptSegment.normalized(segments) }
+
+        let run = indices.map { segments[$0] }
+        let joined = run
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        segments.replaceSubrange(first...last, with: [
+            TranscriptSegment(
+                start: run[0].start,
+                end: run.map(\.end).max() ?? run[0].end,
+                text: joined,
+                engine: run[0].engine,
+                isEdited: true
+            )
+        ])
+        try save(trackID: trackID, segments: segments)
+        return TranscriptSegment.normalized(segments)
+    }
+
+    /// Cuts one line in two, at a point in its text and a point in its span.
+    ///
+    /// Both points are needed and neither implies the other. The text says where the
+    /// sentence actually divides; the time says when the second half starts being spoken,
+    /// which is what a tap on it will seek to. A split that guessed the time from the
+    /// character offset would put the seek in the wrong place on any line whose two halves
+    /// aren't read at the same pace, which is most of them.
+    ///
+    /// The time is clamped strictly inside the original span: a second segment starting
+    /// where the first does would collide with it, since a segment's identity *is* its
+    /// start.
+    @discardableResult
+    func split(
+        trackID: String, start: Double, atCharacter offset: Int, atTime time: Double
+    ) throws -> [TranscriptSegment] {
+        var segments = (try find(trackID: trackID)) ?? []
+        guard let position = segments.firstIndex(where: { $0.start == start }) else {
+            return TranscriptSegment.normalized(segments)
+        }
+        let original = segments[position]
+        let characters = Array(original.text)
+        guard offset > 0, offset < characters.count else { return TranscriptSegment.normalized(segments) }
+
+        let before = String(characters[..<offset]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let after = String(characters[offset...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !before.isEmpty, !after.isEmpty else { return TranscriptSegment.normalized(segments) }
+
+        let at = min(max(time, original.start + 0.01), original.end - 0.01)
+        guard at > original.start, at < original.end else { return TranscriptSegment.normalized(segments) }
+
+        segments.replaceSubrange(position...position, with: [
+            TranscriptSegment(start: original.start, end: at, text: before, engine: original.engine, isEdited: true),
+            TranscriptSegment(start: at, end: original.end, text: after, engine: original.engine, isEdited: true),
+        ])
+        try save(trackID: trackID, segments: segments)
+        return TranscriptSegment.normalized(segments)
+    }
+
     private func recordEdit(
         trackID: String, segmentStart: Double, from originalText: String, to editedText: String
     ) throws {
