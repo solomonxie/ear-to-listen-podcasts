@@ -57,6 +57,17 @@ struct CredentialStore {
         }
     }
 
+    func deleteAll() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw CredentialStoreError.unhandled(status)
+        }
+    }
+
     func setJSON<T: Encodable>(_ value: T, forKey key: String) throws {
         let data = try JSONEncoder().encode(value)
         try set(String(decoding: data, as: UTF8.self), forKey: key)
