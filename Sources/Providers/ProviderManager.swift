@@ -42,6 +42,10 @@ final class ProviderManager: @unchecked Sendable {
         lock.withLock { cache.removeValue(forKey: providerID) }
     }
 
+    func invalidateAll() {
+        lock.withLock { cache.removeAll() }
+    }
+
     func settings(for providerID: String) -> [String: String]? {
         try? credentials.getJSON([String: String].self, forKey: Self.settingsKey(providerID: providerID))
     }

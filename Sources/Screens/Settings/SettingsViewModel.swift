@@ -188,6 +188,29 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    /// Clears every on-device copy only after the caller has successfully exported the
+    /// portable archive. The archive destination is outside the app container, so it is
+    /// not affected by this cleanup.
+    func removeAllAppData() async {
+        do {
+            let stagingURL = URL.applicationSupportDirectory.appending(path: "empty-library.sqlite")
+            removeDatabase(at: stagingURL)
+            defer { removeDatabase(at: stagingURL) }
+            let emptyDatabase = try DatabaseManager.makeDataset(at: stagingURL)
+            try DatabaseManager.shared.replaceContents(with: emptyDatabase)
+
+            try credentials.deleteAll()
+            ProviderManager.shared.invalidateAll()
+            await AudioCache.shared.removeAll()
+            removeAppSupportData()
+            UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier ?? "")
+            NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+            load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// `url` comes from a `.fileImporter` picker, so it's security-scoped. The archive is
     /// restored into a library of its own and switched to — the one that was here is kept
     /// as a file, and `undoRestore()` puts it back.
@@ -224,5 +247,19 @@ final class SettingsViewModel: ObservableObject {
             message += ", \(result.awaitingSync) item\(result.awaitingSync == 1 ? "" : "s") waiting for the next sync"
         }
         return message + "."
+    }
+
+    private func removeAppSupportData() {
+        let manager = FileManager.default
+        let support = URL.applicationSupportDirectory
+        for name in ["SpeakerPhotos", "Artwork", "snapshots", "change-log", "pending-restore.zip"] {
+            try? manager.removeItem(at: support.appending(path: name))
+        }
+    }
+
+    private func removeDatabase(at url: URL) {
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: url.path + suffix))
+        }
     }
 }

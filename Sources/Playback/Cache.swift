@@ -81,6 +81,13 @@ actor AudioCache {
         }
     }
 
+    func removeAll() {
+        let manager = FileManager.default
+        try? manager.removeItem(at: directory)
+        try? manager.removeItem(at: legacyDirectory)
+        try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
     /// Size of the cached copy if one exists — `nil` means not downloaded. Doesn't bump the
     /// LRU access date the way `cachedURL` does, since just listing what's downloaded
     /// shouldn't protect an entry from eviction the way actually playing it does.
