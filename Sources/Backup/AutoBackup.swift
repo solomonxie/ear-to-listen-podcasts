@@ -99,6 +99,22 @@ final class AutoBackup: ObservableObject {
         await backUp(toBucket: isEnabled, toCloudDrive: isCloudDriveEnabled)
     }
 
+    /// A named recovery point made before an irreversible local reset. It is separate
+    /// from the normal daily archive, which may later contain an empty library.
+    func backUpBeforeRemovingAllData() async throws {
+        let archive = try BackupService().currentArchive()
+        let name = BackupArchiveName.beforeRemovingAllData()
+        guard LocalBackups.writeBeforeRemovingAllData(archive, named: name) != nil else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        if isEnabled {
+            try await BackupService().uploadBeforeRemovingAllData(archive, named: name)
+        }
+        if isCloudDriveEnabled {
+            try await CloudDrive.write(archive, named: name)
+        }
+    }
+
     private func persist(_ value: Bool, forKey key: String, changedFrom oldValue: Bool) {
         UserDefaults.standard.set(value, forKey: key)
         guard value != oldValue else { return }

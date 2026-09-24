@@ -63,8 +63,12 @@ enum CloudDrive {
     static let keptArchives = 10
 
     static func write(_ archive: Data) async throws {
+        try await write(archive, named: BackupArchiveName.current())
+    }
+
+    static func write(_ archive: Data, named name: String) async throws {
         guard let documents = documentsURL() else { throw CloudDriveError.unavailable }
-        try archive.write(to: documents.appending(path: BackupArchiveName.current()), options: .atomic)
+        try archive.write(to: documents.appending(path: name), options: .atomic)
         prune(in: documents)
     }
 
