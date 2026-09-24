@@ -4,7 +4,10 @@ import UIKit
 /// The app's one now-playing screen, over real synced `Track`s via `PlaybackEngine`.
 struct RealPlayerView: View {
     @ObservedObject var engine = PlaybackEngine.shared
-    @Environment(\.dismiss) private var dismiss
+    /// Closing is a flag on the engine now, not `@Environment(\.dismiss)`: the page is a
+    /// sibling view rather than a presentation, so there is nothing to dismiss — see
+    /// `ContentView`.
+    private func close() { PlaybackEngine.shared.isPresentingPlayer = false }
     @State private var showingUpNext = false
     @State private var bookmarks: [Bookmark] = []
     /// The mark just made, lit for a moment so the jump to Notes lands on something the
@@ -144,7 +147,7 @@ struct RealPlayerView: View {
                     // way the gesture goes, and both leave the same way — which is the point
                     // of the change: everywhere else in this app, back is left.
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: {
+                        Button { close() } label: {
                             Label("Back", systemImage: "chevron.left").font(.body.weight(.semibold))
                         }
                     }
@@ -508,14 +511,16 @@ struct RealPlayerView: View {
         }
     }
 
-    /// What you want from deep inside a 40-minute transcript, in the order you want it:
-    /// the line being spoken, the top of the page, and a mark on the second you just
-    /// heard. All three are a reach from the bottom of the page, where the thumb already
-    /// is — the copies at the top are a scroll away by the time you need them.
+    /// What you want from deep inside a 40-minute transcript: a mark on the second you just
+    /// heard, the top of the page, and the line being spoken. All three are a reach from the
+    /// bottom of the page, where the thumb already is — the copies at the top are a scroll
+    /// away by the time you need them.
     ///
-    /// **Follow leads.** It's the one pressed mid-read, over and over, by a thumb that
-    /// scrolled off the spoken line; the other two are occasional. Left is where that
-    /// thumb lands.
+    /// **Mark leads.** It is the only one of the three with a deadline: it's pressed because
+    /// of something just heard, and the sentence worth keeping is a few seconds wide. Follow
+    /// and Top can both be pressed at leisure — the line being spoken will still be the line
+    /// being spoken — so the one that can't wait gets the end of the row the thumb is already
+    /// resting on.
     ///
     /// **None of them takes you anywhere you didn't ask for.** "Back to top" moves the
     /// page because that is the whole request, and it stops the page moving itself while
@@ -527,25 +532,6 @@ struct RealPlayerView: View {
     private func floatingControls(_ proxy: ScrollViewProxy) -> some View {
         if isTransportOffscreen {
             HStack(spacing: 10) {
-                if !transcript.lines.isEmpty {
-                    // A toggle here, where the one above the transcript only turns it on:
-                    // this one is in reach of the thumb that just scrolled away from the
-                    // spoken line, and stopping is as likely to be the ask as starting.
-                    // One label, one icon — colour alone says whether it's on, so the
-                    // button doesn't change shape under the thumb that just pressed it.
-                    floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
-                        if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
-                    }
-                }
-                // "Top", not "Back to top": three labelled pills have to fit a phone, and
-                // not "Back" — in iOS that means leaving the screen, which this sheet's
-                // Close chevron already does. The arrow carries the rest of the meaning.
-                // VoiceOver still hears the long form, where there's no width to save.
-                floatingButton("Top", systemImage: "arrow.up", isOn: false) {
-                    isFollowingTranscript = false
-                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                }
-                .accessibilityLabel("Back to top")
                 if let track = engine.currentTrack {
                     // Captioned like the two beside it. A lone glyph in a row of labelled
                     // pills reads as a different kind of control, and this is the only one
@@ -583,6 +569,25 @@ struct RealPlayerView: View {
                         // A hold is invisible to VoiceOver, and this is the only way to the
                         // marks now that the pill has gone.
                         .accessibilityAction(named: "Go to bookmarks") { showBookmarks(proxy) }
+                }
+                // "Top", not "Back to top": three labelled pills have to fit a phone, and
+                // not "Back" — in iOS that means leaving the screen, which this sheet's
+                // Close chevron already does. The arrow carries the rest of the meaning.
+                // VoiceOver still hears the long form, where there's no width to save.
+                floatingButton("Top", systemImage: "arrow.up", isOn: false) {
+                    isFollowingTranscript = false
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
+                }
+                .accessibilityLabel("Back to top")
+                if !transcript.lines.isEmpty {
+                    // A toggle here, where the one above the transcript only turns it on:
+                    // this one is in reach of the thumb that just scrolled away from the
+                    // spoken line, and stopping is as likely to be the ask as starting.
+                    // One label, one icon — colour alone says whether it's on, so the
+                    // button doesn't change shape under the thumb that just pressed it.
+                    floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
+                        if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
+                    }
                 }
             }
             .padding(.bottom, 12)
@@ -629,7 +634,7 @@ struct RealPlayerView: View {
                     return
                 }
                 isDismissing = true
-                dismiss()
+                close()
             }
     }
 
@@ -674,14 +679,7 @@ struct RealPlayerView: View {
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
-                onTapBar: { path.removeAll() },
-                // A speaker's page is read while the episode keeps playing, so a moment
-                // worth marking arrives here as often as it does on the player — and there
-                // is no floating Mark pill on a pushed page.
-                onBookmark: engine.currentTrack.map { track in
-                    { markMoment(track) }
-                },
-                bookmarkCount: bookmarks.count
+                onTapBar: { path.removeAll() }
             )
         }
     }
@@ -707,11 +705,6 @@ struct RealPlayerView: View {
                 onTapBar: {
                     withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
                 }
-                // No bookmark on this one bar. The floating row sits directly above it with
-                // a labelled Mark pill, so the two were a hand's width apart doing the same
-                // thing — and the unlabelled one was the easier to hit by accident while
-                // reaching for play. It is the only page where something else can mark a
-                // moment, so the only page whose bar goes without.
             )
         }
     }
@@ -737,10 +730,12 @@ struct RealPlayerView: View {
 /// another episode was the control that used to be out here; it went because it's the one
 /// mistap on this bar you can't undo by tapping again.
 ///
-/// A bookmark joins them where one is passed in, smaller again: it's the one control here
-/// you press because of what you're hearing rather than to change it. Over Home that's the
-/// only way to mark a moment without opening the player, so it's there; on the player's own
-/// docked bar it isn't, because the floating Mark pill sits directly above it.
+/// **No bookmark on it, anywhere.** It used to carry one on every page but the player's,
+/// which made the bar a different control depending where you met it — and on the player it
+/// sat a hand's width under the floating Mark pill doing the same job unlabelled, right
+/// beside play, where it was the easier of the two to hit by mistake. Marking belongs to the
+/// places that are about one moment: the transport, the floating row, and holding a
+/// transcript line.
 struct NowPlayingBarContent: View {
     let track: Track?
     let artistName: String?
@@ -755,11 +750,6 @@ struct NowPlayingBarContent: View {
     let onSkipBack: () -> Void
     let onTogglePlay: () -> Void
     let onTapBar: () -> Void
-    /// Marks this moment and stays put, like the big transport's bookmark. On every page
-    /// the bar appears on, not just the player's: the episode goes on playing while you
-    /// browse, and a moment worth keeping doesn't wait for the player to be opened first.
-    var onBookmark: (() -> Void)?
-    var bookmarkCount: Int = 0
 
     /// Bigger than the `.title2` it was: it's the one control on the bar and the one
     /// reached for in a hurry — often without looking — so it's sized for that rather
@@ -800,19 +790,6 @@ struct NowPlayingBarContent: View {
                     }
                     .buttonStyle(.plain)
 
-                    if let onBookmark {
-                        Button(action: onBookmark) {
-                            Image(systemName: "bookmark.fill")
-                                .font(.system(size: glyphSize - 8))
-                                .frame(width: 36, height: 52)
-                                .overlay(alignment: .topTrailing) { barMarkCount }
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Bookmark this moment")
-                        .accessibilityValue(bookmarkCount == 0 ? "No marks yet" : "\(bookmarkCount) marks")
-                    }
-
                     Button(action: onSkipBack) {
                         Image(systemName: "gobackward.10")
                             .font(.system(size: glyphSize - 5))
@@ -838,24 +815,6 @@ struct NowPlayingBarContent: View {
                 .padding(.bottom, 2)
             }
             .background(.ultraThinMaterial)
-        }
-    }
-
-    /// The count on the bar's bookmark, same receipt as the big transport's: a button that
-    /// goes nowhere and asks nothing otherwise looks like it did nothing.
-    @ViewBuilder
-    private var barMarkCount: some View {
-        if bookmarkCount > 0 {
-            Text("\(bookmarkCount)")
-                .font(.system(size: 9, weight: .bold).monospacedDigit())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 3.5)
-                .padding(.vertical, 1)
-                .background(Color.accentColor, in: Capsule())
-                .offset(x: 6, y: 8)
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.2), value: bookmarkCount)
-                .fixedSize()
         }
     }
 }
