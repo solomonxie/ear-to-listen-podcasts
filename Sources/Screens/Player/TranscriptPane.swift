@@ -24,6 +24,9 @@ struct TranscriptPane: View {
     /// Asks the page to scroll to the line being spoken and follow from there. The page
     /// owns the scroller, so it owns the jump.
     let onFollow: () -> Void
+    /// Stops playback. Both ways into working on the text call it — see `edit` and
+    /// `beginSelecting`.
+    let onPause: () -> Void
     let onSeek: (TimeInterval) -> Void
 
     /// The line being rewritten, and what it says so far. Editing happens in the row
@@ -429,16 +432,32 @@ struct TranscriptPane: View {
         selection = []
     }
 
-    /// Turns the row into a field, where it stands. **Following goes off**: it would
-    /// scroll the line being typed in out from under the keyboard within seconds.
+    /// Turns the row into a field, where it stands.
+    ///
+    /// **Playback stops.** Correcting a line means reading the lines around it, and audio
+    /// carrying on is either moving the highlight away from the one being typed in or
+    /// rolling into the next episode while the keyboard is up.
+    ///
+    /// **Following goes off**: it would scroll the line being typed in out from under the
+    /// keyboard within seconds.
     ///
     /// It does *not* scroll the page. Pulling the row to the top made Edit look like it
     /// had done nothing — the row you were looking at leapt away, and the field ended up
     /// somewhere you weren't. The keyboard moves the page itself if the field needs it.
     private func edit(_ segment: TranscriptSegment) {
+        onPause()
         isFollowing = false
         editText = segment.text
         editingStart = segment.start
+    }
+
+    /// **Playback stops here too.** Picking lines out to join or cut is reading work, and
+    /// the audio running on underneath it does nothing but move the highlight onto a line
+    /// nobody is looking at — and, at the end of the episode, start the next one over the
+    /// top of what you were in the middle of.
+    private func beginSelecting(_ segment: TranscriptSegment) {
+        onPause()
+        selection = [segment.start]
     }
 
     private func save(_ segment: TranscriptSegment) {
@@ -491,7 +510,7 @@ struct TranscriptPane: View {
                                 onBookmark: { bookmark(segment) },
                                 onCopy: { copy(segment) },
                                 onEdit: { edit(segment) },
-                                onSelect: { selection = [segment.start] }
+                                onSelect: { beginSelecting(segment) }
                             )
                             // Nothing but the text, the highlight and the "still being
                             // revised" flag can change a row, so a redraw of the list

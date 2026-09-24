@@ -211,7 +211,8 @@ struct RealPlayerView: View {
                     currentTime: engine.currentTime,
                     scrollProxy: proxy,
                     isFollowing: $isFollowingTranscript,
-                    onFollow: { follow(proxy) }
+                    onFollow: { follow(proxy) },
+                    onPause: { if engine.isPlaying { engine.pause() } }
                 ) { engine.seek(to: $0) }
 
             }
