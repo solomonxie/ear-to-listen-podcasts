@@ -246,17 +246,17 @@ struct RealPlayerView: View {
     }
 
     /// Jumps to the line being spoken and keeps up from there. Asked for, never assumed —
-    /// The marks, without making one — the other half of what the floating bookmark is
-    /// for, on a hold because tapping is the thing done far more often and mid-episode.
+    /// The marks, without making one. Reached two ways — the pill under the transport, and
+    /// a hold on the floating bookmark once the transport has gone.
     ///
     /// Following goes off for the same reason Back to top turns it off: this is a move made
     /// to read something, and a page that scrolls itself is a page you can't read.
     ///
-    /// The haptic is doing real work here. A tap and a hold on one control have to feel
-    /// different at the moment the thumb lifts, or a hold that was meant to jump and
-    /// instead left a mark is indistinguishable from one that worked.
+    /// No haptic here. It belongs to the hold alone, where it's doing real work — a tap and
+    /// a hold on one control have to feel different as the thumb lifts, or a hold that was
+    /// meant to jump and instead left a mark is indistinguishable from one that worked. On
+    /// a plain button it would just be noise.
     private func showBookmarks(_ proxy: ScrollViewProxy) {
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
         isFollowingTranscript = false
         withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.notesAnchor, anchor: .top) }
     }
@@ -416,6 +416,18 @@ struct RealPlayerView: View {
                 Label("Up Next", systemImage: "list.bullet")
                     .pillLabel()
             }
+            // Goes to the marks without making one — the transport's bookmark, a hand's
+            // width above this row, is what makes them.
+            //
+            // Not a duplicate of the hold on the floating bookmark: this row is only
+            // reachable while the transport is on screen, and that row only exists once it
+            // has scrolled off. Whichever is in front of you has a way to the marks.
+            Button {
+                showBookmarks(proxy)
+            } label: {
+                Label("Bookmarks", systemImage: bookmarks.isEmpty ? "bookmark" : "bookmark.fill")
+                    .pillLabel()
+            }
             // The details card sits between the transport and the text, so on an episode
             // with a transcript this saves a long scroll past everything you already know.
             Button {
@@ -541,7 +553,10 @@ struct RealPlayerView: View {
                         .overlay(alignment: .topTrailing) { markCount(offset: CGSize(width: 5, height: -3)) }
                         .contentShape(Capsule())
                         .onTapGesture { markMoment(track) }
-                        .onLongPressGesture(minimumDuration: 0.4) { showBookmarks(proxy) }
+                        .onLongPressGesture(minimumDuration: 0.4) {
+                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                            showBookmarks(proxy)
+                        }
                         .accessibilityElement()
                         .accessibilityAddTraits(.isButton)
                         .accessibilityLabel("Bookmark this moment")

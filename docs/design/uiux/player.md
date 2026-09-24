@@ -27,7 +27,7 @@ the scroll view alone asks for a stroke longer than the screen.
                                                 the transport; ③ = marks on
                                                 this episode, and the receipt
                                                 for the press
-      [ ☰ Up Next ] [ 💬 Transcript ]
+      [ ☰ Up Next ] [ 🔖 Bookmarks ] [ 💬 Transcript ]
       ⚠ You're offline. Connect to the        ← engine.lastError, orange
         internet to stream this track.
  ─────────── details cards → details.md ────
@@ -70,13 +70,17 @@ from here is that the line worth marking is on screen, and going to the mark
 would leave it. *Hold* goes to the marks and makes none.
 
 One control, because they are two halves of one subject and the row has three
-places in it. That is what let the `[ 🔖 Bookmarks ]` pill come off the row under
-the transport — it existed only to go to the marks, from a row you have to scroll
-back up to reach, while this row is already under the thumb.
+places in it.
+
+**The `[ 🔖 Bookmarks ]` pill stays on the row under the transport.** It is not a
+duplicate of this hold: that row is only reachable while the transport is on
+screen, and this row only exists once the transport has scrolled off. The two
+never appear together, so whichever is in front of you has a way to the marks.
+The pill carries no haptic — that belongs to the hold, where it is what tells a
+jump from a mark left by mistake.
 
 Tap is the far commoner action and gets the shorter gesture. A hold is invisible
-to VoiceOver, so the jump is also an accessibility action on the same element —
-it is the only way to the marks now.
+to VoiceOver, so the jump is also an accessibility action on the same element.
 
 Gestures, not a `Button` with a `contextMenu`: a menu turns "go to the marks"
 into a hold and then a second tap on a one-item list. The repo's rule about
@@ -133,8 +137,9 @@ is how you reach the transcript, and that belongs to the scroll view.
   episode is a decision made from Up Next, a tap below.
 - 🔖 in the transport, on the docked bar and tapped in the floating row **marks
   and stays put** — being thrown down the page while listening is the
-  interruption the mark was supposed to avoid. Going *to* the marks is the same
-  button held. Two wants, one control, told apart by the length of the press.
+  interruption the mark was supposed to avoid. Going *to* the marks is the
+  [ 🔖 Bookmarks ] pill while the transport is up, and the same floating button
+  held once it isn't. Two wants, never confused for each other.
 - Every marking button carries the count. A button that goes nowhere and asks
   nothing otherwise looks like it did nothing, and the number going up says both
   "that worked" and "this is your fourth". Same second twice is still one mark —
