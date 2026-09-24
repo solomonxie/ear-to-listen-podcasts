@@ -165,6 +165,11 @@ moved. A percentage says as much and costs nothing.
 - **The keyboard comes up by itself** — it's the point of tapping Edit — and the
   line is pulled to the top of the page, which is the half of the screen the
   keyboard leaves.
+- **Playback stops the moment editing starts**, and the moment lines are picked
+  for merge or split. Both are reading work. Audio carrying on underneath either
+  moves the highlight off the line being worked on, or reaches the end and starts
+  the next episode over the top of it. It does not resume by itself: a correction
+  is usually one of several, and play is one tap away.
 - **Following goes off the moment editing starts.** It would otherwise scroll the
   line being typed in out from under the keyboard within seconds.
 - **No page, no sheet.** The lines above and below are the context a correction is
