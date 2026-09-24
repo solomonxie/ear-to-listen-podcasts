@@ -27,6 +27,10 @@ struct TranscriptPane: View {
     /// Stops playback. Both ways into working on the text call it — see `edit` and
     /// `beginSelecting`.
     let onPause: () -> Void
+    /// Raised while a line is open for correction, so the page can take its floating row and
+    /// its docked bar off the screen. Both sit over the bottom of the page, and between them
+    /// and the keyboard there was nothing left of it to correct a line in.
+    @Binding var isEditingLine: Bool
     let onSeek: (TimeInterval) -> Void
 
     /// The line being rewritten, and what it says so far. Editing happens in the row
@@ -66,6 +70,11 @@ struct TranscriptPane: View {
         // query — `task(id:)` is here to keep it off the body pass, not to wait.
         .task(id: searchQuery) {
             hits = TranscriptPhraseSearch.hits(for: searchQuery, in: transcript.lines)
+        }
+        // Mirrored from the one piece of state that already knows, rather than set at each
+        // of the three places an edit starts or ends.
+        .onChange(of: editingStart) { _, start in
+            isEditingLine = start != nil
         }
         .sheet(item: $splitting) { segment in
             SplitPhraseSheet(segment: segment) { offset, time in
@@ -451,14 +460,34 @@ struct TranscriptPane: View {
     /// **Following goes off**: it would scroll the line being typed in out from under the
     /// keyboard within seconds.
     ///
-    /// It does *not* scroll the page. Pulling the row to the top made Edit look like it
-    /// had done nothing — the row you were looking at leapt away, and the field ended up
-    /// somewhere you weren't. The keyboard moves the page itself if the field needs it.
+    /// **And the line is brought to the middle of whatever screen is left.** Leaving the page
+    /// where it was relied on the keyboard pushing the field into view, which it does not do
+    /// here: the floating row overlays the bottom of the page and the docked bar insets it, so
+    /// a line tapped low down ended up behind one of them with the keyboard under that. An
+    /// earlier version pulled the row to the *top* instead, which read as Edit having thrown
+    /// the page somewhere — centred keeps the lines it is being corrected against on screen,
+    /// which is the whole reason the field is in the row rather than in a sheet.
     private func edit(_ segment: TranscriptSegment) {
         onPause()
         isFollowing = false
         editText = segment.text
         editingStart = segment.start
+        centreEditedLine(segment)
+    }
+
+    /// **After the keyboard, not with it.** The field asks for focus as it appears, and the
+    /// keyboard then takes about a third of the screen; scrolling before that lands centres
+    /// the row in a window that is about to halve, leaving it under the keyboard again. One
+    /// deliberate wait, then the scroll — and only if that line is still the one being
+    /// corrected, since a fast second tap elsewhere would otherwise drag the page back.
+    private func centreEditedLine(_ segment: TranscriptSegment) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(320))
+            guard editingStart == segment.start else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                scrollProxy.scrollTo(segment.start, anchor: .center)
+            }
+        }
     }
 
     /// **Playback stops here too.** Picking lines out to join is reading work, and the audio

@@ -163,8 +163,16 @@ moved. A percentage says as much and costs nothing.
 ```
 
 - **The keyboard comes up by itself** — it's the point of tapping Edit — and the
-  line is pulled to the top of the page, which is the half of the screen the
-  keyboard leaves.
+  line is brought to the middle of whatever screen is left, a beat later so the
+  centring happens against the window the keyboard actually leaves rather than the
+  one about to halve. Centred, not pulled to the top: the lines above and below are
+  what the correction is being made against, and they are the whole reason the field
+  is in the row instead of in a sheet.
+- **The floating row and the docked bar both go away while a line is open.** The
+  floating row is an overlay, so it sits *on* the text — and the field is the one
+  piece of text that must not be sat on. The docked bar only insets, but it takes a
+  bar's height out of a screen the keyboard has already taken a third of, and
+  editing pauses playback, so a transport is the one thing certainly not wanted.
 - **Playback stops the moment editing starts**, and the moment lines are picked
   for merge or split. Both are reading work. Audio carrying on underneath either
   moves the highlight off the line being worked on, or reaches the end and starts
