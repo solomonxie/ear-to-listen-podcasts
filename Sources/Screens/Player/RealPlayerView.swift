@@ -12,7 +12,9 @@ struct RealPlayerView: View {
     @State private var highlightedBookmark: String?
     /// How far the page has been pulled past its own top, so it can shrink under the
     /// finger on the way out instead of just vanishing at the threshold.
-    @State private var pullDown: CGFloat = 0
+    /// How far a left-edge swipe has carried the page across. The page follows the finger,
+    /// so the gesture is answered while it happens rather than only when it ends.
+    @State private var dragBack: CGFloat = 0
     @State private var isDismissing = false
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
@@ -37,11 +39,15 @@ struct RealPlayerView: View {
     /// about to land, and a timecode wouldn't — none of these three is a moment.
     private static let pageAnchors = [topAnchor, notesAnchor, transcriptAnchor]
     private static let pageAnchorLabels = ["Top", "Notes", "Text"]
-    /// How far past the top the page has to come before it goes away. Read off the scroll
-    /// view's overscroll, which rubber-bands: the finger travels two to three times this,
-    /// so it's well clear of the idle bounce at the top of a long page without asking for
-    /// a stroke longer than the screen.
-    private static let pullToDismiss: CGFloat = 70
+    /// How far a left-edge swipe has to travel before the page goes back. About a thumb's
+    /// width of deliberate movement: short enough to feel like the system's own gesture,
+    /// long enough that a horizontal wobble during a scroll doesn't fire it.
+    private static let swipeToGoBack: CGFloat = 80
+    /// Where that swipe has to start — the same strip iOS reserves for its own back gesture.
+    /// Edge-only, because the page is full of things that answer a horizontal drag of their
+    /// own, the scrubber most of all, and a swipe recognised anywhere would compete with all
+    /// of them for every stroke.
+    private static let backSwipeEdge: CGFloat = 60
     /// Read, never observed. A running transcription republishes several times a second,
     /// and observing it here redrew the artwork, the transport and the whole details card
     /// along with the text — which is what made the page flash while transcribing. The
@@ -134,11 +140,12 @@ struct RealPlayerView: View {
                 .toolbarBackground(.visible, for: .navigationBar)
                 .toolbarBackground(Color.appBackground, for: .navigationBar)
                 .toolbar {
-                    // A card you put down, not a page you back out of: the arrow points
-                    // the way the gesture goes, and both leave the same way.
+                    // A page you go back from, not a card you put down. The arrow points the
+                    // way the gesture goes, and both leave the same way — which is the point
+                    // of the change: everywhere else in this app, back is left.
                     ToolbarItem(placement: .topBarLeading) {
                         Button { dismiss() } label: {
-                            Label("Close", systemImage: "chevron.down").font(.body.weight(.semibold))
+                            Label("Back", systemImage: "chevron.left").font(.body.weight(.semibold))
                         }
                     }
                     // Tapping the title goes back to the top, as it does in every iOS app
@@ -162,11 +169,11 @@ struct RealPlayerView: View {
         // walks into subfolders with plain links of its own, and a per-destination inset
         // never saw those.
         .safeAreaInset(edge: .bottom) { pushedPageBar }
-        // Put the card down by pulling the page past its own top, which the scroll view
-        // reports as overscroll. It shrinks as it goes, so the pull is answered before the
-        // threshold rather than at it.
-        .scaleEffect(1 - min(pullDown, Self.pullToDismiss) / 1600, anchor: .center)
-        .animation(.interactiveSpring(response: 0.3), value: pullDown)
+        // Slides with the finger, so the swipe is answered as it happens rather than only
+        // once it passes the threshold — and springs back when it doesn't.
+        .offset(x: dragBack)
+        .animation(.interactiveSpring(response: 0.3), value: dragBack)
+        .simultaneousGesture(backSwipe)
     }
 
     /// Split out of `body` purely so the type-checker can cope — it timed out once the
@@ -217,7 +224,6 @@ struct RealPlayerView: View {
 
             }
             .padding(.vertical)
-            .background { scrollProbe }
         }
         .coordinateSpace(name: Self.scrollSpace)
         // The page draws its own bar below; the system's would sit a few points
@@ -597,21 +603,34 @@ struct RealPlayerView: View {
     }
 
     /// Watches the page go by, for one purpose: whether it's being pulled off the top.
-    /// One probe behind the whole content, rather than the transport's — that one stopped
-    /// being a useful signal the moment it scrolled off the top.
-    private var scrollProbe: some View {
-        GeometryReader { geometry in
-            let frame = geometry.frame(in: .named(Self.scrollSpace))
-            Color.clear
-                .onChange(of: frame.minY, initial: true) { _, minY in
-                    // Above its own top: the page is being pulled off, not scrolled.
-                    pullDown = max(0, minY)
-                    if pullDown > Self.pullToDismiss, !isDismissing {
-                        isDismissing = true
-                        dismiss()
-                    }
+    /// Swipe in from the left edge to go back, the way every pushed page in the app already
+    /// works. This one is a `fullScreenCover`, so it gets no such gesture for free — the page
+    /// used to leave by being pulled down past its own top instead, a card dismissal on a
+    /// screen that is otherwise navigated, with an arrow pointing the opposite way from every
+    /// other back button here.
+    ///
+    /// **Only at the stack root.** Pushed pages have the system's own back swipe; letting
+    /// this one through as well would take the whole player out from under a speaker page
+    /// somebody meant to step back from.
+    private var backSwipe: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onChanged { value in
+                guard path.isEmpty,
+                      value.startLocation.x < Self.backSwipeEdge,
+                      // Horizontal dominance, or a diagonal flick while reading drags the
+                      // page sideways on its way down.
+                      value.translation.width > abs(value.translation.height) else { return }
+                dragBack = max(0, value.translation.width)
+            }
+            .onEnded { _ in
+                guard dragBack > 0 else { return }
+                guard dragBack > Self.swipeToGoBack, !isDismissing else {
+                    dragBack = 0
+                    return
                 }
-        }
+                isDismissing = true
+                dismiss()
+            }
     }
 
     /// Docked, so play/pause and position are reachable from anywhere on a page that is
@@ -646,31 +665,24 @@ struct RealPlayerView: View {
     @ViewBuilder
     private var pushedPageBar: some View {
         if !path.isEmpty {
-            VStack(spacing: 0) {
-                ProgressView(value: engine.duration > 0 ? min(engine.currentTime / engine.duration, 1) : 0)
-                    .progressViewStyle(.linear)
-                    .tint(.accentColor)
-                    .scaleEffect(x: 1, y: 0.6, anchor: .center)
-
-                NowPlayingBarContent(
-                    track: engine.currentTrack,
-                    artistName: artist?.name,
-                    albumName: album?.name,
-                    subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
-                    isPlaying: engine.isPlaying,
-                    onSkipBack: { engine.skip(by: -10) },
-                    onTogglePlay: { engine.togglePlayPause() },
-                    onTapBar: { path.removeAll() },
-                    // A speaker's page is read while the episode keeps playing, so the
-                    // moment worth marking arrives here as often as it does on the
-                    // player. The bar is the same bar; it marks the same way.
-                    onBookmark: engine.currentTrack.map { track in
-                        { markMoment(track) }
-                    },
-                    bookmarkCount: bookmarks.count
-                )
-            }
-            .background(.ultraThinMaterial)
+            NowPlayingBarContent(
+                track: engine.currentTrack,
+                artistName: artist?.name,
+                albumName: album?.name,
+                currentTime: engine.currentTime,
+                duration: engine.duration,
+                isPlaying: engine.isPlaying,
+                onSkipBack: { engine.skip(by: -10) },
+                onTogglePlay: { engine.togglePlayPause() },
+                onTapBar: { path.removeAll() },
+                // A speaker's page is read while the episode keeps playing, so a moment
+                // worth marking arrives here as often as it does on the player — and there
+                // is no floating Mark pill on a pushed page.
+                onBookmark: engine.currentTrack.map { track in
+                    { markMoment(track) }
+                },
+                bookmarkCount: bookmarks.count
+            )
         }
     }
 
@@ -685,7 +697,8 @@ struct RealPlayerView: View {
                 track: engine.currentTrack,
                 artistName: artist?.name,
                 albumName: album?.name,
-                subtitle: "\(Scrubber.formatted(engine.currentTime)) / \(Scrubber.formatted(engine.duration))",
+                currentTime: engine.currentTime,
+                duration: engine.duration,
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
@@ -694,14 +707,13 @@ struct RealPlayerView: View {
                 onTapBar: {
                     withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
                 }
-                // No bookmark on this bar. The floating row sits directly above it with a
-                // labelled Mark pill, so the two were a hand's width apart doing the same
+                // No bookmark on this one bar. The floating row sits directly above it with
+                // a labelled Mark pill, so the two were a hand's width apart doing the same
                 // thing — and the unlabelled one was the easier to hit by accident while
-                // reaching for play. Over Home the bar keeps its bookmark: there is no
-                // floating row there, and the episode plays on while you browse.
+                // reaching for play. It is the only page where something else can mark a
+                // moment, so the only page whose bar goes without.
             )
         }
-        .background(.ultraThinMaterial)
     }
 }
 
@@ -711,6 +723,13 @@ struct RealPlayerView: View {
 /// Three lines because that's what the question "what am I listening to?" actually takes —
 /// the episode, who is speaking, and which collection it came from. One line of title over
 /// a filename answered none of them.
+///
+/// **One bar, assembled once.** Every page showing it gets the same progress strip, the
+/// same timecode and the same background from here, and supplies only what genuinely
+/// differs: what tapping it does, and whether there is anywhere else on that page to mark a
+/// moment. It was three call sites each adding their own — Home overlaid a 1.5pt strip, a
+/// pushed page stacked a squashed one above, the player's docked copy had none at all, and
+/// only two of the three showed the timecode at all.
 ///
 /// **On the right: back ten seconds, then play/pause.** Pause keeps the far-right seat —
 /// it's the one anyone reaches for in a hurry, often without looking — and the rewind sits
@@ -726,8 +745,12 @@ struct NowPlayingBarContent: View {
     let track: Track?
     let artistName: String?
     let albumName: String?
-    /// The second line under the title: a timecode on the player, the file elsewhere.
-    var subtitle: String?
+    /// Position and length, which this turns into both the timecode line and the progress
+    /// strip above it. Numbers rather than a pre-formatted string and a separate ratio:
+    /// three call sites formatting the same two values were three chances to disagree, and
+    /// they took all three.
+    let currentTime: TimeInterval
+    let duration: TimeInterval
     let isPlaying: Bool
     let onSkipBack: () -> Void
     let onTogglePlay: () -> Void
@@ -746,69 +769,75 @@ struct NowPlayingBarContent: View {
 
     var body: some View {
         if let track {
-            HStack(spacing: 12) {
-                Button(action: onTapBar) {
-                    HStack(spacing: 12) {
-                        ArtworkTile(track: track, cornerRadius: 7, symbolSize: 16)
-                            .frame(width: 44, height: 44)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(track.title)
-                                .font(.subheadline.weight(.semibold))
-                                .lineLimit(1)
-                            if let context = [artistName, albumName].compactMap({ $0?.nilIfEmpty }).nilIfEmpty {
-                                Text(context.joined(separator: " · "))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ProgressView(value: duration > 0 ? min(currentTime / duration, 1) : 0)
+                    .progressViewStyle(.linear)
+                    .tint(.accentColor)
+                    .frame(height: 1.5)
+
+                HStack(spacing: 12) {
+                    Button(action: onTapBar) {
+                        HStack(spacing: 12) {
+                            ArtworkTile(track: track, cornerRadius: 7, symbolSize: 16)
+                                .frame(width: 44, height: 44)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(track.title)
+                                    .font(.subheadline.weight(.semibold))
                                     .lineLimit(1)
-                            }
-                            if let subtitle {
-                                Text(subtitle)
+                                if let context = [artistName, albumName].compactMap({ $0?.nilIfEmpty }).nilIfEmpty {
+                                    Text(context.joined(separator: " · "))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Text("\(Scrubber.formatted(currentTime)) / \(Scrubber.formatted(duration))")
                                     .font(.caption2.monospacedDigit())
                                     .foregroundStyle(.tertiary)
                             }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                if let onBookmark {
-                    Button(action: onBookmark) {
-                        Image(systemName: "bookmark.fill")
-                            .font(.system(size: glyphSize - 8))
-                            .frame(width: 36, height: 52)
-                            .overlay(alignment: .topTrailing) { barMarkCount }
+                    if let onBookmark {
+                        Button(action: onBookmark) {
+                            Image(systemName: "bookmark.fill")
+                                .font(.system(size: glyphSize - 8))
+                                .frame(width: 36, height: 52)
+                                .overlay(alignment: .topTrailing) { barMarkCount }
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Bookmark this moment")
+                        .accessibilityValue(bookmarkCount == 0 ? "No marks yet" : "\(bookmarkCount) marks")
+                    }
+
+                    Button(action: onSkipBack) {
+                        Image(systemName: "gobackward.10")
+                            .font(.system(size: glyphSize - 5))
+                            .frame(width: 44, height: 52)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Bookmark this moment")
-                    .accessibilityValue(bookmarkCount == 0 ? "No marks yet" : "\(bookmarkCount) marks")
-                }
+                    .accessibilityLabel("Back ten seconds")
 
-                Button(action: onSkipBack) {
-                    Image(systemName: "gobackward.10")
-                        .font(.system(size: glyphSize - 5))
-                        .frame(width: 44, height: 52)
-                        .contentShape(Rectangle())
+                    Button(action: onTogglePlay) {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: glyphSize))
+                            .frame(width: 52, height: 52)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back ten seconds")
-
-                Button(action: onTogglePlay) {
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: glyphSize))
-                        .frame(width: 52, height: 52)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                // Less under than over: the home indicator already holds a band of clear
+                // space below the bar, and 8pt of padding on top of it read as the bar
+                // floating off the bottom of the screen.
+                .padding(.top, 8)
+                .padding(.bottom, 2)
             }
-            .padding(.horizontal, 12)
-            // Less under than over: the home indicator already holds a band of clear
-            // space below the bar, and 8pt of padding on top of it read as the bar
-            // floating off the bottom of the screen.
-            .padding(.top, 8)
-            .padding(.bottom, 2)
+            .background(.ultraThinMaterial)
         }
     }
 

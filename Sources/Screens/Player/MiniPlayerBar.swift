@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The bar over Home. Same shape as the one docked on the player — see
-/// `NowPlayingBarContent` — so "what's playing" looks the same wherever you meet it, down
-/// to the bookmark. Here tapping the bar opens the full episode page; there it scrolls
-/// that page back to the top.
+/// The bar over Home. Everything it looks like comes from `NowPlayingBarContent`, so
+/// "what's playing" is the same object wherever you meet it; all this adds is what tapping
+/// it does — open the full episode page, where the docked copy scrolls that page back to the
+/// top — and the artist/album lookup Home doesn't otherwise have to hand.
 struct MiniPlayerBar: View {
     @ObservedObject private var engine = PlaybackEngine.shared
     @Binding var showingNowPlaying: Bool
@@ -19,6 +19,8 @@ struct MiniPlayerBar: View {
                 track: track,
                 artistName: artistName,
                 albumName: albumName,
+                currentTime: engine.currentTime,
+                duration: engine.duration,
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
@@ -32,13 +34,6 @@ struct MiniPlayerBar: View {
                 },
                 bookmarkCount: bookmarkCount
             )
-            .background(.ultraThinMaterial)
-            .overlay(alignment: .top) {
-                ProgressView(value: engine.duration > 0 ? engine.currentTime / engine.duration : 0)
-                    .progressViewStyle(.linear)
-                    .tint(.accentColor)
-                    .frame(height: 1.5)
-            }
             .task(id: track.id) {
                 artistName = track.artistID.flatMap { try? libraryStore.artist(id: $0) }?.name
                 albumName = track.albumID.flatMap { try? libraryStore.album(id: $0) }?.name
