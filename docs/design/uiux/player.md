@@ -41,9 +41,9 @@ they are read together.
 ## Once the transport scrolls off
 
 ```
- ( ⌖ Follow ) ( ↑ Back to top ) ( 🔖③ )             tap marks · hold → marks
+ ( ⌖ Follow ) ( ↑ Top ) ( 🔖 Mark ③ )              tap marks · hold → marks
  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂  progress, 60% height
- ▦ Sleep Toolkit · Huberman      🔖③  ⏪10   ⏸   docked bar, appears only
+ ▦ Sleep Toolkit · Huberman           ⏪10   ⏸   docked bar, appears only
    12:14 / 41:02                                 when the big transport is gone
 ```
 
@@ -53,7 +53,16 @@ and flicker.
 
 **Follow leads.** It is the one pressed over and over, mid-read, by a thumb that
 has just scrolled off the spoken line; the other two are occasional. Left is
-where that thumb lands. The copy above the transcript only turns following on —
+where that thumb lands.
+
+**All three carry a caption.** A lone glyph among labelled pills reads as a
+different kind of control, and the bookmark is the only one of the three that
+*changes* something — the last place to be coy about what it does. "Top" rather
+than "Back to top" so three pills fit a phone, and not "Back", which in iOS means
+leaving the screen — something this sheet's Close chevron already does. The arrow
+carries the rest; VoiceOver still hears the long form, where there is no width to
+save. "Mark" is the verb, which also keeps it distinct from the `[ 🔖 Bookmarks ]`
+pill above, the noun that goes to them. The copy above the transcript only turns following on —
 this one toggles, because stopping is as likely to be the ask as starting. One
 label and one icon either way: colour alone says whether it's on, so the button
 doesn't change shape under the thumb that just pressed it.
@@ -96,10 +105,11 @@ tap, the same one the transport's bookmark gives: nothing moves, so the number
 going up is all there is to say it worked, and it is also worth knowing before
 marking the same minute twice.
 
-The docked bar keeps its own 🔖 left of ⏪10, smaller again than the rewind,
-marking without jumping, since the bar is standing in for the transport. Over
-Home the bar has no 🔖: there the bar is the way *in*, and a mark made from there
-is one made without hearing what's being marked.
+**The docked bar underneath has no 🔖.** It sat a hand's width below this row
+doing the same job, unlabelled, and directly beside play — the easier of the two
+to hit by accident while reaching for pause. Over Home the bar keeps its bookmark:
+there is no floating row there, and the episode plays on while you browse, so it
+is the only way to mark a moment without opening the player first.
 
 ## Moving through a book: by chapter, not by scrollbar
 
@@ -135,7 +145,7 @@ is how you reach the transcript, and that belongs to the scroll view.
 - ⏪10 / ⏩10, not ⏮ / ⏭: spoken audio is missed a sentence at a time, and "what
   did they just say" is what anyone reaches for mid-episode. Moving to another
   episode is a decision made from Up Next, a tap below.
-- 🔖 in the transport, on the docked bar and tapped in the floating row **marks
+- 🔖 in the transport, on Home's bar and tapped in the floating row **marks
   and stays put** — being thrown down the page while listening is the
   interruption the mark was supposed to avoid. Going *to* the marks is the
   [ 🔖 Bookmarks ] pill while the transport is up, and the same floating button
@@ -148,11 +158,12 @@ is how you reach the transcript, and that belongs to the scroll view.
   a decision about the episode, not about this second of it.
 - Any deliberate 12pt drag turns transcript following off — the reader wins
   over the auto-scroll.
-- The docked bar carries 🔖, ⏪10 and play/pause, in that order: pause keeps the
-  far-right seat it's reached for without looking, the rewind is drawn a size
-  smaller so the two don't read as equals, and the bookmark smaller again — it's
-  the one that doesn't change what you're hearing. Same three wherever the bar
-  stands: over Home, on a page pushed off the player, and docked on the player.
+- The bar carries ⏪10 and play/pause: pause keeps the far-right seat it's reached
+  for without looking, and the rewind is drawn a size smaller so the two don't
+  read as equals. 🔖 joins them, smaller again, only where nothing else on screen
+  can mark a moment — over Home and on a page pushed off the player. Docked on the
+  player it would sit a hand's width under the floating Mark pill, doing the same
+  job unlabelled and right beside play.
 - Scrubber holds the finger's position locally while dragging, so the engine's
   0.5s time publishing cannot yank the thumb back.
 
