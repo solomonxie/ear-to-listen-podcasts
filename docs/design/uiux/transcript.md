@@ -21,6 +21,7 @@ Playing, lyric-style. Controls flat above the lines, never in a menu.
 ```
  hold a line   ( ▶ Play from here )  ( 🔖 Add bookmark )
                ( ⧉ Copy )            ( ✎ Edit )
+               ( ✓ Select )
 ```
 
 Add bookmark marks where that line starts and keeps the line itself as the
@@ -215,3 +216,68 @@ for where the episode is described. Inherit (speaker) → album → app default.
   Settings to change that: transcribing spends battery or money, and it's
   asked for here or not at all. Anything transcribed before still shows with
   it off.
+
+## Fixing where the recogniser put the line breaks
+
+A recogniser decides where one line ends on silence, and gets it wrong in both
+directions: a pause mid-sentence becomes two lines, and a speaker who doesn't
+pause becomes one line holding three sentences. Neither is correctable by editing
+text — the boundary itself is the mistake.
+
+`✓ Select` off the hold menu turns the list into a picker.
+
+```
+ ○  12:14  We were talking about                 tap toggles
+ ●  12:19  the default configuration             ← two picked, adjacent
+ ○  12:23  which nobody changes
+
+ [ 2 selected ]                    ( Merge ) ( Split ) ( Done )
+```
+
+- **A non-empty selection *is* the mode.** No separate flag: a mode with nothing
+  picked has no actions, nothing to say, and needs its own way out.
+- **The bar replaces the recogniser row** rather than stacking under it. Offering
+  to start a fresh pass over lines somebody is halfway through rearranging is
+  offering to destroy them.
+- **The tick column appears only while picking.** A permanent one would indent
+  every line of every transcript for a mode almost nobody is in.
+- **Nothing on hold while picking.** Every item in that menu acts on a single
+  line, and the press that opens it is also how you reach for another tick.
+- **Merge wants two or more, adjacent.** Across a gap it would either throw the
+  lines between away or swallow lines nobody picked, so the button goes dim
+  instead of choosing one of those for you. The store refuses it too — a store
+  that trusts callers to have checked corrupts a transcript the first time one
+  doesn't.
+- **Split wants exactly one**, and asks two questions about it.
+
+```
+ Split line
+ First line   │ We were talking about
+ Second line  │ the default configuration
+
+ Where the text divides    ──────●────────   snaps to a word
+ Where the second starts   ────●──────────   12:19.4
+```
+
+Both points are needed and **neither answers for the other**. The text says
+where the sentence divides; the time says when the second half starts being
+spoken, which is what a tap on that line seeks to. Deriving the time from the
+character offset misplaces the seek on any line whose halves aren't read at the
+same pace, which is most of them. The time does *follow* the text point until
+it's set by hand — right far more often than the middle of the line — and then
+stays put, because snapping it back would undo the more careful of the two
+decisions.
+
+Both halves stay on screen throughout. They are the only way to tell a good cut
+from one that leaves a dangling word, and controls without the result make this a
+guess with a confirm button.
+
+The text point snaps to word starts where the language has them and moves one
+character at a time where it doesn't. A Chinese or Japanese line has exactly one
+word by any space-based reckoning — and is the line that needs splitting most,
+since a recogniser with no spaces to go on runs whole sentences together.
+
+Both operations mark what they produce edited, so the next pass can't merge its
+own version of the span back over a boundary somebody set by hand, and both
+rewrite the sidecar and recount the terms — joining two lines can put a name back
+together that was split across them and counted as neither.

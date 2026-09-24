@@ -38,13 +38,22 @@ struct TranscriptPane: View {
     /// bar on purpose: looking for the same phrase again is most of what this is for, and
     /// the bar closes itself the moment a line is picked.
     @State private var isSearching = false
+    /// Which lines are picked out, by start time. Non-empty *is* select mode — a separate
+    /// flag would allow a mode with nothing selected, which has no actions and nothing to
+    /// say, and then needs its own way out.
+    @State private var selection: Set<Double> = []
+    /// The line being cut in two, while the sheet is up.
+    @State private var splitting: TranscriptSegment?
     @State private var searchQuery = ""
     @State private var hits: [TranscriptPhraseSearch.Hit] = []
     @FocusState private var isTypingSearch: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            controls
+            // Replaces the recogniser row rather than stacking under it: the two have
+            // nothing to do with each other, and offering to start a new pass over the
+            // lines someone is halfway through rearranging is offering to destroy them.
+            if selection.isEmpty { controls } else { selectionBar }
             if let status {
                 Text(status).sectionRowSecondary().padding(.horizontal)
             }
@@ -57,6 +66,12 @@ struct TranscriptPane: View {
         // query — `task(id:)` is here to keep it off the body pass, not to wait.
         .task(id: searchQuery) {
             hits = TranscriptPhraseSearch.hits(for: searchQuery, in: transcript.lines)
+        }
+        .sheet(item: $splitting) { segment in
+            SplitPhraseSheet(segment: segment) { offset, time in
+                transcript.splitLine(segment, atCharacter: offset, atTime: time)
+                selection = []
+            }
         }
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
@@ -367,6 +382,53 @@ struct TranscriptPane: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
+    /// What can be done with the picked lines, and the way out. Counting is the first
+    /// thing said: in a list of near-identical short lines, how many are held is the thing
+    /// most easily lost track of.
+    private var selectionBar: some View {
+        HStack(spacing: 10) {
+            Text("\(selection.count) selected")
+                .font(.footnote.weight(.semibold))
+                .monospacedDigit()
+            Spacer(minLength: 0)
+            Button("Merge") { merge() }.disabled(!canMerge)
+            Button("Split") { splitting = selectedLine }.disabled(selectedLine == nil)
+            Button("Done") { selection = [] }
+        }
+        .font(.footnote)
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .padding(.horizontal)
+    }
+
+    private var selectedLine: TranscriptSegment? {
+        guard selection.count == 1, let start = selection.first else { return nil }
+        return transcript.lines.first { $0.start == start }
+    }
+
+    /// Two or more, and adjacent. Merging across a gap would either throw the lines
+    /// between away or swallow lines nobody picked — see `TranscriptStore.merge` — so the
+    /// button goes dim instead of choosing one of those for you.
+    private var canMerge: Bool {
+        guard selection.count > 1 else { return false }
+        let picked = transcript.lines.indices.filter { selection.contains(transcript.lines[$0].start) }
+        guard let first = picked.first, let last = picked.last else { return false }
+        return last - first == picked.count - 1
+    }
+
+    private func toggleSelected(_ segment: TranscriptSegment) {
+        if selection.contains(segment.start) {
+            selection.remove(segment.start)
+        } else {
+            selection.insert(segment.start)
+        }
+    }
+
+    private func merge() {
+        transcript.mergeLines(starts: selection)
+        selection = []
+    }
+
     /// Turns the row into a field, where it stands. **Following goes off**: it would
     /// scroll the line being typed in out from under the keyboard within seconds.
     ///
@@ -418,10 +480,18 @@ struct TranscriptPane: View {
                             TranscriptLine(
                                 segment: segment,
                                 isCurrent: segment.start == spokenStart,
-                                onPlay: { play(from: segment) },
+                                isSelecting: !selection.isEmpty,
+                                isSelected: selection.contains(segment.start),
+                                // A tap means "read along from here" normally and "this
+                                // one" while lines are being picked — the same press, two
+                                // modes, which is why the mode is visible on every row.
+                                onPlay: {
+                                    if selection.isEmpty { play(from: segment) } else { toggleSelected(segment) }
+                                },
                                 onBookmark: { bookmark(segment) },
                                 onCopy: { copy(segment) },
-                                onEdit: { edit(segment) }
+                                onEdit: { edit(segment) },
+                                onSelect: { selection = [segment.start] }
                             )
                             // Nothing but the text, the highlight and the "still being
                             // revised" flag can change a row, so a redraw of the list
@@ -450,14 +520,21 @@ private struct TranscriptLine: View, Equatable {
     /// row's own segment and the pane's state, both of which survive a skipped redraw.
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.segment == rhs.segment && lhs.isCurrent == rhs.isCurrent
+            // Both belong here or the row keeps the skipped redraw and the tick never
+            // appears — the whole list is `.equatable()`, so a selection that isn't part
+            // of equality is a selection that doesn't draw.
+            && lhs.isSelecting == rhs.isSelecting && lhs.isSelected == rhs.isSelected
     }
 
     let segment: TranscriptSegment
     let isCurrent: Bool
+    let isSelecting: Bool
+    let isSelected: Bool
     let onPlay: () -> Void
     let onBookmark: () -> Void
     let onCopy: () -> Void
     let onEdit: () -> Void
+    let onSelect: () -> Void
 
     /// Text and timestamp, and nothing drawn on top of them. Copy and Edit were capsules
     /// that appeared on the tapped row: they sat under the page's scroll handle, took
@@ -470,30 +547,46 @@ private struct TranscriptLine: View, Equatable {
         // completes, which is why the menu — and so Copy and Edit — did nothing. A button
         // with a menu attached is the pattern a List row uses, and the two coexist.
         Button(action: onPlay) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(segment.text)
-                    .font(isCurrent ? .body.weight(.semibold) : .body)
-                    .foregroundStyle(isCurrent ? .primary : .secondary)
-                HStack(spacing: 6) {
-                    Text(Scrubber.formatted(segment.start))
-                    if segment.isEdited {
-                        Label("edited", systemImage: "pencil").labelStyle(.titleAndIcon)
-                    }
+            HStack(alignment: .top, spacing: 10) {
+                // Only while picking. A permanent tick column would indent every line of
+                // every transcript for a mode almost nobody is in.
+                if isSelecting {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.body)
+                        .foregroundStyle(isSelected
+                            ? AnyShapeStyle(Color.accentColor)
+                            : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
                 }
-                .font(.caption2)
-                .foregroundStyle(isCurrent ? .secondary : .tertiary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(segment.text)
+                        .font(isCurrent ? .body.weight(.semibold) : .body)
+                        .foregroundStyle(isCurrent ? .primary : .secondary)
+                    HStack(spacing: 6) {
+                        Text(Scrubber.formatted(segment.start))
+                        if segment.isEdited {
+                            Label("edited", systemImage: "pencil").labelStyle(.titleAndIcon)
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(isCurrent ? .secondary : .tertiary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Play from here", systemImage: "play.fill", action: onPlay)
-            // Second, under Play: holding a line is how you say "this one", and the two
-            // things anyone means by it are hear it again and keep it.
-            Button("Add bookmark", systemImage: "bookmark.fill", action: onBookmark)
-            Button("Copy", systemImage: "doc.on.doc", action: onCopy)
-            Button("Edit", systemImage: "pencil", action: onEdit)
+            // Nothing on hold while picking: every item here acts on one line, and the
+            // press that would open them is also how you'd reach for another tick.
+            if !isSelecting {
+                Button("Play from here", systemImage: "play.fill", action: onPlay)
+                // Second, under Play: holding a line is how you say "this one", and the two
+                // things anyone means by it are hear it again and keep it.
+                Button("Add bookmark", systemImage: "bookmark.fill", action: onBookmark)
+                Button("Copy", systemImage: "doc.on.doc", action: onCopy)
+                Button("Edit", systemImage: "pencil", action: onEdit)
+                Button("Select", systemImage: "checkmark.circle", action: onSelect)
+            }
         }
     }
 }
@@ -532,6 +625,120 @@ private struct InlinePhraseEditor: View {
         .buttonStyle(.plain)
         // The keyboard is the point of tapping Edit — it shouldn't need a second tap.
         .onAppear { isTyping = true }
+    }
+}
+
+/// Where to cut one line in two — in the text and in time, because neither answers for
+/// the other. The text says where the sentence divides; the time says when the second half
+/// starts being spoken, which is what a tap on it will seek to. Guessing the time from the
+/// character offset puts that seek in the wrong place on any line whose halves aren't read
+/// at the same pace, which is most of them.
+///
+/// **Both halves stay on screen.** They are the only way to tell a good cut from one that
+/// leaves a dangling word, and a sheet showing the controls but not the result would make
+/// this a guess with a confirm button.
+///
+/// The text point snaps to word boundaries where the language has them and moves a
+/// character at a time where it doesn't. A Chinese or Japanese transcript has exactly one
+/// "word" by any space-based reckoning — and is the transcript that needs splitting most,
+/// because a recogniser with no spaces to go on runs whole sentences together.
+private struct SplitPhraseSheet: View {
+    let segment: TranscriptSegment
+    let onSplit: (Int, Double) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var offset: Double
+    @State private var time: Double
+    /// Until the time is moved by hand it tracks the text point, which is right far more
+    /// often than the middle of the line. Once it's been set deliberately it stays put —
+    /// having it snap back while the text point is nudged would undo the more careful of
+    /// the two decisions.
+    @State private var hasSetTime = false
+
+    private let characters: [Character]
+    private let boundaries: [Int]
+
+    init(segment: TranscriptSegment, onSplit: @escaping (Int, Double) -> Void) {
+        self.segment = segment
+        self.onSplit = onSplit
+        let characters = Array(segment.text)
+        self.characters = characters
+        self.boundaries = characters.indices.dropFirst().filter {
+            characters[$0 - 1] == " " && characters[$0] != " "
+        }
+        let middle = characters.count / 2
+        let nearest = boundaries.min { abs($0 - middle) < abs($1 - middle) } ?? middle
+        _offset = State(initialValue: Double(max(nearest, 1)))
+        _time = State(initialValue: (segment.start + segment.end) / 2)
+    }
+
+    /// The span, guaranteed non-empty. A `Slider` with an empty range traps, and a stored
+    /// transcript from before `end` existed can still decode with the two equal.
+    private var span: ClosedRange<Double> { segment.start...max(segment.end, segment.start + 0.02) }
+
+    private var cut: Int { snapped(Int(offset.rounded())) }
+    private var before: String { String(characters[..<cut]).trimmingCharacters(in: .whitespaces) }
+    private var after: String { String(characters[cut...]).trimmingCharacters(in: .whitespaces) }
+
+    private func snapped(_ index: Int) -> Int {
+        let bounded = min(max(index, 1), max(characters.count - 1, 1))
+        guard !boundaries.isEmpty else { return bounded }
+        return boundaries.min { abs($0 - bounded) < abs($1 - bounded) } ?? bounded
+    }
+
+    private var proportionalTime: Double {
+        let length = segment.end - segment.start
+        guard length > 0, characters.count > 1 else { return span.lowerBound }
+        return min(max(segment.start + length * Double(cut) / Double(characters.count), span.lowerBound), span.upperBound)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("First line") { Text(before) }
+                Section("Second line") { Text(after) }
+
+                Section {
+                    Slider(value: $offset, in: 1...Double(max(characters.count - 1, 1)), step: 1)
+                } header: {
+                    Text("Where the text divides")
+                } footer: {
+                    Text(boundaries.isEmpty
+                         ? "This line has no spaces to divide on, so it moves one character at a time."
+                         : "Snaps to the start of a word.")
+                }
+
+                Section {
+                    Slider(value: $time, in: span) { editing in
+                        if editing { hasSetTime = true }
+                    }
+                    LabeledContent("Starts at", value: Scrubber.formatted(time))
+                        .monospacedDigit()
+                } header: {
+                    Text("Where the second line starts")
+                } footer: {
+                    Text("What tapping the second line will play from. It follows the text point until you set it yourself.")
+                }
+            }
+            .navigationTitle("Split line")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: cut) { _, _ in
+                guard !hasSetTime else { return }
+                time = proportionalTime
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Split") {
+                        onSplit(cut, time)
+                        dismiss()
+                    }
+                    .disabled(before.isEmpty || after.isEmpty)
+                }
+            }
+        }
     }
 }
 
