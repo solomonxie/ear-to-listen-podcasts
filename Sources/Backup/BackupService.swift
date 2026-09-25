@@ -4,12 +4,14 @@ import GRDB
 enum BackupError: Error, LocalizedError, Equatable {
     case noActiveRemoteProvider
     case noBackupFound
+    case emptyBackup
     case unsupportedVersion(Int)
 
     var errorDescription: String? {
         switch self {
         case .noActiveRemoteProvider: return "Add and activate a cloud source first."
         case .noBackupFound: return "No backup found in that remote source."
+        case .emptyBackup: return "That backup is empty — your library was left alone."
         case .unsupportedVersion(let version): return "This backup (v\(version)) is newer than this app supports."
         }
     }
@@ -233,7 +235,7 @@ struct BackupService {
                 try playlistStore.create(Playlist(id: entry.id, name: entry.name, source: entry.source, createdAt: entry.createdAt))
             }
             for ref in entry.tracks {
-                guard let track = try trackStore.find(providerID: ref.providerID, filePath: ref.filePath) else {
+                guard let track = try track(named: ref.providerID, at: ref.filePath) else {
                     unmatched += 1
                     continue
                 }
@@ -247,7 +249,7 @@ struct BackupService {
         // sensible row to pre-seed from a path alone. What doesn't match yet is counted,
         // not dropped: `PendingRestore` comes back for it after the next sync.
         for entry in snapshot.episodes {
-            guard var track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else {
+            guard var track = try track(named: entry.providerID, at: entry.filePath) else {
                 awaiting += 1
                 continue
             }
@@ -272,7 +274,7 @@ struct BackupService {
         // to hang it off otherwise. Merging rather than overwriting means a correction
         // made on this device outlives a restore of an older backup.
         for entry in snapshot.transcripts {
-            guard let track = try trackStore.find(providerID: entry.providerID, filePath: entry.filePath) else {
+            guard let track = try track(named: entry.providerID, at: entry.filePath) else {
                 awaiting += 1
                 continue
             }
@@ -294,6 +296,19 @@ struct BackupService {
             playlistsImported: snapshot.playlists.count, tracksMatched: matched,
             tracksUnmatched: unmatched, editsAwaitingSync: awaiting
         )
+    }
+
+    /// The episode an entry names. (providerID, filePath) is the pair every backup keys
+    /// by, but the id half only survives if the source row itself did: reconnecting a
+    /// bucket after a reinstall used to mint a new one, and every edit, favourite,
+    /// bookmark and transcript in the archive then waited for a match that could never
+    /// happen. So a miss falls back to the path alone — which is what the listener would
+    /// call the same episode — and only when it names exactly one here. Two sources
+    /// holding the same path is the one case where guessing is worse than waiting.
+    private func track(named providerID: String, at filePath: String) throws -> Track? {
+        if let exact = try trackStore.find(providerID: providerID, filePath: filePath) { return exact }
+        let byPath = try trackStore.find(filePath: filePath)
+        return byPath.count == 1 ? byPath.first : nil
     }
 
     /// Bookmarks are matched on the moment they mark, so restoring the same archive
@@ -348,6 +363,16 @@ struct BackupService {
         try archive(try makeSnapshot())
     }
 
+    /// Whether an archive read back off a destination holds anything — what keeps a
+    /// restore from taking the copy a wipe left behind while good ones sit beside it.
+    /// Reads the JSON only: nothing is unpacked and nothing is written.
+    func holdsData(_ archive: Data) -> Bool {
+        guard let entry = ZipArchive.read(archive).first(where: { $0.name == "snapshot.json" }),
+              let snapshot = try? decode(entry.data)
+        else { return false }
+        return !snapshot.isEmpty
+    }
+
     func upload(_ archive: Data) async throws {
         try await activeRemoteProvider().uploadBackup(archive)
     }
@@ -360,7 +385,7 @@ struct BackupService {
     /// `FirstRunRestore`'s call, and it wants the bytes so it can keep them for
     /// `PendingRestore`.
     func downloadRemoteArchive() async throws -> Data? {
-        try await activeRemoteProvider().downloadBackup()
+        try await activeRemoteProvider().downloadBackup(acceptable: holdsData)
     }
 
     /// The first connected bucket that takes writes, whichever cloud it's in — the

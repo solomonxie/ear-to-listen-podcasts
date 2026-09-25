@@ -89,6 +89,10 @@ struct ImageFileStore: Sendable {
     }
 
     private static func write(_ jpeg: Data, in directory: URL) throws -> String {
+        // The folder is made in `init`, but Remove All App Data takes it away under a
+        // live instance — without this, every photo saved after a reset fails until the
+        // app is relaunched.
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let fileName = "\(UUID().uuidString).jpg"
         try jpeg.write(to: directory.appendingPathComponent(fileName))
         return fileName

@@ -171,6 +171,15 @@ struct LibrarySnapshot: Codable {
     var episodes: [EpisodeEntry] = []
     var transcripts: [TranscriptEntry] = []
 
+    /// Nothing in here worth keeping. An empty library makes a perfectly valid archive,
+    /// and shipping one is how a wipe erases every good copy it was meant to be insurance
+    /// against: it takes the day's key in the bucket, prunes iCloud's ten oldest to make
+    /// room, and under a pre-deletion name it outranks every dated archive there is.
+    var isEmpty: Bool {
+        playlists.isEmpty && providers.isEmpty && importSources.isEmpty
+            && artists.isEmpty && episodes.isEmpty && transcripts.isEmpty
+    }
+
     init(
         exportedAt: Date,
         playlists: [PlaylistEntry],

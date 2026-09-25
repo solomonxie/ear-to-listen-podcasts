@@ -90,24 +90,34 @@ enum CloudDrive {
 
     /// The backup, waiting for iCloud to fetch it if it's still a placeholder — which, on
     /// the fresh install this exists for, it always is.
-    static func latestBackup(timeout: TimeInterval = 30) async throws -> Data? {
+    ///
+    /// `acceptable` is what makes the newest name a candidate rather than the answer: a
+    /// copy that reads back holding nothing is skipped and the one under it is tried, so
+    /// an archive of an empty library can't stand in front of the real one.
+    static func latestBackup(
+        timeout: TimeInterval = 30,
+        acceptable: (Data) -> Bool = { !$0.isEmpty }
+    ) async throws -> Data? {
         guard let documents = documentsURL() ?? documentsURL(of: legacyContainerID) else {
             throw CloudDriveError.unavailable
         }
-        guard let fileName = newestBackupFileName(in: documents) else {
-            // Nothing under the new name — look where the old one kept them.
-            guard let legacy = documentsURL(of: legacyContainerID), legacy != documents,
-                  let fileName = newestBackupFileName(in: legacy)
-            else { return nil }
-            return try await read(fileName, in: legacy, timeout: timeout)
+        var folders = [documents]
+        if let legacy = documentsURL(of: legacyContainerID), legacy != documents { folders.append(legacy) }
+        // One deadline for the whole walk, not one per candidate: a folder of ten
+        // placeholders iCloud can't fetch would otherwise hold a first launch for minutes.
+        let deadline = Date().addingTimeInterval(timeout)
+        for folder in folders {
+            for fileName in backupFileNames(in: folder) {
+                guard let archive = await read(fileName, in: folder, until: deadline) else { continue }
+                if acceptable(archive) { return archive }
+            }
         }
-        return try await read(fileName, in: documents, timeout: timeout)
+        return nil
     }
 
-    private static func read(_ fileName: String, in documents: URL, timeout: TimeInterval) async throws -> Data? {
+    private static func read(_ fileName: String, in documents: URL, until deadline: Date) async -> Data? {
         let url = documents.appending(path: fileName)
         try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-        let deadline = Date().addingTimeInterval(timeout)
         repeat {
             if let archive = try? Data(contentsOf: url), !archive.isEmpty { return archive }
             try? await Task.sleep(for: .milliseconds(500))
@@ -115,16 +125,17 @@ enum CloudDrive {
         return nil
     }
 
-    /// The newest day's archive that's there — or the one older builds wrote, if that's
-    /// all there is. Undownloaded files show up under a hidden placeholder name rather
-    /// than their own, so those count too; the read below is what waits for the bytes.
-    private static func newestBackupFileName(in documents: URL) -> String? {
+    /// Everything there worth trying, best first — and the file older builds wrote last,
+    /// if it's there at all. Undownloaded files show up under a hidden placeholder name
+    /// rather than their own, so those count too; the read above waits for the bytes.
+    private static func backupFileNames(in documents: URL) -> [String] {
         let listed = (try? FileManager.default.contentsOfDirectory(atPath: documents.path)) ?? []
-        let names = listed.map(realName(ofPlaceholder:))
-        if let newest = BackupArchiveName.newest(among: names) { return newest }
+        var names = BackupArchiveName.preferred(among: listed.map(realName(ofPlaceholder:)))
         let legacy = documents.appending(path: legacyBackupFileName)
-        guard FileManager.default.fileExists(atPath: legacy.path) || placeholderExists(for: legacy) else { return nil }
-        return legacyBackupFileName
+        if FileManager.default.fileExists(atPath: legacy.path) || placeholderExists(for: legacy) {
+            names.append(legacyBackupFileName)
+        }
+        return names
     }
 
     /// `.202609-ear-to-listen.zip.icloud` is how iCloud names a file it hasn't fetched yet.
