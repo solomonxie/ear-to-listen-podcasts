@@ -1,9 +1,13 @@
 import PhotosUI
 import SwiftUI
 
-/// Everything known about what's playing — the tags that came off the file, where the
-/// file actually lives, and the dates that explain why it looks the way it does. Grouped
-/// cards rather than one flat list, so "who/what" doesn't blur into "which file".
+/// Everything known about what's playing — the tags that came off the file, and where the
+/// file actually lives. Grouped cards rather than one flat list, so "who/what" doesn't
+/// blur into "which file".
+///
+/// The dates are not here. Synced-at, changed-on-storage, details-edited: five rows
+/// answering a question nobody was asking while listening, and all five are still in the
+/// database for the things that do ask.
 ///
 /// The Episode card is the editor too: every field is a live control, showing even when
 /// empty, and a change lands as soon as you leave the field. Correcting a title is the
@@ -21,8 +25,9 @@ struct EpisodeDetailsPane: View {
     @State private var playlistNames: [String] = []
     @State private var terms: [TermCount] = []
     @State private var showingAddToPlaylist = false
-    @State private var connectionLabel: String?
-    @State private var downloadedBytes: Int64?
+    /// Every place this episode's audio is — usually one, more when the same recording
+    /// turned up in a second bucket or under a second name.
+    @State private var copies: [FileLocation] = []
 
     @State private var title = ""
     /// Which unfolding control is open — one at a time, across the whole card.
@@ -42,6 +47,8 @@ struct EpisodeDetailsPane: View {
 
     @State private var artworkItem: PhotosPickerItem?
     @State private var isSuggesting = false
+    /// Bumped to set the summary card going once the fields are in — see `suggestButton`.
+    @State private var analyzeRequest = 0
     @State private var suggestionError: String?
     @State private var readiness: EpisodeMetadataSuggester.Readiness = .noTranscript
 
@@ -96,37 +103,6 @@ struct EpisodeDetailsPane: View {
                     .font(.footnote)
                     .lineLimit(2...8)
                     .focused($focusedField, equals: .notes)
-            }
-
-            DetailCard("File") {
-                LinkRow(
-                    "Source", value: connectionLabel ?? "—",
-                    route: connectionLabel == nil ? nil
-                        : .browse(providerID: track.providerID, folder: nil, highlight: nil)
-                )
-                // Both open the bucket browser — the folder to look around it, the file
-                // to land on this episode in it. Seeing where something actually lives is
-                // most of why anyone reads this card.
-                LinkRow(
-                    "Folder", value: folder ?? "—",
-                    route: .browse(providerID: track.providerID, folder: folder, highlight: nil)
-                )
-                LinkRow(
-                    "File", value: (track.filePath as NSString).lastPathComponent,
-                    route: .browse(
-                        providerID: track.providerID, folder: folder, highlight: track.filePath
-                    )
-                )
-                DetailRow("Format", fileExtension)
-                DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
-            }
-
-            DetailCard("Dates") {
-                DetailRow("Changed on storage", Self.formatted(track.remoteModifiedAt))
-                DetailRow("Last synced", Self.formatted(track.updatedAt))
-                DetailRow("Last played", Self.formatted(track.lastPlayedAt) ?? "Never")
-                DetailRow("Details edited", Self.formatted(track.metadataEditedAt))
-                DetailRow("Stopped at", track.positionMs.map { Scrubber.formatted(Double($0) / 1000) })
             }
 
         }
@@ -206,6 +182,19 @@ struct EpisodeDetailsPane: View {
         )
 
         DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
+        DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
+        // Where the file actually is, written the way that cloud's own tooling writes it,
+        // and a tap from the bucket browser standing on it. One row per copy: the same
+        // recording in two buckets is one episode with two addresses, not two episodes.
+        ForEach(Array(copies.enumerated()), id: \.element.id) { index, copy in
+            LinkRow(
+                index == 0 ? "File" : "Also at",
+                value: copy.label,
+                route: .browse(
+                    providerID: copy.providerID, folder: copy.folder, highlight: copy.filePath
+                )
+            )
+        }
         // Above Topics, which belong to the album: this is the one membership that's
         // about *this episode* and the one you decide while listening to it.
         PlaylistsRow(names: playlistNames, onAdd: { showingAddToPlaylist = true })
@@ -244,9 +233,14 @@ struct EpisodeDetailsPane: View {
         Divider()
         // Last in the card and the only part of it written in sentences — the fields
         // above are what the episode *is*, this is what it says.
-        EpisodeSummaryView(track: track, onAnalyzed: { loadTerms() })
+        EpisodeSummaryView(track: track, analyzeRequest: analyzeRequest, onAnalyzed: { loadTerms() })
     }
 
+    /// **The page's one ✨.** It used to be two — this one for the fields, another in the
+    /// summary's own heading — which asked the reader to know which half of "read this
+    /// episode and tell me about it" each sparkle did. They are one pass now: the details,
+    /// then the summary and the terms under it.
+    ///
     /// Up in the card's heading rather than at the foot of the fields it fills in. Down
     /// there it sat a few points under the row of artwork buttons, which made one more
     /// capsule in a row of capsules — and it isn't an artwork control at all.
@@ -255,7 +249,7 @@ struct EpisodeDetailsPane: View {
             Task { await suggest() }
         } label: {
             HStack(spacing: 5) {
-                Label("Suggest with AI", systemImage: "sparkles")
+                Label("Read with AI", systemImage: "sparkles")
                 if isSuggesting { ProgressView().controlSize(.mini) }
             }
             .font(.caption)
@@ -263,18 +257,26 @@ struct EpisodeDetailsPane: View {
         .disabled(isSuggesting || !readiness.isReady)
     }
 
-    private var folder: String? {
-        let folder = (track.filePath as NSString).deletingLastPathComponent
-        return folder.isEmpty ? nil : folder
-    }
-
-    private var fileExtension: String? {
-        let ext = (track.filePath as NSString).pathExtension
-        return ext.isEmpty ? nil : ext.uppercased()
-    }
-
-    private static func formatted(_ date: Date?) -> String? {
-        date.map { $0.formatted(date: .abbreviated, time: .shortened) }
+    /// One listing of the sources, not one per copy: an episode with three addresses
+    /// otherwise asked the same question three times.
+    private func loadCopies() -> [FileLocation] {
+        let records = (try? providerStore.all()) ?? []
+        let files = (try? TrackFileStore(dbQueue: DatabaseManager.shared.dbQueue).all(forTrack: track.id)) ?? []
+        // The copy it plays from reads first, whatever order they were found in.
+        let ordered = files.sorted { left, _ in
+            left.providerID == track.providerID && left.filePath == track.filePath
+        }
+        return ordered.compactMap { file in
+            guard let record = records.first(where: { $0.id == file.providerID }) else { return nil }
+            let uri = ProviderManager.shared.fileURI(for: record, filePath: file.filePath)
+                ?? "\(record.label)/\(file.filePath)"
+            return FileLocation(
+                id: file.id, providerID: file.providerID, filePath: file.filePath,
+                // Said on the row rather than left to be discovered by tapping it: a link
+                // to a file that isn't there any more is worse than a plain line of text.
+                label: file.isLost ? "\(uri) — missing" : uri
+            )
+        }
     }
 
     /// The wheels speak `Int?`; the fields behind them are still the strings the save
@@ -295,8 +297,7 @@ struct EpisodeDetailsPane: View {
         topics = track.albumID.flatMap { try? libraryStore.topics(forAlbum: $0) } ?? []
         loadPlaylists()
         loadTerms()
-        connectionLabel = (try? providerStore.all())?.first { $0.id == track.providerID }?.label
-        downloadedBytes = await AudioCache.shared.cachedSize(providerID: track.providerID, filePath: track.filePath)
+        copies = loadCopies()
         // Half-typed words outrank whatever the database says — a sync landing mid-edit
         // must not pull the text out from under the cursor. A different track is the one
         // exception: those words have nowhere left to go.
@@ -433,6 +434,10 @@ struct EpisodeDetailsPane: View {
             suggestionError = error.localizedDescription
         }
         isSuggesting = false
+        // The summary card runs the second half — it owns that text and what's on screen
+        // of it, so asking it to go is a truer move than writing the row from out here.
+        // It declines by itself if there's already a summary or no transcript to read.
+        analyzeRequest += 1
     }
 
     private func trimmed(_ value: String) -> String? {
@@ -653,20 +658,29 @@ private struct LinkRow: View {
 
 }
 
-/// The episode's language, with the list of what this phone can actually recognise
-/// offline. Its own view so the twice-a-second churn of a transcription run redraws one
-/// row rather than every field on the page.
+/// One place the episode's audio is, ready to draw: the address as its own cloud writes
+/// it, and what the bucket browser needs to open standing on it.
+private struct FileLocation: Identifiable {
+    let id: String
+    let providerID: String
+    let filePath: String
+    let label: String
+
+    var folder: String? {
+        let folder = (filePath as NSString).deletingLastPathComponent
+        return folder.isEmpty ? nil : folder
+    }
+}
+
+/// The episode's language. Its own view so the twice-a-second churn of a transcription
+/// run redraws one row rather than every field on the page.
 private struct EpisodeLanguageRow: View {
     @Binding var open: String?
     @ObservedObject private var transcript = TranscriptRunner.shared
-    @ObservedObject private var languages = OnDeviceLanguages.shared
 
     var body: some View {
         // No label column here — the field draws its own row, like the wheels beside it.
-        EpisodeLanguageField(
-            playing: transcript, languages: languages, id: "language", open: $open
-        )
-        .equatable()
-        .task { await languages.refreshIfNeeded() }
+        EpisodeLanguageField(playing: transcript, id: "language", open: $open)
+            .equatable()
     }
 }
