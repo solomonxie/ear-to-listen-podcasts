@@ -13,17 +13,10 @@ struct RealPlayerView: View {
     /// The mark just made, lit for a moment so the jump to Notes lands on something the
     /// eye can find.
     @State private var highlightedBookmark: String?
-    /// How far the page has been pulled past its own top, so it can shrink under the
-    /// finger on the way out instead of just vanishing at the threshold.
-    /// How far a left-edge swipe has carried the page across. The page follows the finger,
-    /// so the gesture is answered while it happens rather than only when it ends.
-    @State private var dragBack: CGFloat = 0
-    @State private var isDismissing = false
-    /// Raised by the scrubber for as long as the bar is armed. The bar runs the full
-    /// width of the page, so its left end sits inside the strip the back swipe watches —
-    /// and a seek started there used to slide the whole player off instead of moving the
-    /// playhead.
-    @State private var isScrubbing = false
+    /// Raised by the scrubber while the bar is armed. The bar runs the full width of the
+    /// page, so its left end sits inside the strip the back swipe watches — and a seek
+    /// started there used to slide the whole player off instead of moving the playhead.
+    @State private var scrub = ScrubState()
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
     /// at the transport, and text that scrolls itself the moment you arrive takes the
@@ -50,15 +43,6 @@ struct RealPlayerView: View {
     /// about to land, and a timecode wouldn't — none of these three is a moment.
     private static let pageAnchors = [topAnchor, notesAnchor, transcriptAnchor]
     private static let pageAnchorLabels = ["Top", "Notes", "Text"]
-    /// How far a left-edge swipe has to travel before the page goes back. About a thumb's
-    /// width of deliberate movement: short enough to feel like the system's own gesture,
-    /// long enough that a horizontal wobble during a scroll doesn't fire it.
-    private static let swipeToGoBack: CGFloat = 80
-    /// Where that swipe has to start — the same strip iOS reserves for its own back gesture.
-    /// Edge-only, because the page is full of things that answer a horizontal drag of their
-    /// own, the scrubber most of all, and a swipe recognised anywhere would compete with all
-    /// of them for every stroke.
-    private static let backSwipeEdge: CGFloat = 60
     /// Read, never observed. A running transcription republishes several times a second,
     /// and observing it here redrew the artwork, the transport and the whole details card
     /// along with the text — which is what made the page flash while transcribing. The
@@ -186,11 +170,10 @@ struct RealPlayerView: View {
         // walks into subfolders with plain links of its own, and a per-destination inset
         // never saw those.
         .safeAreaInset(edge: .bottom) { pushedPageBar }
-        // Slides with the finger, so the swipe is answered as it happens rather than only
-        // once it passes the threshold — and springs back when it doesn't.
-        .offset(x: dragBack)
-        .animation(.interactiveSpring(response: 0.3), value: dragBack)
-        .simultaneousGesture(backSwipe)
+        // Stood down the moment anything is pushed: a pushed page has the system's own
+        // back swipe, and a page that can't be swiped back from is a page with no way out
+        // for anyone who doesn't look for the ‹.
+        .swipeToGoBack(canBegin: { path.isEmpty && !scrub.isLive }, perform: close)
     }
 
     /// Split out of `body` purely so the type-checker can cope — it timed out once the
@@ -209,7 +192,7 @@ struct RealPlayerView: View {
                 }
                 Scrubber(
                     currentTime: engine.currentTime, duration: engine.duration,
-                    isScrubbing: $isScrubbing
+                    scrub: $scrub
                 ) { engine.seek(to: $0) }
                     .padding(.horizontal)
                 transport(for: track, proxy: proxy)
@@ -235,13 +218,19 @@ struct RealPlayerView: View {
                     .id(Self.transcriptAnchor)
 
                 TranscriptPane(
-                    currentTime: engine.currentTime,
+                    spokenStart: transcript.currentLine(at: engine.currentTime)?.start,
                     scrollProxy: proxy,
                     isFollowing: $isFollowingTranscript,
                     onFollow: { follow(proxy) },
                     onPause: { if engine.isPlaying { engine.pause() } },
                     isEditingLine: $isEditingLine
-                ) { engine.seek(to: $0) }
+                ) { time in
+                    engine.seek(to: time)
+                    // Picking a line means "read along from here", so it plays from there.
+                    // A seek that left a paused page paused sent the reader back to the
+                    // transport to hear the line they had just chosen.
+                    if !engine.isPlaying { engine.resume() }
+                }
 
             }
             .padding(.vertical)
@@ -627,43 +616,6 @@ struct RealPlayerView: View {
         .buttonStyle(.plain)
     }
 
-    /// Watches the page go by, for one purpose: whether it's being pulled off the top.
-    /// Swipe in from the left edge to go back, the way every pushed page in the app already
-    /// works. This one is a `fullScreenCover`, so it gets no such gesture for free — the page
-    /// used to leave by being pulled down past its own top instead, a card dismissal on a
-    /// screen that is otherwise navigated, with an arrow pointing the opposite way from every
-    /// other back button here.
-    ///
-    /// **Only at the stack root.** Pushed pages have the system's own back swipe; letting
-    /// this one through as well would take the whole player out from under a speaker page
-    /// somebody meant to step back from.
-    ///
-    /// **Never while the scrubber is armed.** Edge-only isn't enough on its own: the bar
-    /// reaches within a margin of the left edge, so seeking to the first minute or two
-    /// starts the stroke inside that strip. Arming takes a deliberate hold the back swipe
-    /// can't survive (it moves at once, failing the press), so a raised flag means the
-    /// finger is plainly on the bar and the page has no claim on the stroke.
-    private var backSwipe: some Gesture {
-        DragGesture(minimumDistance: 20)
-            .onChanged { value in
-                guard path.isEmpty, !isScrubbing,
-                      value.startLocation.x < Self.backSwipeEdge,
-                      // Horizontal dominance, or a diagonal flick while reading drags the
-                      // page sideways on its way down.
-                      value.translation.width > abs(value.translation.height) else { return }
-                dragBack = max(0, value.translation.width)
-            }
-            .onEnded { _ in
-                guard dragBack > 0 else { return }
-                guard dragBack > Self.swipeToGoBack, !isDismissing else {
-                    dragBack = 0
-                    return
-                }
-                isDismissing = true
-                close()
-            }
-    }
-
     /// Docked, so play/pause and position are reachable from anywhere on a page that is
     /// now arbitrarily long. Reading forty minutes of transcript must never mean scrolling
     /// back to the top to stop playback — tapping the bar is the way back up.
@@ -869,7 +821,9 @@ struct Scrubber: View {
     let duration: TimeInterval
     /// Published to the page rather than kept here: the page's own left-edge back swipe
     /// overlaps the left end of this bar and has to stand down while it's being used.
-    @Binding var isScrubbing: Bool
+    @Binding var scrub: ScrubState
+
+    private var isScrubbing: Bool { scrub.isArmed }
     let onSeek: (TimeInterval) -> Void
 
     /// Long enough not to fire on a thumb passing through, short enough that reaching for
@@ -923,18 +877,23 @@ struct Scrubber: View {
                     take(hold: true)
                 case .second(true, let drag):
                     take(hold: true)
-                    if let drag { dragTime = time(atX: drag.location.x, width: width) }
+                    if let drag {
+                        dragTime = time(atX: drag.location.x, width: width)
+                        scrub.touch()
+                    }
                 default:
                     break
                 }
             }
             .onEnded { value in
+                // Lowered first and unconditionally: an end that arrives with nothing
+                // armed still has to leave the bar unarmed.
+                defer { scrub.disarm() }
                 guard isScrubbing else { return }
                 if case .second(true, let drag?) = value {
                     dragTime = time(atX: drag.location.x, width: width)
                 }
                 onSeek(dragTime)
-                isScrubbing = false
             }
     }
 
@@ -943,7 +902,7 @@ struct Scrubber: View {
     private func take(hold: Bool) {
         guard hold, !isScrubbing else { return }
         dragTime = currentTime
-        isScrubbing = true
+        scrub.arm()
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     }
 
@@ -1008,6 +967,39 @@ private extension View {
 
 /// Where the player can push to. A route rather than a view, so the stack has a path the
 /// docked bar can read and pop.
+/// Whether the scrubber is being used right now, for the one other thing on the page that
+/// has to know: the back swipe, which otherwise reads a seek that starts near the left
+/// edge as "take this page away".
+///
+/// **It expires.** A plain flag is raised by the hold and lowered by the end of the
+/// stroke — and a stroke cancelled part-way through, which this page invites by redrawing
+/// itself twice a second while playing and faster while a transcription runs, has no end.
+/// One left raised is a player that can never be swiped away again for the rest of the
+/// session, with nothing on screen to say why. A stamp that has to be refreshed can only
+/// ever be wrong for a moment: a real scrub touches it as the finger moves, and anything
+/// that stopped touching it was over two seconds ago.
+struct ScrubState: Equatable {
+    private(set) var isArmed = false
+    private var at = Date.distantPast
+
+    /// Armed, and touched recently enough to still be a finger on the bar.
+    var isLive: Bool { isArmed && Date().timeIntervalSince(at) < 2 }
+
+    mutating func arm() {
+        isArmed = true
+        at = Date()
+    }
+
+    mutating func touch() {
+        at = Date()
+    }
+
+    mutating func disarm() {
+        isArmed = false
+        at = .distantPast
+    }
+}
+
 enum PlayerRoute: Hashable {
     case speaker(String)
     case album(String)
