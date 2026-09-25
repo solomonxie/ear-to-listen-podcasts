@@ -30,7 +30,10 @@ enum FirstRunRestore {
         // build — is not a failure and not something to report on a first launch. Leave
         // the flag alone and try again next time, while the library is still empty.
         guard await CloudDrive.status().isReady else { return }
-        guard let archive = try? await CloudDrive.latestBackup() else { return }
+        // The newest name isn't always the one to take: a wipe of an already-empty
+        // library used to leave an archive holding nothing, sorting above every copy
+        // that still had the library in it.
+        guard let archive = try? await CloudDrive.latestBackup(acceptable: BackupService().holdsData) else { return }
         guard apply(archive) else { return }
         await MainActor.run { AutoBackup.shared.enableCloudDriveAfterRestore() }
     }

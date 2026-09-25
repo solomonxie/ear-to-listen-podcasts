@@ -3,12 +3,19 @@ import GRDB
 
 /// Putting an archive back, without the library it lands on being the thing at risk.
 ///
-/// A restore builds a **new dataset** — an empty, migrated database of its own — fills it
-/// from the archive, and only then puts it in place. Nothing of the live library is
-/// touched until that has all worked, and the library it replaced is kept aside as a file
-/// (`LocalBackups`), so "that was the wrong archive" is one button, not a lost evening.
-/// The dangerous direction is a bad local state overwriting a good copy somewhere else,
-/// and this is the tier that makes undoing it possible without reaching for one.
+/// **Onto a library with episodes in it, the archive is merged in** (`BackupService.apply`,
+/// which only ever fills in what isn't there). A swap would be the destructive move here:
+/// an archive carries no episodes or albums — a sync rebuilds those — so replacing a
+/// working library with one costs every episode on screen and the source row that knows
+/// how to fetch them back, to put back edits that could have landed exactly where they
+/// were. The tier-1 copies are taken first either way, so "that was the wrong archive" is
+/// still one button.
+///
+/// **Onto an empty library it builds a new dataset** — an empty, migrated database of its
+/// own — fills it from the archive, and only then puts it in place. Nothing of the live
+/// library is touched until that has all worked. With nothing on screen to lose, this is
+/// the cleaner of the two: playlists and sources come back under the ids the archive
+/// names, rather than merging into whatever a half-finished sync has made so far.
 ///
 /// The swap goes through the connection the app already holds (`replaceContents(with:)`)
 /// rather than pointing everything at a new file, so nothing is left reading a database
@@ -31,36 +38,54 @@ enum DatasetRestore {
         return (url, at)
     }
 
-    /// Restores `archive` into a dataset of its own and switches to it. Returns what
-    /// landed and what's waiting on a sync, same as a merge-in-place would.
+    /// Puts `archive` back — merged into the library that's here, or swapped in as a
+    /// dataset of its own if there isn't one. Returns what landed and what's waiting on
+    /// a sync.
     @discardableResult
     static func restore(_ archive: Data) throws -> BackupImportResult {
         let live = BackupService()
         let snapshot = try live.unarchive(archive)
+        // An archive of an empty library is what a wipe leaves behind, and it decodes
+        // perfectly well. Swapping it in is a wipe dressed as a restore.
+        guard !snapshot.isEmpty else { throw BackupError.emptyBackup }
 
-        // Both copies of what's about to be replaced: the zip for anywhere, the database
-        // file for here — a swap back, with no matching or re-linking in between.
+        // Both copies of what's about to change: the zip for anywhere, the database file
+        // for here — a swap back, with no matching or re-linking in between.
         if let current = try? live.currentArchive() {
             LocalBackups.writeBefore("restore", archive: current)
         }
         let preservedName = (BackupArchiveName.beforeOperation("restore") as NSString).deletingPathExtension + ".sqlite"
         let preserved = LocalBackups.copyDatabase(named: preservedName)
 
+        let result = try hasALibrary() ? live.apply(snapshot) : swapIn(snapshot)
+        if let preserved {
+            UserDefaults.standard.set(preserved.lastPathComponent, forKey: previousKey)
+            UserDefaults.standard.set(Date(), forKey: previousAtKey)
+        }
+        // Whatever named an episode this device hasn't fetched yet waits here and is
+        // re-applied after each sync — on an empty library, that's all of it.
+        if result.awaitingSync > 0 { PendingRestore.save(archive) } else { PendingRestore.clear() }
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+        return result
+    }
+
+    /// Whether there is anything on screen to lose. A library part-way through its first
+    /// sync counts: those episodes are what the archive's edits attach to.
+    private static func hasALibrary() throws -> Bool {
+        let dbQueue = DatabaseManager.shared.dbQueue
+        return try !TrackStore(dbQueue: dbQueue).all(includingLost: true).isEmpty
+            || !PlaylistStore(dbQueue: dbQueue).all().isEmpty
+    }
+
+    /// The archive into a database of its own, then that database into place. Only onto an
+    /// empty library, where there is nothing the swap can take away.
+    private static func swapIn(_ snapshot: LibrarySnapshot) throws -> BackupImportResult {
         let stagingURL = URL.applicationSupportDirectory.appending(path: "restoring.sqlite")
         remove(stagingURL)
         defer { remove(stagingURL) }
         let staged = try DatabaseManager.makeDataset(at: stagingURL)
         let result = try BackupService(dbQueue: staged).apply(snapshot)
-
         try DatabaseManager.shared.replaceContents(with: staged)
-        if let preserved {
-            UserDefaults.standard.set(preserved.lastPathComponent, forKey: previousKey)
-            UserDefaults.standard.set(Date(), forKey: previousAtKey)
-        }
-        // Everything in the new dataset is waiting on a sync — it holds what the archive
-        // held and nothing else, so no episode file is matched yet.
-        if result.awaitingSync > 0 { PendingRestore.save(archive) } else { PendingRestore.clear() }
-        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
         return result
     }
 

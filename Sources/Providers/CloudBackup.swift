@@ -44,14 +44,18 @@ extension CloudProvider {
     /// either folder — not necessarily this month's, since a device coming back from a
     /// reinstall may not have backed up yet — and falls back to the keys older builds
     /// wrote so those copies still restore.
-    func downloadBackup() async throws -> Data? {
+    ///
+    /// `acceptable` decides whether a copy that downloaded is the one to use. A newer
+    /// archive holding nothing — what a wipe of an already-empty library used to leave —
+    /// is skipped for the one under it rather than returned as the answer.
+    func downloadBackup(acceptable: (Data) -> Bool = { !$0.isEmpty }) async throws -> Data? {
         var names: [String] = []
         for folder in [backupFolder, legacyBackupFolder] {
             names += ((try? await listFiles(inFolder: folder)) ?? []).map(\.path)
         }
-        let newest = BackupArchiveName.newest(among: names)
-        for key in (newest.map { [$0] } ?? []) + legacyBackupKeys {
-            if let data = try? await download(fileID: key) { return data }
+        for key in BackupArchiveName.preferred(among: names) + legacyBackupKeys {
+            guard let data = try? await download(fileID: key) else { continue }
+            if acceptable(data) { return data }
         }
         return nil
     }

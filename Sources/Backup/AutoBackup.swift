@@ -76,6 +76,31 @@ final class AutoBackup: ObservableObject {
         isCloudDriveEnabled = true
     }
 
+    /// Lets go of everything read out of the defaults a reset just wiped. Without it this
+    /// object outlives the erase still switched on, and its gate reads a missing mark as
+    /// "never shipped one" — so a minute later the empty library goes up over the copies
+    /// the reset made on the way out.
+    ///
+    /// The keys are removed again after the assignments, because assigning writes them
+    /// back: an erased install has never answered "back this up?", and the next connection
+    /// added should still be able to ask.
+    func forgetSettings() {
+        isEnabled = false
+        isCloudDriveEnabled = false
+        lastBackupAt = nil
+        lastCloudDriveBackupAt = nil
+        lastError = nil
+        cloudDriveError = nil
+        stop()
+        let defaults = UserDefaults.standard
+        for key in [
+            Self.bucketEnabledKey, Self.bucketLastKey, Self.bucketMarkKey,
+            Self.cloudDriveEnabledKey, Self.cloudDriveLastKey, Self.cloudDriveMarkKey,
+        ] {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
     /// Called on every foreground, because the fix for a blocked iCloud row happens in
     /// the Settings app — the listener leaves, changes it, and comes back to a row that
     /// has to agree with what they just did.
@@ -113,7 +138,13 @@ final class AutoBackup: ObservableObject {
     @discardableResult
     func backUpBeforeDeletion() async throws -> String {
         let service = BackupService()
-        let archive = try service.currentArchive()
+        let snapshot = try service.makeSnapshot()
+        // Erasing a library that is already empty has nothing to preserve, and the copy
+        // it would write is the most dangerous file this app can make: a pre-deletion
+        // name outranks every dated archive on every destination, so an empty one hides
+        // the real recovery copy for good.
+        guard !snapshot.isEmpty else { return "Nothing to back up — this library is already empty." }
+        let archive = try service.archive(snapshot)
         let name = BackupArchiveName.preDeletion()
         guard LocalBackups.writePreDeletion(archive, named: name) != nil else {
             throw CocoaError(.fileWriteUnknown)
@@ -176,7 +207,12 @@ final class AutoBackup: ObservableObject {
         let service = BackupService()
         let archive: Data
         do {
-            archive = try service.currentArchive()
+            let snapshot = try service.makeSnapshot()
+            // A library with nothing in it is a state to be recovered from, not one to
+            // ship: today's key in the bucket is taken by it, and ten empty days prune
+            // iCloud clean of every copy that still had the library in it.
+            guard !snapshot.isEmpty else { return }
+            archive = try service.archive(snapshot)
         } catch {
             if toBucket { lastError = error.localizedDescription }
             if toCloudDrive { cloudDriveError = error.localizedDescription }

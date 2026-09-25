@@ -121,8 +121,6 @@ enum LocalBackups {
     private static func isOurs(_ name: String) -> Bool {
         let stem = (name as NSString).deletingPathExtension
         if name.hasSuffix(".jsonl") { return stem.count == 8 && stem.allSatisfy(\.isNumber) }
-        return BackupArchiveName.matches(stem + ".zip")
-            || stem.hasPrefix("\(BackupArchiveName.suffix)-before-")
-            || stem.hasPrefix("\(BackupArchiveName.suffix)-\(BackupArchiveName.preDeletionMarker)-")
+        return BackupArchiveName.ours(stem + ".zip")
     }
 }
