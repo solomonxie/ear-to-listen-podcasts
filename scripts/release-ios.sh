@@ -1,16 +1,21 @@
 #!/bin/sh
-# Archive a Release build, export a signed .ipa, and upload it to App Store Connect.
+# Archive a Release build and hand it to App Store Connect in one go.
 #
 # The user-visible version is MARKETING_VERSION in project.yml; the build number is a
 # timestamp, so every upload sorts above the last one without editing anything.
+#
+# By default the export *is* the upload (`destination: upload` in ExportOptions.plist),
+# signed and delivered through the Apple ID in Xcode > Settings > Accounts. That account
+# is already there to sign the build, so a release needs no second credential and nothing
+# secret on disk.
 #
 # Secrets come from the environment (or .env.local, which is gitignored) — never git:
 #   DEVELOPMENT_TEAM          required, Apple Developer Team ID
 #   ASC_KEY_ID + ASC_ISSUER_ID            upload with an App Store Connect API key
 #   APPLE_ID   + APP_SPECIFIC_PASSWORD    upload with an Apple ID instead
-# With neither pair set the script stops after the .ipa and tells you where it is.
-# NO_UPLOAD=1 stops there too, with the credentials still set — for when the upload
-# is going through Transporter by hand.
+# Either pair takes over from the Xcode account — that is the headless path, for a machine
+# nobody is signed in on. NO_UPLOAD=1 stops at the .ipa, for an upload going through
+# Transporter by hand.
 #
 # Usage: scripts/release-ios.sh [build-number]
 set -e
@@ -29,6 +34,15 @@ EXPORT_PLIST=$OUT/ExportOptions.plist
 mkdir -p "$OUT"
 sed "s/REPLACE_WITH_YOUR_TEAM_ID/$DEVELOPMENT_TEAM/" ExportOptions.plist > "$EXPORT_PLIST"
 
+if [ -n "$NO_UPLOAD" ] ||
+   { [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ]; } ||
+   { [ -n "$APPLE_ID" ] && [ -n "$APP_SPECIFIC_PASSWORD" ]; }; then
+  UPLOAD_ON_EXPORT=
+  /usr/libexec/PlistBuddy -c "Set :destination export" "$EXPORT_PLIST"
+else
+  UPLOAD_ON_EXPORT=1
+fi
+
 xcodegen generate
 
 xcodebuild -project "$SCHEME.xcodeproj" -scheme "$SCHEME" \
@@ -40,6 +54,11 @@ xcodebuild -project "$SCHEME.xcodeproj" -scheme "$SCHEME" \
 xcodebuild -exportArchive -archivePath "$ARCHIVE" \
   -exportOptionsPlist "$EXPORT_PLIST" -exportPath "$OUT/export" \
   -allowProvisioningUpdates
+
+if [ -n "$UPLOAD_ON_EXPORT" ]; then
+  echo "Uploaded build $BUILD. App Store Connect takes 15-60 min to finish processing it."
+  exit 0
+fi
 
 IPA=$OUT/export/$SCHEME.ipa
 du -h "$IPA"

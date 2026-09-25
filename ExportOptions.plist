@@ -6,6 +6,12 @@
 <dict>
     <key>method</key>
     <string>app-store-connect</string>
+    <!-- Delivered by the export itself, through the Apple ID in Xcode > Settings >
+         Accounts — no API key, no app-specific password, and no .ipa to carry by hand.
+         `scripts/release-ios.sh` flips this to `export` when it's told to stop at the
+         file instead. -->
+    <key>destination</key>
+    <string>upload</string>
     <key>teamID</key>
     <string>REPLACE_WITH_YOUR_TEAM_ID</string>
     <key>signingStyle</key>
@@ -18,5 +24,9 @@
     <true/>
     <key>stripSwiftSymbols</key>
     <true/>
+    <!-- The build number is the timestamp the script passed in. Left to itself, Xcode
+         picks its own and the upload no longer matches what was archived. -->
+    <key>manageAppVersionAndBuildNumber</key>
+    <false/>
 </dict>
 </plist>
