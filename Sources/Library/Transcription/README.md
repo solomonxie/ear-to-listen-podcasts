@@ -31,11 +31,22 @@ not left in the text.
 A sidecar is imported **only when nothing is stored locally**. It never overwrites work
 done in the app, least of all corrections.
 
-### Writing — strict
+### Writing — strict, and only when asked
 
 `.vtt` (read back) plus `.lrc` (courtesy copy for lyrics-aware players), both next to the
-audio, on any provider whose `isWritable` is true. Written after a correction immediately,
-and at the end of a pass otherwise — not per window.
+audio, on any provider whose `isWritable` is true.
+
+**Only from the Upload button** (`TranscriptRunner.uploadTranscript`). Nothing writes on a
+change: a correction, a join, a split and a whole fresh pass all stop at this device's
+database. These are the listener's files — possibly written by them, edited by them, or
+shared — and overwriting one as a side effect of tidying a line here isn't a trade to make
+on their behalf. The button asks first, in the words of what is lost.
+
+**Everywhere the episode is, in every format that's there.** An episode can live in more
+than one bucket (`TrackFile`), each with its own sidecars. At every copy the `.vtt` and
+`.lrc` go up; any other transcript format already beside the audio — `.srt`, `.json`,
+`.txt` — is rewritten too, so a stale copy of the same transcript can't sit next to the
+fresh one. Formats that aren't there are not created.
 
 **Why VTT is canonical.** `TranscriptCoverage` decides what still needs transcribing from
 segment *spans*, and the empty segments `TranscriptRunner.padded` writes are how "this

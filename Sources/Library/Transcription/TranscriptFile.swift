@@ -22,6 +22,13 @@ enum TranscriptFile {
     static let canonicalExtension = "vtt"
     static let companionExtension = "lrc"
 
+    /// Every format this app can write. The two above go up whenever a transcript is
+    /// uploaded; the rest are only ever *rewritten* — an episode whose folder already
+    /// holds an `.srt` gets that file replaced too, because a stale copy of the same
+    /// transcript, in another format, beside the fresh one is exactly the confusion
+    /// uploading is meant to end.
+    static let writableExtensions = [canonicalExtension, companionExtension, "srt", "json", "txt"]
+
     /// `podcast/ep1.mp3` → `podcast/ep1.vtt`. Matching on basename is the whole convention.
     ///
     /// A path with nothing left once its extension is off has no sidecar name to give, and
@@ -271,6 +278,62 @@ enum TranscriptFile {
         return out.joined(separator: "\n")
     }
 
+    /// The transcript in one format, by extension. Anything unrecognised comes back as
+    /// VTT — the canonical one, and the only one read back.
+    static func text(
+        from segments: [TranscriptSegment], extension ext: String,
+        title: String? = nil, artist: String? = nil
+    ) -> String {
+        switch ext.lowercased() {
+        case companionExtension: return lrc(from: segments, title: title, artist: artist)
+        case "srt": return srt(from: segments)
+        case "json": return json(from: segments)
+        case "txt": return plainText(from: segments)
+        default: return vtt(from: segments)
+        }
+    }
+
+    static func contentType(for ext: String) -> String {
+        switch ext.lowercased() {
+        case canonicalExtension: return "text/vtt"
+        case "json": return "application/json"
+        case "srt": return "application/x-subrip"
+        default: return "text/plain"
+        }
+    }
+
+    /// Numbered cues and a comma before the milliseconds — the two things that make this
+    /// SRT rather than VTT. Our `NOTE` extras have nowhere to go in this format, which is
+    /// why it is a rewrite target and never the copy read back.
+    static func srt(from segments: [TranscriptSegment]) -> String {
+        var out: [String] = []
+        for (index, segment) in TranscriptSegment.normalized(segments).filter({ !$0.text.isEmpty }).enumerated() {
+            out.append("\(index + 1)")
+            out.append("\(srtTime(segment.start)) --> \(srtTime(segment.end))")
+            out.append(segment.text)
+            out.append("")
+        }
+        return out.joined(separator: "\n")
+    }
+
+    /// The Podcast Index transcript shape, the one `parseJSON` reads.
+    static func json(from segments: [TranscriptSegment]) -> String {
+        let lines = TranscriptSegment.normalized(segments).filter { !$0.text.isEmpty }
+        let body = lines.map { segment in
+            ["startTime": segment.start, "endTime": segment.end, "body": segment.text] as [String: Any]
+        }
+        let document: [String: Any] = ["version": "1.0.0", "segments": body]
+        guard let data = try? JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else { return "" }
+        return text
+    }
+
+    /// No timings at all — the words, in order. What `parsePlainText` spreads back over
+    /// the episode when it's the only file there.
+    static func plainText(from segments: [TranscriptSegment]) -> String {
+        TranscriptSegment.normalized(segments).filter { !$0.text.isEmpty }.map(\.text).joined(separator: "\n")
+    }
+
     // MARK: Time formats
 
     static func vttTime(_ seconds: Double) -> String {
@@ -280,6 +343,10 @@ enum TranscriptFile {
         let secs = Int(total) % 60
         let millis = Int((total - total.rounded(.down)) * 1000)
         return String(format: "%02d:%02d:%02d.%03d", hours, minutes, secs, millis)
+    }
+
+    static func srtTime(_ seconds: Double) -> String {
+        vttTime(seconds).replacingOccurrences(of: ".", with: ",")
     }
 
     /// LRC counts in minutes, which for a podcast routinely runs past 59 — `[83:20.50]` is

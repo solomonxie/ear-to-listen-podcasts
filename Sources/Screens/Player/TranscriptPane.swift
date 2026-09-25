@@ -56,6 +56,9 @@ struct TranscriptPane: View {
     @State private var selection: Set<Double> = []
     /// The line being cut in two, while the sheet is up.
     @State private var splitting: TranscriptSegment?
+    /// Whether the upload warning is up. Never skipped: the files it writes over are the
+    /// listener's own, and may be ones they wrote.
+    @State private var isConfirmingUpload = false
     @State private var searchQuery = ""
     @State private var hits: [TranscriptPhraseSearch.Hit] = []
     @FocusState private var isTypingSearch: Bool
@@ -89,6 +92,17 @@ struct TranscriptPane: View {
         }
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
+        }
+        // Said before it happens, in the words of what is lost: whatever those files say
+        // now is what goes, and this app has no copy of it.
+        .confirmationDialog(
+            "Overwrite the transcript in your storage?",
+            isPresented: $isConfirmingUpload
+        ) {
+            Button("Overwrite", role: .destructive) { transcript.uploadTranscript() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This writes what's on this page over the transcript files sitting beside the audio — every copy of this episode, and every transcript format already there. Whatever they say now is gone.")
         }
         // Asked before a penny is spent, and before an existing transcript is written
         // over — the second one matters more, because it's the one that can't be undone
@@ -145,15 +159,6 @@ struct TranscriptPane: View {
             }
 
             HStack(spacing: 10) {
-                // First, because it's the cheapest and most likely to be what you want:
-                // a transcript someone already made beats recognising the audio again.
-                TranscriptControlButton(
-                    title: transcript.isFetchingRemote ? "Fetching…" : "Remote",
-                    systemImage: transcript.isFetchingRemote ? "arrow.down.circle.dotted" : "arrow.down.circle",
-                    isOn: transcript.isFetchingRemote
-                ) { transcript.loadRemoteTranscript() }
-                    .disabled(transcript.track == nil || transcript.isRunning || transcript.isFetchingRemote)
-
                 ForEach(TranscriptionEngineKind.allCases, id: \.self) { engine in
                     engineButton(engine)
                 }
@@ -162,6 +167,17 @@ struct TranscriptPane: View {
                 // saying no to explicitly: starting a fresh pass over lines somebody is
                 // halfway through rearranging is offering to destroy them.
                 .disabled(!selection.isEmpty)
+
+                // After the two that make a transcript, because it is what you do once
+                // you have one — and the only control on this page that touches the files
+                // in someone's own storage. Everything else here writes to the phone and
+                // stops, which is why this one is a press with a warning on it.
+                TranscriptControlButton(
+                    title: transcript.isUploading ? "Uploading…" : "Upload",
+                    systemImage: transcript.isUploading ? "arrow.up.circle.dotted" : "arrow.up.circle",
+                    isOn: transcript.isUploading
+                ) { isConfirmingUpload = true }
+                    .disabled(transcript.lines.isEmpty || transcript.isRunning || transcript.isUploading)
 
                 TranscriptControlButton(
                     title: isFollowing ? "Following" : "Follow",
@@ -284,8 +300,8 @@ struct TranscriptPane: View {
     private func confirmMessage(for engine: TranscriptionEngineKind) -> String {
         guard transcript.wouldReplaceExisting else { return estimate(for: engine) }
         var text = """
-        This replaces the transcript you already have and uploads the new one over the \
-        copy beside the audio in your storage. Lines you corrected by hand are kept.
+        This replaces the transcript you already have on this phone. Lines you corrected by \
+        hand are kept, and nothing in your storage changes until you press Upload.
         """
         if engine.pricePerMinuteUSD != nil { text += "\n\n" + estimate(for: engine) }
         return text
@@ -342,6 +358,7 @@ struct TranscriptPane: View {
             // saying: it is working through the episode and it will be done when it's done.
             return "Transcribing the whole episode · \(percent)"
         }
+        if let report = transcript.uploadReport { return "\(report)" }
         if transcript.lines.isEmpty { return nil }
         // Nothing was spent making this one — it was already in the bucket.
         if transcript.isFromSidecar { return "From a transcript file beside the episode" }
