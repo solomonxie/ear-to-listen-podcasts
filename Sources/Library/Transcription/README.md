@@ -119,8 +119,9 @@ two such tokens, so a Latin word inside a Chinese sentence keeps its air.
 `supportsOnDeviceRecognition` is read but not obeyed. It is a false negative often enough
 — phones with the language's dictation model installed still report `false` — that
 refusing on it alone means refusing audio the phone can handle. The attempt runs anyway,
-and only a failed attempt is reported as a missing model. `OnDeviceLanguages` sweeps the
-flag across every supported locale to mark the language picker, which is advisory.
+and only a failed attempt is reported as a missing model. The language picker says nothing
+about it either: a flag that lies, on a fact that changes under the reader, isn't worth a
+word in every row.
 
 ## Layout
 
@@ -128,5 +129,5 @@ Platform-neutral (portable as-is): `TranscriptCoverage` (gaps, windows, abandon 
 `TranscriptLines` (word grouping), `TranscriptFile` (parse and serialize),
 `TranscriptSidecar`, `TranscriptRunner`, `TranscriptionEngine`.
 
-Apple-specific: `AppleSpeechTranscriber` (`import Speech`), `OnDeviceLanguages`
-(`import Speech`), `AudioWindowFile` (`import AVFoundation`). A port replaces these.
+Apple-specific: `AppleSpeechTranscriber` (`import Speech`), `AudioWindowFile`
+(`import AVFoundation`). A port replaces these.

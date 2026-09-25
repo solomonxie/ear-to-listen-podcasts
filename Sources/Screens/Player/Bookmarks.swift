@@ -114,7 +114,7 @@ struct NotesPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("NOTES").sectionHeading()
+                Text("BOOKMARKS AND NOTES").sectionHeading()
                 Spacer()
                 if !bookmarks.isEmpty {
                     Text(countLabel).font(.caption).foregroundStyle(.secondary)

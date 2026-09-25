@@ -28,11 +28,17 @@ struct EpisodeSummaryView: View {
     /// Refreshed when the pass finishes, so the Terms card below redraws with it.
     var onAnalyzed: (() -> Void)?
 
+    /// Bumped by the one ✨ on the page, up in the Episode card's heading. The summary
+    /// has no button of its own: two sparkles on one page, doing two halves of the same
+    /// "read this episode and tell me about it", is a choice nobody wanted to make.
+    var analyzeRequest: Int = 0
+
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let summarizer = EpisodeSummarizer()
 
-    init(track: Track, onAnalyzed: (() -> Void)? = nil) {
+    init(track: Track, analyzeRequest: Int = 0, onAnalyzed: (() -> Void)? = nil) {
         self.track = track
+        self.analyzeRequest = analyzeRequest
         self.onAnalyzed = onAnalyzed
         _summary = State(initialValue: track.summary ?? "")
     }
@@ -52,8 +58,8 @@ struct EpisodeSummaryView: View {
                 editor
             } else if summary.isEmpty {
                 Text(hasTranscript
-                     ? "Nothing yet. ✨ writes one from the transcript — what it is, the moments worth going back to, and where it lands."
-                     : "Nothing yet. Transcribe this episode and ✨ will write one; or write your own.")
+                     ? "Nothing yet. ✨ above writes one from the transcript — what it is, the moments worth going back to, and where it lands."
+                     : "Nothing yet. Transcribe this episode and ✨ above will write one; or write your own.")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .onTapGesture { beginEditing() }
@@ -63,6 +69,14 @@ struct EpisodeSummaryView: View {
             if let errorMessage {
                 Text(errorMessage).font(.caption).foregroundStyle(.orange)
             }
+        }
+        // Nothing is written over: a summary already here — typed or generated — is what
+        // the page shows, and the run that produced it only fills a blank. To have
+        // another written, clear this one and ask again, which is the same rule the
+        // fields above follow.
+        .task(id: analyzeRequest) {
+            guard analyzeRequest > 0, summary.isEmpty, hasTranscript, !isRunning else { return }
+            await analyze()
         }
         // A track can change under the page while it plays on.
         .onChange(of: track.id) { _, _ in
@@ -80,28 +94,14 @@ struct EpisodeSummaryView: View {
         HStack(spacing: 8) {
             Text("SUMMARY").sectionHeading()
             Spacer()
-            if isOpen, !isEditing, !summary.isEmpty {
+            if isRunning {
+                ProgressView().controlSize(.mini)
+            } else if isOpen, !isEditing, !summary.isEmpty {
                 Button("Edit") { beginEditing() }
                     .font(.caption.weight(.semibold))
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
             }
-            // Writes over what's there, which is why it's a glyph beside the text rather
-            // than the thing your thumb lands on: a summary someone typed shouldn't be
-            // one tap from being replaced by a model's.
-            Button {
-                Task { await analyze() }
-            } label: {
-                if isRunning {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Image(systemName: "sparkles").font(.caption.weight(.semibold))
-                }
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(hasTranscript ? Color.accentColor : .secondary)
-            .disabled(!hasTranscript || isRunning || isEditing)
-            .accessibilityLabel("Write this summary from the transcript")
         }
     }
 
