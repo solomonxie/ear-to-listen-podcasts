@@ -17,10 +17,11 @@ help:
 	@echo "make gen          regenerate the Xcode project from project.yml"
 	@echo ""
 	@echo "Signing reads DEVELOPMENT_TEAM from the environment or .env.local (gitignored)."
-	@echo "Uploading needs one of these pairs in the same place:"
+	@echo "Uploading goes through the Apple ID in Xcode > Settings > Accounts — the same"
+	@echo "one that signs the build, so a release needs nothing else. For a machine nobody"
+	@echo "is signed in on, set one of these pairs in the same place instead:"
 	@echo "  ASC_KEY_ID + ASC_ISSUER_ID          App Store Connect API key"
 	@echo "  APPLE_ID   + APP_SPECIFIC_PASSWORD  Apple ID"
-	@echo "With neither, make release stops at the .ipa and prints its path."
 
 gen:
 	xcodegen generate
