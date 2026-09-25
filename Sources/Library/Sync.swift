@@ -89,6 +89,7 @@ enum SyncEngineError: Error, LocalizedError {
 struct SyncEngine {
     let dbQueue: DatabaseQueue
     private var trackStore: TrackStore { TrackStore(dbQueue: dbQueue) }
+    private var trackFileStore: TrackFileStore { TrackFileStore(dbQueue: dbQueue) }
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
     private var jobStore: SyncJobStore { SyncJobStore(dbQueue: dbQueue) }
@@ -131,8 +132,11 @@ struct SyncEngine {
             // Pausing mid-pass stops it where it stands rather than letting the rest of a
             // long listing run to completion.
             if SyncQueuePolicy.isPaused { break }
-            let existing = try? trackStore.find(providerID: record.id, filePath: file.path)
-            guard existing == nil || existing!.isLost || hasChanged(existing!, file) else { continue }
+            // Asked of the copies, not of the episodes: a file this bucket holds may be
+            // the second copy of an episode that plays from another bucket, and that is
+            // still a file this pass already knows.
+            let known = (try? trackFileStore.find(providerID: record.id, filePath: file.path)) ?? nil
+            guard known == nil || known!.isLost || hasChanged(known!, file) else { continue }
             // Already waiting or being worked — leave it where it is in the queue.
             if (try? jobStore.hasUnfinished(providerID: record.id, filePath: file.path)) == true { continue }
 
@@ -197,7 +201,9 @@ struct SyncEngine {
 
     /// Imports one already-listed file if not yet known locally (or refreshes its
     /// size/hash/lost state if it's changed since); shared by the whole-bucket `sync`
-    /// above and the per-file sync queue. Returns whether a new track was added.
+    /// above and the per-file sync queue. Returns whether a new track was added — a file
+    /// that turns out to be a copy of an episode already here adds none, it adds a place
+    /// that episode lives (`TrackStore.upsert`).
     @discardableResult
     func importFileIfNeeded(
         _ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider,
@@ -217,11 +223,11 @@ struct SyncEngine {
         // "episode" that then syncs forever.
         guard FileKind(path: file.path).isPlayable else { return false }
 
-        if let existing = try trackStore.find(providerID: record.id, filePath: file.path) {
-            if existing.isLost || hasChanged(existing, file) {
-                try trackStore.refresh(
-                    id: existing.id, sizeBytes: file.sizeBytes,
-                    contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt, isLost: false
+        if let known = try trackFileStore.find(providerID: record.id, filePath: file.path) {
+            if known.isLost || hasChanged(known, file) {
+                try trackStore.refreshCopy(
+                    known, sizeBytes: file.sizeBytes, contentHash: file.contentHash,
+                    remoteModifiedAt: file.modifiedAt
                 )
             }
             return false
@@ -268,14 +274,14 @@ struct SyncEngine {
     /// sync. Prefers the provider's content fingerprint (no download needed) since same-path,
     /// same-size overwrites are otherwise invisible; falls back to the remote modified date,
     /// then to size, for providers/files that don't supply a hash.
-    private func hasChanged(_ existing: Track, _ file: CloudFile) -> Bool {
+    private func hasChanged(_ known: TrackFile, _ file: CloudFile) -> Bool {
         if let newHash = file.contentHash {
-            return newHash != existing.contentHash
+            return newHash != known.contentHash
         }
-        if let newModifiedAt = file.modifiedAt, let oldModifiedAt = existing.remoteModifiedAt {
+        if let newModifiedAt = file.modifiedAt, let oldModifiedAt = known.remoteModifiedAt {
             return newModifiedAt != oldModifiedAt
         }
-        return existing.sizeBytes != file.sizeBytes
+        return known.sizeBytes != file.sizeBytes
     }
 
     private func extractMetadata(provider: CloudProvider, fileID: String) async -> (title: String?, artist: String?, album: String?, durationMs: Int?, year: Int?) {

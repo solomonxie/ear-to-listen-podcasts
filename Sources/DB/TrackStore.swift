@@ -4,17 +4,25 @@ import GRDB
 struct TrackStore {
     let dbQueue: DatabaseQueue
 
-    /// A track's real identity is (providerID, filePath) — `id` is a UUID minted by
-    /// whoever imported it first. Two importers racing on the same file each mint their
-    /// own, so this resolves against the natural key inside the write transaction: the
-    /// second one updates the existing row instead of tripping
-    /// `idx_tracks_provider_path`.
+    /// A file's identity is (providerID, filePath) — `id` is a UUID minted by whoever
+    /// imported it first. Two importers racing on the same file each mint their own, so
+    /// this resolves against the natural key inside the write transaction: the second one
+    /// updates the existing row instead of tripping `idx_tracks_provider_path`.
+    ///
+    /// **An episode's identity is the recording, not the file.** A file whose fingerprint
+    /// matches one already here is the same episode arriving a second time — copied into
+    /// another bucket, or sitting in this one under another name. It becomes another place
+    /// that episode lives rather than a second episode, so one recording has one set of
+    /// marks, one transcript and one row in every list. Which is resolved in the same
+    /// transaction, and for the same reason: two sync queues draining at once.
     func upsert(_ track: Track, artistName: String?, albumName: String?) throws {
         try dbQueue.write { db in
             var row = track
-            if let existing = try Track
+            row.fingerprint = FileFingerprint.of(track)
+            let atSamePath = try Track
                 .filter(Column("providerID") == track.providerID && Column("filePath") == track.filePath)
-                .fetchOne(db), existing.id != track.id {
+                .fetchOne(db)
+            if let existing = atSamePath, existing.id != track.id {
                 row.id = existing.id
                 // Playback progress and hand-made marks belong to the listener, not to
                 // the import.
@@ -22,14 +30,48 @@ struct TrackStore {
                 row.lastPlayedAt = existing.lastPlayedAt
                 row.isFavorite = existing.isFavorite
                 row.listenLater = existing.listenLater
+            } else if atSamePath == nil, try Track.fetchOne(db, key: track.id) == nil,
+                      let twin = try sameRecording(as: row, in: db) {
+                // A file the library has never seen, and the same recording as one it
+                // has. Only a genuinely new arrival gets here: an edit being saved back
+                // onto a row that already exists must never be answered by filing it
+                // under some other episode.
+                try Self.link(row, toTrack: twin.id, in: db)
+                return
             }
             try row.save(db)
+            try Self.link(row, toTrack: row.id, in: db)
             try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [row.id])
             try db.execute(
                 sql: "INSERT INTO trackSearchIndex(trackID, title, artist, album) VALUES (?, ?, ?, ?)",
                 arguments: [row.id, row.title, artistName ?? "", albumName ?? ""]
             )
         }
+    }
+
+    /// An episode already here that is this same recording under a different name or in a
+    /// different bucket. Deliberately not the episode itself: the caller has already
+    /// missed on (providerID, filePath), so anything this finds is a second copy.
+    private func sameRecording(as track: Track, in db: Database) throws -> Track? {
+        guard let fingerprint = track.fingerprint else { return nil }
+        return try Track.filter(Column("fingerprint") == fingerprint && Column("id") != track.id).fetchOne(db)
+    }
+
+    /// Records where a file is, under the episode it belongs to. Written for every import,
+    /// including the first — the episode's own copy is a row here too, so "every place
+    /// this lives" is one query rather than a row plus a special case.
+    private static func link(_ track: Track, toTrack trackID: String, in db: Database) throws {
+        let existing = try TrackFile
+            .filter(Column("providerID") == track.providerID && Column("filePath") == track.filePath)
+            .fetchOne(db)
+        var file = existing ?? TrackFile(trackID: trackID, providerID: track.providerID, filePath: track.filePath)
+        file.trackID = trackID
+        file.sizeBytes = track.sizeBytes
+        file.contentHash = track.contentHash
+        file.transcriptPath = track.transcriptPath
+        file.remoteModifiedAt = track.remoteModifiedAt
+        file.isLost = track.isLost
+        try file.save(db)
     }
 
     /// An episode edited by hand, as opposed to one a sync found. Same write as `upsert`,
@@ -41,15 +83,71 @@ struct TrackStore {
         ChangeLog.record("episodes", key: track.filePath, old: old, new: track, in: dbQueue)
     }
 
+    /// Disconnecting a source takes its files with it — but an episode that also lives in
+    /// a source still connected isn't gone, it just lives in one fewer place. Those move
+    /// onto a copy that's left rather than being deleted along with everything else.
     func deleteAll(forProvider providerID: String) throws {
         try dbQueue.write { db in
-            let ids = try String.fetchAll(db, sql: "SELECT id FROM tracks WHERE providerID = ?", arguments: [providerID])
-            if !ids.isEmpty {
-                let placeholders = ids.map { _ in "?" }.joined(separator: ",")
-                try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID IN (\(placeholders))", arguments: StatementArguments(ids))
+            let affected = try TrackFile.filter(Column("providerID") == providerID).fetchAll(db)
+            try TrackFile.filter(Column("providerID") == providerID).deleteAll(db)
+
+            for trackID in Set(affected.map(\.trackID)) {
+                guard var track = try Track.fetchOne(db, key: trackID) else { continue }
+                let remaining = try TrackFile.filter(Column("trackID") == trackID).fetchAll(db)
+                guard let moved = remaining.first(where: { !$0.isLost }) ?? remaining.first else {
+                    try Self.forget(trackID, in: db)
+                    continue
+                }
+                guard track.providerID == providerID else { continue }
+                Self.point(&track, at: moved)
+                try track.save(db)
             }
-            try Track.filter(Column("providerID") == providerID).deleteAll(db)
+
+            // Rows from before an episode knew where all its copies were, and anything a
+            // failed import left pointing at this source.
+            let orphans = try String.fetchAll(
+                db, sql: "SELECT id FROM tracks WHERE providerID = ?", arguments: [providerID]
+            )
+            for id in orphans { try Self.forget(id, in: db) }
         }
+    }
+
+    private static func forget(_ trackID: String, in db: Database) throws {
+        try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [trackID])
+        _ = try Track.deleteOne(db, key: trackID)
+    }
+
+    /// One copy, after a listing found it changed — or found it back. The episode follows
+    /// it: if this is the copy it plays from, the episode's own columns move with it, and
+    /// if the episode was lost, a copy that's returned is what it plays from now.
+    func refreshCopy(_ file: TrackFile, sizeBytes: Int64?, contentHash: String?, remoteModifiedAt: Date?) throws {
+        try dbQueue.write { db in
+            guard var copy = try TrackFile.fetchOne(db, key: file.id) else { return }
+            copy.sizeBytes = sizeBytes
+            copy.contentHash = contentHash
+            copy.remoteModifiedAt = remoteModifiedAt
+            copy.isLost = false
+            try copy.update(db)
+
+            guard var track = try Track.fetchOne(db, key: copy.trackID) else { return }
+            let isPlayedCopy = track.providerID == copy.providerID && track.filePath == copy.filePath
+            guard isPlayedCopy || track.isLost else { return }
+            Self.point(&track, at: copy)
+            track.fingerprint = FileFingerprint.of(track)
+            try track.save(db)
+        }
+    }
+
+    /// Plays this episode from that copy from now on.
+    private static func point(_ track: inout Track, at file: TrackFile) {
+        track.providerID = file.providerID
+        track.filePath = file.filePath
+        track.sizeBytes = file.sizeBytes
+        track.contentHash = file.contentHash
+        track.transcriptPath = file.transcriptPath
+        track.remoteModifiedAt = file.remoteModifiedAt
+        track.isLost = file.isLost
+        track.updatedAt = Date()
     }
 
     func all() throws -> [Track] {
@@ -129,9 +227,34 @@ struct TrackStore {
         ChangeLog.record("episodes", key: id, old: ["listenLater": was], new: ["listenLater": listenLater], in: dbQueue)
     }
 
+    /// The episode stored at this file — whichever of its copies that is. A second copy
+    /// isn't on the episode row, so asking `tracks` alone would answer "nothing here"
+    /// about a file the library knows perfectly well, and the bucket browser would
+    /// refuse to play it.
     func find(providerID: String, filePath: String) throws -> Track? {
         try dbQueue.read { db in
-            try Track.filter(Column("providerID") == providerID && Column("filePath") == filePath).fetchOne(db)
+            if let track = try Track
+                .filter(Column("providerID") == providerID && Column("filePath") == filePath)
+                .fetchOne(db) { return track }
+            guard let copy = try TrackFile
+                .filter(Column("providerID") == providerID && Column("filePath") == filePath)
+                .fetchOne(db) else { return nil }
+            return try Track.fetchOne(db, key: copy.trackID)
+        }
+    }
+
+    /// Every episode sitting at this path, whichever source brought it in. The provider
+    /// id a backup names is the row that existed when it was written, and reconnecting a
+    /// bucket after a reinstall makes a new one — so a restore that misses on the pair
+    /// comes here before giving up.
+    func find(filePath: String) throws -> [Track] {
+        try dbQueue.read { db in
+            var found = try Track.filter(Column("filePath") == filePath).fetchAll(db)
+            let ids = try TrackFile.filter(Column("filePath") == filePath).fetchAll(db).map(\.trackID)
+            for id in ids where !found.contains(where: { $0.id == id }) {
+                if let track = try Track.fetchOne(db, key: id) { found.append(track) }
+            }
+            return found
         }
     }
 
@@ -249,20 +372,6 @@ struct TrackStore {
         return (folders.sorted(), tracks)
     }
 
-    /// Refreshes just the sync-derived columns for an already-known track, leaving its
-    /// title/artist/album metadata (and search index) untouched.
-    func refresh(id: String, sizeBytes: Int64?, contentHash: String?, remoteModifiedAt: Date?, isLost: Bool) throws {
-        try dbQueue.write { db in
-            guard var track = try Track.fetchOne(db, key: id) else { return }
-            track.sizeBytes = sizeBytes
-            track.contentHash = contentHash
-            track.remoteModifiedAt = remoteModifiedAt
-            track.isLost = isLost
-            track.updatedAt = Date()
-            try track.save(db)
-        }
-    }
-
     /// Marks tracks for this provider as lost if their file path wasn't in the latest listing.
     /// Returns the number newly marked lost.
     /// Points each track at the transcript now sitting beside it, and un-points the ones
@@ -270,6 +379,14 @@ struct TrackStore {
     /// audio, so nothing else in a sync pass would ever notice it.
     func updateTranscriptPaths(providerID: String, sidecars: [String: String]) throws {
         try dbQueue.write { db in
+            // Per copy: two buckets holding the same episode can each have a transcript
+            // beside it, and an upload writes over both.
+            for var file in try TrackFile.filter(Column("providerID") == providerID).fetchAll(db) {
+                let found = sidecars[file.filePath]
+                guard found != file.transcriptPath else { continue }
+                file.transcriptPath = found
+                try file.update(db)
+            }
             let tracks = try Track.filter(Column("providerID") == providerID).fetchAll(db)
             for var track in tracks {
                 let found = sidecars[track.filePath]
@@ -307,17 +424,36 @@ struct TrackStore {
         }
     }
 
+    /// An episode is lost when every copy of it is. One that has gone from this bucket but
+    /// still sits in another isn't missing — it moves onto the copy that's still there, so
+    /// it keeps playing instead of greying out.
     func markLost(providerID: String, keepingPaths paths: Set<String>) throws -> Int {
         try dbQueue.write { db in
-            let candidates = try Track
+            let present = try TrackFile
                 .filter(Column("providerID") == providerID && Column("isLost") == false)
                 .fetchAll(db)
+            var touched: Set<String> = []
+            for var file in present where !paths.contains(file.filePath) {
+                file.isLost = true
+                try file.update(db)
+                touched.insert(file.trackID)
+            }
+
             var count = 0
-            for var track in candidates where !paths.contains(track.filePath) {
-                track.isLost = true
-                track.updatedAt = Date()
+            for trackID in touched {
+                guard var track = try Track.fetchOne(db, key: trackID) else { continue }
+                let copies = try TrackFile.filter(Column("trackID") == trackID).fetchAll(db)
+                guard let alive = copies.first(where: { !$0.isLost }) else {
+                    guard !track.isLost else { continue }
+                    track.isLost = true
+                    track.updatedAt = Date()
+                    try track.save(db)
+                    count += 1
+                    continue
+                }
+                guard track.providerID != alive.providerID || track.filePath != alive.filePath else { continue }
+                Self.point(&track, at: alive)
                 try track.save(db)
-                count += 1
             }
             return count
         }

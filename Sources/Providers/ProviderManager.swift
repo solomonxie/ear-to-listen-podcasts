@@ -81,4 +81,17 @@ final class ProviderManager: @unchecked Sendable {
         let folder = rootFolder(for: record)
         return folder.map { "\(kind.uriScheme)://\(bucket)/\($0)" } ?? "\(kind.uriScheme)://\(bucket)"
     }
+
+    /// "s3://bucket/podcasts/ep1.mp3" — the whole address of one file, the way that
+    /// cloud's own tooling writes it. `displayPath` says where a connection starts; this
+    /// says where a file is, which is what an episode has to show once the same episode
+    /// can be in more than one place.
+    func fileURI(for record: ProviderRecord, filePath: String) -> String? {
+        if record.type == LocalFilesProvider.providerType {
+            return "files://\(filePath)"
+        }
+        guard let kind = record.cloudKind,
+              let bucket = bucketSettings(for: record)?["bucket"], !bucket.isEmpty else { return nil }
+        return "\(kind.uriScheme)://\(bucket)/\(filePath)"
+    }
 }
