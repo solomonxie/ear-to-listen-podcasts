@@ -68,6 +68,16 @@ overwrite it and it's obvious at a glance what it precedes. This is the copy
 that actually gets used: a bad import lands minutes after the day's backup
 caught the good state, or hours after, having caught nothing.
 
+**Remove All App Data** writes one of these first, with no picker and nothing to
+save by hand (`ear-to-listen-pre-deletion-20260918-140233.zip`), and pushes the same
+bytes to iCloud Drive and the bucket wherever they're *connected* — not only
+where the daily switch is on, since the local copy shares the sandbox the reset
+is about to empty. A destination that fails is left out of the summary rather
+than stopping the reset; the local write has to land or there's no copy at all.
+The reset then marks `FirstRunRestore` done: wiping the defaults clears that flag
+too, and the next launch would otherwise read the empty library as a fresh
+install and pull that very archive back down.
+
 Pruned by age, not by count: once an operation can add files, a count silently
 decides how many imports it takes to lose yesterday. "Anything from the last
 week" is a promise that stays true. Tier 2 inverts it — there the listener pays
@@ -90,7 +100,9 @@ nothing new and skips, indefinitely.
   file per day, latest 10 kept (`BackupArchiveName`); the name is the sort
   order — zero-padded date first — so "newest archive" is `max()` over the
   names, with no dates to parse. Monthly names from earlier builds still sort
-  and still restore, ranking as the first of their month. A fresh install finds
+  and still restore, ranking as the first of their month. A pre-deletion copy
+  outranks every dated archive, so a reinstall after an erase comes back to the
+  library as it was and not to an empty one backed up since. A fresh install finds
   the newest as an undownloaded placeholder (a hidden `.<name>.icloud`), so the
   read asks iCloud for it and waits. `CloudDriveStatus` splits "unavailable"
   into the four causes that need four different things said (`notEntitled` /

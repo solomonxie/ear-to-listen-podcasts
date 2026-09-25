@@ -99,20 +99,44 @@ final class AutoBackup: ObservableObject {
         await backUp(toBucket: isEnabled, toCloudDrive: isCloudDriveEnabled)
     }
 
-    /// A named recovery point made before an irreversible local reset. It is separate
-    /// from the normal daily archive, which may later contain an empty library.
-    func backUpBeforeRemovingAllData() async throws {
-        let archive = try BackupService().currentArchive()
-        let name = BackupArchiveName.beforeRemovingAllData()
-        guard LocalBackups.writeBeforeRemovingAllData(archive, named: name) != nil else {
+    /// The recovery point written immediately before an irreversible local reset, under a
+    /// name of its own so a later backup of the empty library can't replace it. No picker
+    /// and nothing to confirm: a save sheet is one more thing to get wrong at the only
+    /// moment the copy matters.
+    ///
+    /// It goes wherever there is somewhere to put it — a connected bucket and a ready
+    /// iCloud Drive both take it whether or not the daily switch is on. Those two are the
+    /// copies that matter here: the local one shares the sandbox this is about to empty,
+    /// so it survives the reset but not deleting the app. A destination that fails is
+    /// left out of the summary rather than stopping the reset, but the local copy has to
+    /// land or there is no copy at all.
+    @discardableResult
+    func backUpBeforeDeletion() async throws -> String {
+        let service = BackupService()
+        let archive = try service.currentArchive()
+        let name = BackupArchiveName.preDeletion()
+        guard LocalBackups.writePreDeletion(archive, named: name) != nil else {
             throw CocoaError(.fileWriteUnknown)
         }
-        if isEnabled {
-            try await BackupService().uploadBeforeRemovingAllData(archive, named: name)
+
+        var destinations = ["Files"]
+        do {
+            try await service.uploadPreDeletion(archive, named: name)
+            destinations.append("the bucket")
+        } catch BackupError.noActiveRemoteProvider {
+            // Nothing connected to write to, which is not a failure of this run.
+        } catch {
+            lastError = error.localizedDescription
         }
-        if isCloudDriveEnabled {
-            try await CloudDrive.write(archive, named: name)
+        if await CloudDrive.status().isReady {
+            do {
+                try await CloudDrive.write(archive, named: name)
+                destinations.append("iCloud Drive")
+            } catch {
+                cloudDriveError = error.localizedDescription
+            }
         }
+        return "Saved \(name) to \(destinations.formatted())."
     }
 
     private func persist(_ value: Bool, forKey key: String, changedFrom oldValue: Bool) {

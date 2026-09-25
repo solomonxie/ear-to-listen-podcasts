@@ -17,6 +17,13 @@ import GRDB
 enum FirstRunRestore {
     private static let didRestoreKey = "backup.icloud.didRestore"
 
+    /// Say this install has had its restore, so an empty library stops being read as a
+    /// fresh one. Removing all app data wipes the defaults this flag lives in, and the
+    /// archive it writes on the way out is exactly what a first run would pull back down.
+    static func markDone() {
+        UserDefaults.standard.set(true, forKey: didRestoreKey)
+    }
+
     static func runIfNeeded() async {
         guard shouldRun(ignoringProviders: 0) else { return }
         // "Not ready yet" — container still propagating, iCloud signed out, an unsigned

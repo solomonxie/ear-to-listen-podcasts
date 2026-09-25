@@ -188,12 +188,14 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
-    /// Clears every on-device copy only after the caller has successfully exported the
-    /// portable archive. The archive destination is outside the app container, so it is
-    /// not affected by this cleanup.
+    /// Clears every on-device copy, after a recovery archive has been written by itself —
+    /// to Files, and to iCloud and the bucket wherever they're connected. Nothing is
+    /// picked or saved by hand: the one irreversible button shouldn't depend on getting a
+    /// save sheet right, and the copies that outlive this phone are the off-device ones
+    /// anyway.
     func removeAllAppData() async {
         do {
-            try await AutoBackup.shared.backUpBeforeRemovingAllData()
+            let savedTo = try await AutoBackup.shared.backUpBeforeDeletion()
             let stagingURL = URL.applicationSupportDirectory.appending(path: "empty-library.sqlite")
             removeDatabase(at: stagingURL)
             defer { removeDatabase(at: stagingURL) }
@@ -205,8 +207,14 @@ final class SettingsViewModel: ObservableObject {
             await AudioCache.shared.removeAll()
             removeAppSupportData()
             UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier ?? "")
+            // Erasing on purpose is not a fresh install. Without this, wiping the defaults
+            // clears the first-run flag too, and the next launch sees an empty library,
+            // goes to iCloud for the newest archive — the recovery copy just written — and
+            // puts the speakers and edits straight back.
+            FirstRunRestore.markDone()
             NotificationCenter.default.post(name: .libraryDidChange, object: nil)
             load()
+            backupStatusMessage = savedTo
         } catch {
             errorMessage = error.localizedDescription
         }
