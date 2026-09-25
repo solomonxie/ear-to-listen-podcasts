@@ -39,19 +39,25 @@ enum BackupArchiveName {
     /// anything that rewrites many rows at once. A name of its own, so the day's rolling
     /// copy can't overwrite it and the listener can tell at a glance what it precedes.
     static func beforeOperation(_ operation: String, at date: Date = Date(), calendar: Calendar = .current) -> String {
-        let stamp = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        return String(
-            format: "%@-before-%@-%04d%02d%02d-%02d%02d%02d.zip", suffix, operation,
-            stamp.year ?? 0, stamp.month ?? 0, stamp.day ?? 0,
-            stamp.hour ?? 0, stamp.minute ?? 0, stamp.second ?? 0
-        )
+        "\(suffix)-before-\(operation)-\(stamp(at: date, calendar: calendar)).zip"
     }
 
     /// The copy made immediately before erasing this installation. It deliberately does
     /// not look like a daily archive, so a later backup of the empty library cannot
-    /// replace it.
-    static func beforeRemovingAllData(at date: Date = Date(), calendar: Calendar = .current) -> String {
-        beforeOperation("remove-all-data", at: date, calendar: calendar)
+    /// replace it, and it says what it precedes in a word anyone reading a folder listing
+    /// a year later will understand.
+    static let preDeletionMarker = "pre-deletion"
+
+    static func preDeletion(at date: Date = Date(), calendar: Calendar = .current) -> String {
+        "\(suffix)-\(preDeletionMarker)-\(stamp(at: date, calendar: calendar)).zip"
+    }
+
+    private static func stamp(at date: Date, calendar: Calendar) -> String {
+        let at = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        return String(
+            format: "%04d%02d%02d-%02d%02d%02d",
+            at.year ?? 0, at.month ?? 0, at.day ?? 0, at.hour ?? 0, at.minute ?? 0, at.second ?? 0
+        )
     }
 
     static func matches(_ name: String) -> Bool {
@@ -63,7 +69,7 @@ enum BackupArchiveName {
     /// the copies a large operation leaves behind) are left to the caller's own fallback.
     static func newest<Names: Sequence<String>>(among names: Names) -> String? {
         let names = Array(names)
-        if let recovery = names.filter(isBeforeRemovingAllData).max() { return recovery }
+        if let recovery = names.filter(isPreDeletion).max() { return recovery }
         return names.filter(matches).max { left, right in rank(of: left)! < rank(of: right)! }
     }
 
@@ -86,7 +92,11 @@ enum BackupArchiveName {
         }
     }
 
-    private static func isBeforeRemovingAllData(_ name: String) -> Bool {
-        name.split(separator: "/").last.map(String.init)?.contains("-before-remove-all-data-") ?? false
+    /// Both spellings: earlier builds named this copy after the button that made it
+    /// (`-before-remove-all-data-`), and an archive that can't be recognised is an archive
+    /// a reinstall silently passes over.
+    private static func isPreDeletion(_ name: String) -> Bool {
+        let fileName = name.split(separator: "/").last.map(String.init) ?? name
+        return fileName.contains("-\(preDeletionMarker)-") || fileName.contains("-before-remove-all-data-")
     }
 }
