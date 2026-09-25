@@ -1,20 +1,11 @@
 # Now Playing
 
-`Sources/Screens/Player/RealPlayerView.swift` — a full-screen card over the
-mini player, put down by pulling it down. It follows the finger and shrinks as
-it goes; the chevron top-left points the same way.
+`Sources/Screens/Player/RealPlayerView.swift` — the full episode page, opened
+from the mini player bar or by tapping an episode, and left the way every other
+page here is left: back, to the left. See **Leaving it** below.
 
 ```
- drag the artwork or titles   110pt, or a flick   ← the one that gets used
- pull the whole page past its own top   70pt of overscroll
-```
-
-Two ways in because the page is one long scroll: below the header the drag
-belongs to the transcript, and overscroll rubber-bands, so a threshold read off
-the scroll view alone asks for a stroke longer than the screen.
-
-```
- ⌄          Now Playing                       ← tap title = back to top
+ ‹          Now Playing                       ← tap title = back to top
  ┌─────────────────────────────────────────┐
  │              [ artwork ]                │  220pt, deterministic colour
  └─────────────────────────────────────────┘
@@ -58,11 +49,30 @@ Edge-only, in the same strip iOS reserves for its own back gesture. The page is
 full of things that answer a horizontal drag — the scrubber above all — and a
 swipe recognised anywhere would compete with all of them for every stroke. The
 page slides with the finger and springs back if the stroke is too short, so the
-gesture is answered as it happens.
+gesture is answered as it happens. A flick counts as well as a full 80pt: a short
+fast stroke and a short slow one shouldn't end the same way.
+
+**A `UIScreenEdgePanGestureRecognizer`, not a `DragGesture`**
+(`Sources/App/SwipeToGoBack.swift`). Two things were wrong with the SwiftUI one,
+and both were felt rather than seen:
+
+- *It shared the stroke instead of winning it.* `simultaneousGesture` ran beside
+  every gesture on the page, so one stroke was answered twice — seeking into the
+  first minute dragged the whole player sideways — and each new competitor needed
+  another guard bolted onto the drag. The edge pan is the recogniser the rest of
+  iOS uses here, and the arbitration that makes the system's back swipe behave
+  makes this one behave.
+- *It redrew the page on every frame.* The travel lived in the player's own
+  `@State`, so following the finger rebuilt a body carrying the artwork, the
+  transport, the details and a thousand transcript lines — with an implicit
+  spring on top, which then eased the page towards where the finger had been a
+  third of a second ago. That was the whole of the lag. The travel lives in the
+  modifier now; nothing rebuilds.
 
 Only at the stack root: a pushed page has the system's own back swipe, and letting
 this one through as well would take the whole player out from under a speaker page
-somebody meant to step back one screen from.
+somebody meant to step back one screen from. The gesture declines the stroke
+rather than swallowing it, so whatever else wanted it still gets it.
 
 ## Once the transport scrolls off
 
