@@ -109,16 +109,20 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func addProvider(type: String, label: String, settings: [String: String]) -> ProviderRecord? {
-        let id = UUID().uuidString
+        let restored = restoredSource(type: type, label: label)
+        let id = restored?.id ?? UUID().uuidString
         do {
             try ProviderManager.shared.saveSettings(settings, forProviderID: id)
+            // A provider built earlier from the empty settings this row had would keep
+            // being handed out from the cache.
+            ProviderManager.shared.invalidate(providerID: id)
             let record = ProviderRecord(
                 id: id,
                 type: type,
                 label: label,
                 configJSON: "",
                 isActive: true,
-                createdAt: Date()
+                createdAt: restored?.createdAt ?? Date()
             )
             try providerStore.upsert(record)
             load()
@@ -127,6 +131,24 @@ final class SettingsViewModel: ObservableObject {
             errorMessage = error.localizedDescription
             return nil
         }
+    }
+
+    /// The row a restore put back, still waiting for the credentials that stayed in the
+    /// Keychain — connecting that cloud again takes it over rather than making a second
+    /// one. Everything in a backup names its episodes by (providerID, filePath), so a
+    /// fresh id would have the sync fill the library under a provider the archive has
+    /// never heard of: the playlists, hand edits and transcripts would all sit waiting
+    /// for a match that can't happen, and expire.
+    ///
+    /// Only on a sure thing — the same label, or the one credential-less source of that
+    /// type. Two restored buckets and an ambiguous label is a guess, and guessing wrong
+    /// attaches the connection to the wrong library.
+    private func restoredSource(type: String, label: String) -> ProviderRecord? {
+        let candidates = ((try? providerStore.all()) ?? []).filter {
+            $0.type == type && (ProviderManager.shared.settings(for: $0.id) ?? [:]).isEmpty
+        }
+        if let sameLabel = candidates.first(where: { $0.label == label }) { return sameLabel }
+        return candidates.count == 1 ? candidates.first : nil
     }
 
     func delete(_ record: ProviderRecord) {
@@ -201,12 +223,24 @@ final class SettingsViewModel: ObservableObject {
             defer { removeDatabase(at: stagingURL) }
             let emptyDatabase = try DatabaseManager.makeDataset(at: stagingURL)
             try DatabaseManager.shared.replaceContents(with: emptyDatabase)
+            // The rows are gone from the database, but a full checkpoint would leave them
+            // in the sidecar beside it — an erase has to take the copy as well.
+            DatabaseManager.shared.purgeWriteAheadLog()
 
-            try credentials.deleteAll()
+            // Past the swap nothing is allowed to stop this: the library is already gone,
+            // and a step that throws its way out of here leaves an app that is erased and
+            // doesn't know it — keychain half-cleared, downloads still on disk, and the
+            // first-run flag unset, so the next launch reads the empty library as a fresh
+            // install and pulls the recovery archive straight back down.
+            try? credentials.deleteAll()
             ProviderManager.shared.invalidateAll()
             await AudioCache.shared.removeAll()
             removeAppSupportData()
             UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier ?? "")
+            // The defaults are gone, but the object holding them in memory isn't: its
+            // daily gate would read no mark as "never shipped one", and back the empty
+            // library up over the copies this reset just made.
+            AutoBackup.shared.forgetSettings()
             // Erasing on purpose is not a fresh install. Without this, wiping the defaults
             // clears the first-run flag too, and the next launch sees an empty library,
             // goes to iCloud for the newest archive — the recovery copy just written — and
@@ -221,8 +255,9 @@ final class SettingsViewModel: ObservableObject {
     }
 
     /// `url` comes from a `.fileImporter` picker, so it's security-scoped. The archive is
-    /// restored into a library of its own and switched to — the one that was here is kept
-    /// as a file, and `undoRestore()` puts it back.
+    /// merged into the library that's here — or, if there isn't one, restored into a
+    /// library of its own and switched to. Either way the one that was here is kept as a
+    /// file, and `undoRestore()` puts it back.
     func importSnapshot(from url: URL) {
         let didStartAccess = url.startAccessingSecurityScopedResource()
         defer { if didStartAccess { url.stopAccessingSecurityScopedResource() } }

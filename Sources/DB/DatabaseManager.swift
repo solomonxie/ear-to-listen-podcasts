@@ -53,6 +53,15 @@ final class DatabaseManager: @unchecked Sendable {
         }
     }
 
+    /// Flushes the sidecar and empties it. What `checkpoint()` does isn't enough after an
+    /// erase: a full checkpoint leaves every page it copied still sitting in the WAL file,
+    /// so the rows someone asked to be rid of are still on the disk and still readable.
+    func purgeWriteAheadLog() {
+        try? dbQueue.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+        }
+    }
+
     /// Replaces the live library's contents with `source`, through the connection every
     /// part of the app is already holding — so a restore doesn't leave a `SyncEngine` or
     /// a player reading a database nobody writes to any more.

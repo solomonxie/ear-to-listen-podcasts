@@ -15,10 +15,49 @@ final class BackupArchiveNameTests: XCTestCase {
         return calendar.date(from: components)!
     }
 
+    /// When, what for, whose — in that order, because the first part is also the sort key.
     func testNamesOneArchivePerDay() {
-        XCTAssertEqual(BackupArchiveName.current(date(2026, 9, 18), calendar: calendar), "20260918-ear-to-listen.zip")
-        XCTAssertEqual(BackupArchiveName.current(date(2026, 10, 1), calendar: calendar), "20261001-ear-to-listen.zip")
-        XCTAssertEqual(BackupArchiveName.base(date(2027, 1, 5), calendar: calendar), "20270105-ear-to-listen")
+        XCTAssertEqual(BackupArchiveName.current(date(2026, 9, 18), calendar: calendar), "20260918-daily-ear-to-listen.zip")
+        XCTAssertEqual(BackupArchiveName.current(date(2026, 10, 1), calendar: calendar), "20261001-daily-ear-to-listen.zip")
+        XCTAssertEqual(BackupArchiveName.base(date(2027, 1, 5), calendar: calendar), "20270105-daily-ear-to-listen")
+    }
+
+    /// The copies taken before something irreversible are named to the second: two can
+    /// land in one afternoon, and each one is the only copy of what it precedes.
+    func testTheCopiesBeforeSomethingAreNamedToTheSecond() {
+        XCTAssertEqual(
+            BackupArchiveName.preDeletion(at: date(2026, 9, 18, 14, 2, 33), calendar: calendar),
+            "20260918140233-pre-deletion-ear-to-listen.zip"
+        )
+        XCTAssertNotEqual(
+            BackupArchiveName.preDeletion(at: date(2026, 9, 18, 14, 2, 33), calendar: calendar),
+            BackupArchiveName.preDeletion(at: date(2026, 9, 18, 14, 2, 34), calendar: calendar)
+        )
+    }
+
+    /// A day and a day-and-a-time sort against each other without either being parsed.
+    func testADayAndATimeSortTogether() {
+        XCTAssertEqual(
+            BackupArchiveName.newest(among: ["20260918-daily-ear-to-listen.zip", "20260917235959-daily-ear-to-listen.zip"]),
+            "20260918-daily-ear-to-listen.zip"
+        )
+        // And the names written before the purpose moved into the middle still rank.
+        XCTAssertEqual(
+            BackupArchiveName.newest(among: ["20260918-ear-to-listen.zip", "20260917-daily-ear-to-listen.zip"]),
+            "20260918-ear-to-listen.zip"
+        )
+    }
+
+    /// Only this app's own files, so a prune in a folder the listener can open never
+    /// takes anything they put there.
+    func testKnowsItsOwnFiles() {
+        XCTAssertTrue(BackupArchiveName.ours("20260918-daily-ear-to-listen.zip"))
+        XCTAssertTrue(BackupArchiveName.ours("20260918140233-before-import-ear-to-listen.zip"))
+        XCTAssertTrue(BackupArchiveName.ours("20260918-ear-to-listen.zip"))
+        XCTAssertTrue(BackupArchiveName.ours("ear-to-listen-pre-deletion-20260918-140233.zip"))
+        XCTAssertTrue(BackupArchiveName.ours("202608-byopo.zip"))
+        XCTAssertFalse(BackupArchiveName.ours("holiday-photos.zip"))
+        XCTAssertFalse(BackupArchiveName.ours("notes.zip"))
     }
 
     func testPicksTheNewestDay() {
@@ -73,9 +112,28 @@ final class BackupArchiveNameTests: XCTestCase {
     /// day's run can't overwrite it and "newest archive" never picks it.
     func testALargeOperationsCopyIsNamedApart() {
         let name = BackupArchiveName.beforeOperation("import", at: date(2026, 9, 18, 14, 2, 33), calendar: calendar)
-        XCTAssertEqual(name, "ear-to-listen-before-import-20260918-140233.zip")
+        XCTAssertEqual(name, "20260918140233-before-import-ear-to-listen.zip")
         XCTAssertFalse(BackupArchiveName.matches(name))
         XCTAssertNil(BackupArchiveName.newest(among: [name]))
+    }
+
+    /// A restore walks the list rather than taking the top name: the copy a wipe left
+    /// behind sorts first and holds nothing, and the good ones are underneath it.
+    func testEveryArchiveWorthTryingComesBackBestFirst() {
+        let names = [
+            "20260917-daily-ear-to-listen.zip",
+            "20260918140233-pre-deletion-ear-to-listen.zip",
+            "20260918-daily-ear-to-listen.zip",
+            // Written by an earlier build, and still the copy that matters most.
+            "ear-to-listen-pre-deletion-20260901-090000.zip",
+            "notes.zip",
+        ]
+        XCTAssertEqual(BackupArchiveName.preferred(among: names), [
+            "20260918140233-pre-deletion-ear-to-listen.zip",
+            "ear-to-listen-pre-deletion-20260901-090000.zip",
+            "20260918-daily-ear-to-listen.zip",
+            "20260917-daily-ear-to-listen.zip",
+        ])
     }
 
     func testIgnoresEverythingElse() {

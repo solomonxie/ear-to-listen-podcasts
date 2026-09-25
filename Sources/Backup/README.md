@@ -30,11 +30,19 @@ Snapshot decoding is hand-written on purpose: a synthesized `init(from:)`
 ignores a property's default and demands the key, so every field added after
 v1 would make older archives undecodable rather than partially restorable.
 
+An archive of a library with nothing in it is never written or shipped, anywhere.
+It decodes perfectly well, which is the danger: it takes the day's key in the
+bucket, prunes iCloud's oldest to make room, and under a pre-deletion name it
+outranks every dated archive there is — so one wipe of an already-empty library
+could hide every good copy at once. Restores read defensively for the same
+reason: candidates are walked best-first and one holding nothing is skipped
+rather than taken (`BackupArchiveName.preferred`).
+
 What ships is a zip (`BackupService.archive`/`unarchive`, via the hand-rolled
 `ZipArchive` — store-only, no compression), the same bytes to every tier:
 
 ```
-20260918-ear-to-listen.zip
+20260918-daily-ear-to-listen.zip
 ├── snapshot.json        version, user-authored data, connection list (no secrets)
 ├── photos/<file>.jpg    speaker photos referenced by snapshot.json
 ├── artwork/<file>.jpg   episode artwork
@@ -48,7 +56,7 @@ change log moved. Copying megabytes per keystroke to guard against a
 once-a-year event is the wrong trade, and the log covers what falls between.
 It keeps three different things:
 
-- **Database copies** (`<appSupport>/snapshots/20260918-ear-to-listen.sqlite`) — the
+- **Database copies** (`<appSupport>/snapshots/20260918-daily-ear-to-listen.sqlite`) — the
   file itself, not a zip, so putting one back is a swap, and it's the only copy
   that survives a schema problem no row-level undo can fix. The WAL is
   checkpointed first (`DatabaseManager.checkpoint()`) or the copy is missing
@@ -63,13 +71,13 @@ It keeps three different things:
 
 A large operation — an import, a restore, accepting a whole album's AI
 suggestions — writes an extra zip under a name of its own first
-(`ear-to-listen-before-import-20260918-140233.zip`), so the day's rolling copy can't
+(`20260918140233-before-import-ear-to-listen.zip`), so the day's rolling copy can't
 overwrite it and it's obvious at a glance what it precedes. This is the copy
 that actually gets used: a bad import lands minutes after the day's backup
 caught the good state, or hours after, having caught nothing.
 
 **Remove All App Data** writes one of these first, with no picker and nothing to
-save by hand (`ear-to-listen-pre-deletion-20260918-140233.zip`), and pushes the same
+save by hand (`20260918140233-pre-deletion-ear-to-listen.zip`), and pushes the same
 bytes to iCloud Drive and the bucket wherever they're *connected* — not only
 where the daily switch is on, since the local copy shares the sandbox the reset
 is about to empty. A destination that fails is left out of the summary rather
@@ -98,8 +106,8 @@ nothing new and skips, indefinitely.
   offer, and it outlives deleting the app. Archives only, never the live SQLite
   file: iCloud syncs file-at-a-time and knows nothing about WAL sidecars. One
   file per day, latest 10 kept (`BackupArchiveName`); the name is the sort
-  order — zero-padded date first — so "newest archive" is `max()` over the
-  names, with no dates to parse. Monthly names from earlier builds still sort
+  order — when, then what for, then whose — so "newest archive" is `max()` over
+  the names, with no dates to parse. Monthly names from earlier builds still sort
   and still restore, ranking as the first of their month. A pre-deletion copy
   outranks every dated archive, so a reinstall after an erase comes back to the
   library as it was and not to an empty one backed up since. A fresh install finds
@@ -112,7 +120,7 @@ nothing new and skips, indefinitely.
   account.
 - **The bucket** — switched on when a connection is added (an explicit "off"
   is respected), toggled from the bucket's own row in `SourcesSectionView`.
-  Key: `ear-to-listen-podcasts/20260918-ear-to-listen.zip`. Restore lists that folder
+  Key: `ear-to-listen-podcasts/20260918-daily-ear-to-listen.zip`. Restore lists that folder
   and takes the newest date (a device back from a reinstall hasn't written
   today's yet), then falls back to the keys older builds wrote.
 
@@ -121,23 +129,49 @@ Export/Import via `.fileExporter`/`.fileImporter`, and Backup/Restore via
 `CloudProvider.uploadBackup`/`downloadBackup` (derived key, no picker) — S3,
 COS, OSS, Azure or Google, whichever is connected.
 
-## Restore builds a new library
+## Restore: merged in, or swapped in
 
-`DatasetRestore` fills a **new, empty, migrated database** from the archive and
-only then puts it in place — nothing of the live library is touched until that
-has all worked. The swap goes through the connection the app already holds
-(`DatabaseManager.replaceContents(with:)`), so nothing is left reading a
-database nobody writes to any more. The library it replaced is kept as a file
-for a week, and Settings offers one button to put it back.
+Which one depends on what's already here, because an archive holds no episodes
+or albums — a sync rebuilds those.
+
+**Onto a library with episodes in it, the archive is merged** (`BackupService.apply`,
+which only ever fills in what isn't there). A swap is the destructive move here:
+it costs every episode on screen and the source row that knows how to fetch them
+back, to put back edits that could have landed exactly where they were.
+
+**Onto an empty library it builds a new dataset** — a new, empty, migrated
+database, filled from the archive and only then put in place, through the
+connection the app already holds (`DatabaseManager.replaceContents(with:)`), so
+nothing is left reading a database nobody writes to any more. With nothing on
+screen to lose, this is the cleaner of the two: playlists and sources come back
+under the ids the archive names.
+
+Either way the tier-1 copies are taken first — the zip for anywhere, the
+`.sqlite` for here — so the library from before is kept for a week and Settings
+offers one button to put it back. An archive holding nothing is refused outright:
+that's a wipe wearing a restore's clothes.
 
 The dangerous direction is a bad local state overwriting a good copy somewhere
 else, not the other way round — which is why the tiers lean as they do: tier 1
-makes undoing possible without touching a remote copy, tier 3 can't delete, and
-a restore never merges into what's there.
+makes undoing possible without touching a remote copy, and tier 3 can't delete.
 
-Everything in the new library is waiting on a sync, since it holds what the
-archive held and no episode files. That's the same shape as a reinstall, and
-`PendingRestore` handles both.
+Whatever names an episode this device hasn't fetched yet waits in
+`PendingRestore` — on an empty library, that's all of it.
+
+### The key that has to survive
+
+Everything in an archive names its episodes by `(providerID, filePath)`, and the
+id half only lives as long as the source row does. Two things keep it attached:
+
+- Connecting a cloud again **takes over the credential-less row a restore put
+  back**, rather than minting a new id (`SettingsViewModel.restoredSource`).
+  Credentials stay in the Keychain keyed by that id, so a restored source is a
+  row waiting to be reconnected, not a second one to add beside it.
+- A miss on the pair **falls back to the path alone**, and only when it names
+  exactly one episode here. Without it, an archive written before an erase can
+  never reattach to the library synced after one: every edit, favourite,
+  bookmark and transcript in it waits for a match that cannot happen, then
+  expires at thirty days.
 
 ## Coming Back After a Reinstall
 
@@ -160,7 +194,11 @@ and speakers alone, so a playlist deleted since the restore stays deleted.
 
 ```
 DatasetRestore.swift:restore(_:)
+        │ an archive holding nothing is refused here — that's a wipe, not a restore
         │ tier-1 copies first: the zip for anywhere, the .sqlite for here
+        ▼
+   episodes here already? ── yes ──► merged straight into the live library
+        │ no
         ▼
    DatabaseManager.makeDataset(at:)  — empty, migrated, nothing live touched
         ▼
@@ -172,6 +210,7 @@ BackupService.swift:apply(_:)
         ▼
    for each track ref (providerID + filePath, not the old device's track id)
         ├─ TrackStore.swift:find(providerID:filePath:) hit ──► PlaylistStore.swift:addTrack(_:toPlaylist:at:)
+        ├─ miss, but the path names exactly one episode here ──► linked to that one
         └─ miss (not synced on this device yet) ──► counted as unmatched, not linked
         ▼
    for each artist entry (matched by name, not the old device's id)
@@ -180,4 +219,5 @@ BackupService.swift:apply(_:)
            own upsertArtist(name:) finds and reuses it rather than creating a duplicate
         ▼
    DatabaseManager.replaceContents(with:) — the swap, through the live connection
+                                            (the empty-library path only)
 ```

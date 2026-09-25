@@ -25,6 +25,84 @@ final class BackupServiceTests: XCTestCase {
         return track
     }
 
+    /// The failure that cost a library: the bucket was reconnected after a reinstall, so
+    /// the source row was a new id, and every edit in the archive named the old one. They
+    /// are the same episodes — the path says so — and they have to land.
+    func testEditsLandAfterTheSourceWasReconnectedUnderANewID() throws {
+        let source = try makeDatabase()
+        let edited = try makeTrack(providerID: "old-id", filePath: "shows/ep3.mp3", dbQueue: source)
+        var track = edited
+        track.title = "The one about sleep"
+        track.isFavorite = true
+        track.metadataEditedAt = Date()
+        try TrackStore(dbQueue: source).upsert(track, artistName: "Deep Huberman", albumName: nil)
+        let snapshot = try BackupService(dbQueue: source).makeSnapshot()
+        XCTAssertEqual(snapshot.episodes.count, 1)
+
+        // The device as it is after the reinstall: same episode, synced in under the
+        // connection that was added back, which got an id of its own.
+        let restored = try makeDatabase()
+        let resynced = try makeTrack(providerID: "new-id", filePath: "shows/ep3.mp3", dbQueue: restored)
+        try BackupService(dbQueue: restored).apply(snapshot)
+
+        let landed = try XCTUnwrap(try TrackStore(dbQueue: restored).find(id: resynced.id))
+        XCTAssertEqual(landed.title, "The one about sleep")
+        XCTAssertTrue(landed.isFavorite)
+    }
+
+    /// The other half of that rule: two sources holding the same path is the one case
+    /// where a guess would attach the edit to the wrong episode, so it waits instead.
+    func testAnEditWaitsWhenThePathNamesTwoEpisodes() throws {
+        let source = try makeDatabase()
+        let original = try makeTrack(providerID: "old-id", filePath: "ep.mp3", dbQueue: source)
+        var track = original
+        track.title = "Renamed"
+        track.metadataEditedAt = Date()
+        try TrackStore(dbQueue: source).upsert(track, artistName: nil, albumName: nil)
+        let snapshot = try BackupService(dbQueue: source).makeSnapshot()
+
+        let restored = try makeDatabase()
+        _ = try makeTrack(providerID: "bucket-a", filePath: "ep.mp3", dbQueue: restored)
+        _ = try makeTrack(providerID: "bucket-b", filePath: "ep.mp3", dbQueue: restored)
+        let result = try BackupService(dbQueue: restored).apply(snapshot)
+
+        XCTAssertEqual(result.editsAwaitingSync, 1)
+        XCTAssertFalse(try TrackStore(dbQueue: restored).all().contains { $0.title == "Renamed" })
+    }
+
+    /// Restoring onto a library that's working must not cost it the episodes on screen:
+    /// an archive carries none, so a swap would empty the app to put edits back.
+    func testRestoringOntoALivingLibraryKeepsItsEpisodes() throws {
+        let source = try makeDatabase()
+        let original = try makeTrack(providerID: "old-id", filePath: "ep.mp3", dbQueue: source)
+        var track = original
+        track.isFavorite = true
+        try TrackStore(dbQueue: source).upsert(track, artistName: nil, albumName: nil)
+        let snapshot = try BackupService(dbQueue: source).makeSnapshot()
+
+        let live = try makeDatabase()
+        _ = try makeTrack(providerID: "new-id", filePath: "ep.mp3", dbQueue: live)
+        _ = try makeTrack(providerID: "new-id", filePath: "untouched.mp3", dbQueue: live)
+        try BackupService(dbQueue: live).apply(snapshot)
+
+        XCTAssertEqual(try TrackStore(dbQueue: live).all().count, 2)
+        XCTAssertEqual(try TrackStore(dbQueue: live).all().filter(\.isFavorite).map(\.filePath), ["ep.mp3"])
+    }
+
+    /// An empty library makes a perfectly valid archive. Shipping one is how a wipe
+    /// erases the copies it was insurance against.
+    func testAnEmptyLibraryIsNotSomethingToShip() throws {
+        let dbQueue = try makeDatabase()
+        let service = BackupService(dbQueue: dbQueue)
+        XCTAssertTrue(try service.makeSnapshot().isEmpty)
+        XCTAssertFalse(service.holdsData(try service.currentArchive()))
+
+        _ = try makeTrack(providerID: "p1", filePath: "ep1.mp3", dbQueue: dbQueue)
+        try PlaylistStore(dbQueue: dbQueue).create(Playlist(id: "pl1", name: "Favorites", source: "local", createdAt: Date()))
+        XCTAssertFalse(try service.makeSnapshot().isEmpty)
+        XCTAssertTrue(service.holdsData(try service.currentArchive()))
+    }
+
     func testSnapshotRoundTripsThroughJSON() throws {
         let dbQueue = try makeDatabase()
         try ProviderStore(dbQueue: dbQueue).upsert(
