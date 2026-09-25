@@ -25,6 +25,12 @@ targets:
     info:
       path: Sources/App/Info.plist
       properties:
+        # Written as build settings, not as literals. XcodeGen otherwise bakes
+        # CFBundleVersion 1 into the generated plist, and the timestamp
+        # `scripts/release-ios.sh` passes as CURRENT_PROJECT_VERSION goes nowhere — every
+        # upload then arrives as build 1 and App Store Connect rejects all but the first.
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         # Home-screen name. CFBundleName too, or iOS falls back to PRODUCT_NAME
         # ("EarToListen") wherever the display name isn't consulted.
         CFBundleDisplayName: Ear to Listen
