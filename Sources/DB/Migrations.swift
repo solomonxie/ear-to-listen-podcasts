@@ -548,6 +548,43 @@ enum Migrations {
             }
         }
 
+        // One episode, however many files. The same recording turns up twice — a copy in
+        // a second bucket, or one bucket holding it under two names — and until now each
+        // one was an episode of its own, with its own marks, its own transcript and its
+        // own place in a list.
+        migrator.registerMigration("v32_one_episode_many_files") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "fingerprint", .text)
+            }
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_tracks_fingerprint ON tracks(fingerprint)")
+            try db.create(table: "trackFiles") { t in
+                t.column("id", .text).primaryKey()
+                t.column("trackID", .text).notNull().indexed()
+                    .references("tracks", onDelete: .cascade)
+                t.column("providerID", .text).notNull()
+                t.column("filePath", .text).notNull()
+                t.column("sizeBytes", .integer)
+                t.column("contentHash", .text)
+                t.column("transcriptPath", .text)
+                t.column("remoteModifiedAt", .datetime)
+                t.column("isLost", .boolean).notNull().defaults(to: false)
+                t.column("addedAt", .datetime).notNull()
+            }
+            // The same natural key the episode table has always used, now where a second
+            // copy can hold one too.
+            try db.execute(
+                sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_trackFiles_provider_path ON trackFiles(providerID, filePath)"
+            )
+
+            // Every episode already knows one place it lives.
+            for var track in try Track.fetchAll(db) {
+                track.fingerprint = FileFingerprint.of(track)
+                try track.update(db)
+                try TrackFile(primaryOf: track).insert(db)
+            }
+            try TrackMerge.foldDuplicates(in: db)
+        }
+
         return migrator
     }
 }

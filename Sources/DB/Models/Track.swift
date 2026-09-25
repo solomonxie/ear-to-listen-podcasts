@@ -55,4 +55,9 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable {
     /// Put aside to hear soon. The other half of favouriting: a favourite is what you
     /// keep after listening, this is what you line up before.
     var listenLater: Bool = false
+    /// What says this episode and another one are the same recording, however they're
+    /// named and whichever bucket each came out of — see `FileFingerprint`. Nil when the
+    /// file didn't give enough to be sure, which means it is never folded with anything.
+    /// Every place the file lives is a `TrackFile`; the pair above is the one it plays.
+    var fingerprint: String? = nil
 }
