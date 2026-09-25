@@ -9,7 +9,8 @@ import Foundation
 ///
 /// Writing puts what this app made back where other tools can read it, so a transcript
 /// isn't trapped in one app's database. `.vtt` is the one read back; the `.lrc` beside it
-/// is for lyrics-aware players.
+/// is for lyrics-aware players. It happens when someone presses Upload and at no other
+/// time — see `upload`.
 enum TranscriptSidecar {
     /// The first sidecar that parses into something usable. Missing files are the normal
     /// case, not an error — most episodes won't have one.
@@ -40,28 +41,45 @@ enum TranscriptSidecar {
         return nil
     }
 
-    /// Writes both files. Throws only on a write that was attempted and failed — a
-    /// read-only source is a normal answer, not a problem to report.
-    static func save(
-        _ segments: [TranscriptSegment], track: Track, provider: CloudProvider, title: String?, artist: String?
-    ) async throws {
-        guard provider.isWritable else { return }
-        let lines = segments.filter { !$0.text.isEmpty }
-        guard !lines.isEmpty else { return }
+    /// Writes the transcript over what's beside one copy of the audio, and says which
+    /// files it wrote.
+    ///
+    /// **Only ever by hand.** Nothing in the app calls this on a change: correcting a
+    /// line, joining two, running a fresh pass — all of it stays in this device's database
+    /// until the Upload button is pressed. A transcript in someone's own storage is a file
+    /// they may have written, edited or shared, and overwriting it as a side effect of
+    /// tidying one line here is not a trade worth making silently.
+    ///
+    /// **Everything that is there, replaced.** The `.vtt` and its `.lrc` companion always
+    /// go up. Any other transcript format already sitting beside the audio — `.srt`,
+    /// `.json`, `.txt` — is rewritten too, because the point of pressing the button is
+    /// that what's in the bucket now says what this app says. Formats that aren't there
+    /// aren't created.
+    ///
+    /// Throws only on a write that was attempted and failed — a read-only source is a
+    /// normal answer, not a problem to report.
+    @discardableResult
+    static func upload(
+        _ segments: [TranscriptSegment], beside audioPath: String, provider: CloudProvider,
+        title: String?, artist: String?
+    ) async throws -> [String] {
+        guard provider.isWritable else { return [] }
+        guard segments.contains(where: { !$0.text.isEmpty }) else { return [] }
 
-        if let path = TranscriptFile.sidecarPath(
-            forAudioPath: track.filePath, extension: TranscriptFile.canonicalExtension
-        ) {
-            let vtt = TranscriptFile.vtt(from: segments)
-            try await provider.upload(Data(vtt.utf8), toPath: path, contentType: "text/vtt")
+        var written: [String] = []
+        for ext in TranscriptFile.writableExtensions {
+            guard let path = TranscriptFile.sidecarPath(forAudioPath: audioPath, extension: ext) else { continue }
+            let isOurs = ext == TranscriptFile.canonicalExtension || ext == TranscriptFile.companionExtension
+            // One HEAD per extra format, on a button press, for one episode — the rule
+            // against per-item probing is about listings of thousands, not this.
+            if !isOurs, (try? await provider.metadata(forFileID: path)) == nil { continue }
+            let text = TranscriptFile.text(from: segments, extension: ext, title: title, artist: artist)
+            try await provider.upload(
+                Data(text.utf8), toPath: path, contentType: TranscriptFile.contentType(for: ext)
+            )
+            written.append(path)
         }
-
-        if let path = TranscriptFile.sidecarPath(
-            forAudioPath: track.filePath, extension: TranscriptFile.companionExtension
-        ) {
-            let lrc = TranscriptFile.lrc(from: segments, title: title, artist: artist)
-            try await provider.upload(Data(lrc.utf8), toPath: path, contentType: "text/plain")
-        }
+        return written
     }
 
     /// Sidecars are small text files, so they're fetched whole through the provider's

@@ -72,12 +72,14 @@ final class TranscriptRunner: ObservableObject {
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private let trackFileStore = TrackFileStore(dbQueue: DatabaseManager.shared.dbQueue)
     private var runTask: Task<Void, Never>?
     private var sidecarTask: Task<Void, Never>?
-    /// Set when the stored transcript has moved on from what's beside the audio, so the
-    /// sidecar is rewritten once rather than after every pass.
-    private var needsSidecarExport = false
-    @Published private(set) var isFetchingRemote = false
+    /// Raised while the transcript is being written out to storage, which only ever
+    /// happens because someone pressed Upload.
+    @Published private(set) var isUploading = false
+    /// What the last upload wrote, in one line. Cleared by the next change of episode.
+    @Published private(set) var uploadReport: String?
     /// The transcript as it stood before the last pass replaced it, kept only while a
     /// reject is still on offer. This is what makes "Reject" possible at all — a pass
     /// merges over the stored text, and without a copy there is nothing to go back to.
@@ -167,6 +169,7 @@ final class TranscriptRunner: ObservableObject {
         replacedSegments = nil
         canRejectLastPass = false
         lastError = nil
+        uploadReport = nil
         duration = newTrack?.durationMs.map { Double($0) / 1000 } ?? 0
         guard let newTrack else { return }
         frozenLines = nil
@@ -183,42 +186,17 @@ final class TranscriptRunner: ObservableObject {
         }
     }
 
-    /// The "Remote" button: fetch whatever is beside the audio right now, on purpose.
-    ///
-    /// Everything else that pulls does so only when there's nothing stored. This is the
-    /// one way to say "the bucket's copy changed, go and get it" — for a transcript
-    /// written by another device, or one you edited in the bucket by hand.
-    func loadRemoteTranscript() {
-        guard let track, !isFetchingRemote else { return }
-        cancel()
-        lastError = nil
-        isFetchingRemote = true
-        sidecarTask = Task { [weak self] in
-            guard let self else { return }
-            let before = segments.count
-            await importSidecar(track: track, force: true)
-            guard self.track?.id == track.id else { return }
-            isFetchingRemote = false
-            if segments.isEmpty {
-                lastError = "No transcript found beside this episode in your storage."
-            } else if segments.count == before, !edits.isEmpty {
-                lastError = "Kept your edited transcript — remote copies never overwrite corrections."
-            }
-        }
-    }
-
     /// Pulls the transcript the bucket holds for this episode.
     ///
-    /// On opening an episode this runs only when nothing is stored locally — the remote
-    /// file is the cheapest transcript there is, but once there's one here, re-reading it
-    /// on every open would be a request per episode for a file that rarely changes.
-    /// `force` is the transcript button asking again on purpose.
+    /// On opening an episode this runs only when nothing is stored locally — the file
+    /// beside the audio is the cheapest transcript there is, but once there's one here,
+    /// re-reading it on every open would be a request per episode for a file that rarely
+    /// changes. `force` is a fresh pass asking once before spending anything.
     ///
     /// **A hand edit ends it.** Once the listener has corrected a line, this episode's
-    /// text is theirs: the remote copy is never read again and `exportSidecar` writes over
-    /// it. That's the trade — remote edits to an episode you've corrected are lost — and
-    /// it's the right way round, because the correction is the thing that can't be
-    /// regenerated.
+    /// text is theirs and the file beside the audio is never read again. The other
+    /// direction is a button (`uploadTranscript`), so neither copy can quietly overwrite
+    /// the other.
     private func importSidecar(track: Track, force: Bool = false) async {
         guard edits.isEmpty else { return }
         guard let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
@@ -233,25 +211,51 @@ final class TranscriptRunner: ObservableObject {
         )) ?? found
     }
 
-    /// Writes the transcript back beside the audio so it outlives this app. Skipped for
-    /// read-only sources, and for transcripts that came from a sidecar untouched.
-    private func exportSidecar() {
-        guard needsSidecarExport, let track, !lines.isEmpty else { return }
-        needsSidecarExport = false
+    /// **The Upload button, and the only way a transcript leaves this device.**
+    ///
+    /// Everything that changes the transcript — a correction, a join, a split, a whole
+    /// fresh pass — writes to this device's database and stops there. The files in
+    /// someone's own storage are theirs; they may have written them, edited them by hand
+    /// or handed them to someone else, and overwriting them as a side effect of tidying
+    /// one line is not a trade to make on their behalf. So it is a press, with a warning
+    /// on it, and never a consequence.
+    ///
+    /// **Everywhere the episode is.** One recording can live in two buckets, each with its
+    /// own transcript files beside it — writing to one of them and leaving the other
+    /// saying something else is the state this is here to end.
+    func uploadTranscript() {
+        guard let track, !isUploading, !segments.isEmpty else { return }
+        isUploading = true
+        lastError = nil
+        uploadReport = nil
         let snapshot = segments
         let title = track.title
         Task { [weak self] in
             guard let self else { return }
-            guard let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
-                  let provider = try? ProviderManager.shared.provider(for: record) else { return }
-            do {
-                try await TranscriptSidecar.save(
-                    snapshot, track: track, provider: provider, title: title, artist: nil
-                )
-            } catch {
-                // Not worth interrupting playback over — the transcript is safe locally
-                // and in the backup either way.
-                lastError = "Couldn't save the transcript next to the audio: \(error.localizedDescription)"
+            let copies = (try? trackFileStore.all(forTrack: track.id)).flatMap { $0.isEmpty ? nil : $0 }
+                ?? [TrackFile(primaryOf: track)]
+            let records = (try? providerStore.all()) ?? []
+            var written: [String] = []
+            var failure: String?
+            for copy in copies {
+                guard let record = records.first(where: { $0.id == copy.providerID }),
+                      let provider = try? ProviderManager.shared.provider(for: record) else { continue }
+                do {
+                    written += try await TranscriptSidecar.upload(
+                        snapshot, beside: copy.filePath, provider: provider, title: title, artist: nil
+                    )
+                } catch {
+                    failure = error.localizedDescription
+                }
+            }
+            guard self.track?.id == track.id else { return }
+            isUploading = false
+            if let failure {
+                lastError = "Couldn't write the transcript to your storage: \(failure)"
+            } else if written.isEmpty {
+                lastError = "Nothing was written — this episode's storage doesn't take writes."
+            } else {
+                uploadReport = "Wrote \(written.count) file\(written.count == 1 ? "" : "s") beside the audio."
             }
         }
     }
@@ -299,10 +303,6 @@ final class TranscriptRunner: ObservableObject {
         canRejectLastPass = false
         try? transcriptStore.save(trackID: track.id, segments: previous)
         segments = previous
-        // Straight back out: the rejected one was uploaded when the pass finished, so
-        // leaving the bucket holding it would make "reject" a local-only lie.
-        needsSidecarExport = true
-        exportSidecar()
     }
 
     private func startPass(track: Track, engine: TranscriptionEngineKind) {
@@ -325,7 +325,6 @@ final class TranscriptRunner: ObservableObject {
             progress = 0
             thaw()
             endBackgroundAssertion()
-            exportSidecar()
             // Only worth offering when there was something to go back to.
             canRejectLastPass = replacedSegments != nil && !segments.isEmpty
         }
@@ -491,7 +490,6 @@ final class TranscriptRunner: ObservableObject {
         segments = (try? transcriptStore.merge(
             trackID: track.id, incoming: produced, engine: engine.rawValue
         )) ?? TranscriptStore.merging(existing: segments, incoming: produced)
-        needsSidecarExport = true
     }
 
     // MARK: Editing
@@ -504,23 +502,17 @@ final class TranscriptRunner: ObservableObject {
             trackID: track.id, segmentStart: segment.start, newText: trimmed
         )) ?? segments
         edits = (try? transcriptStore.edits(trackID: track.id)) ?? edits
-        needsSidecarExport = true
         // A correction can put a name into the transcript that was mis-heard everywhere
         // it was said, which is exactly the term someone is correcting it for.
         recountTerms()
-        // A correction is hand-typed and can't be regenerated, so it goes back out at once
-        // rather than waiting for the loop to settle.
-        exportSidecar()
     }
 
-    /// Joins the selected lines. Same follow-up as a correction: the sidecar beside the
-    /// episode is rewritten, and the terms are recounted because joining two lines can put
-    /// a name back together that was split across them and counted as neither.
+    /// Joins the selected lines. The terms are recounted because joining two lines can put
+    /// a name back together that was split across them and counted as neither. Nothing
+    /// goes to storage — that is the Upload button's, and only the Upload button's.
     func mergeLines(starts: Set<Double>) {
         guard let track, starts.count > 1 else { return }
         segments = (try? transcriptStore.merge(trackID: track.id, starts: starts)) ?? segments
-        needsSidecarExport = true
-        exportSidecar()
         recountTerms()
     }
 
@@ -531,8 +523,6 @@ final class TranscriptRunner: ObservableObject {
         segments = (try? transcriptStore.split(
             trackID: track.id, start: segment.start, atCharacter: offset, atTime: time
         )) ?? segments
-        needsSidecarExport = true
-        exportSidecar()
         recountTerms()
     }
 
