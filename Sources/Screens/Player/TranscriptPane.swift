@@ -13,7 +13,12 @@ import UIKit
 /// waiting for it.
 struct TranscriptPane: View {
     @ObservedObject var transcript = TranscriptRunner.shared
-    let currentTime: TimeInterval
+    /// The line being spoken, not the second it is: the page's clock ticks twice a second
+    /// and the list below is a `ForEach` over every line of a forty-minute transcript, so
+    /// handing it the raw time made SwiftUI walk all of them twice a second — while the
+    /// only thing that can change in between is which line is bold, which changes when a
+    /// line changes and not before.
+    let spokenStart: Double?
     /// The whole player page scrolls as one, so the lyric list doesn't own a scroller —
     /// it drives the page's, which is what lets the artwork scroll away as lines advance.
     let scrollProxy: ScrollViewProxy
@@ -528,11 +533,10 @@ struct TranscriptPane: View {
             // Inside the page's scroller it would otherwise collapse to nothing.
             .frame(minHeight: 220)
         } else {
-            // Looked up once for the whole list, not once per row: while a transcription
-            // is running this list is rebuilt several times a second, and "am I the line
-            // being spoken?" asked per row was the difference between a page that scrolls
-            // and a page that stutters.
-            let spokenStart = transcript.currentLine(at: currentTime)?.start
+            // `spokenStart` is worked out once, by the page, for the same reason it isn't
+            // worked out per row: while a transcription runs this list is rebuilt several
+            // times a second, and "am I the line being spoken?" asked per row was the
+            // difference between a page that scrolls and a page that stutters.
             // Hoisted for the same reason as `spokenStart`: asked per row it's a scan of the
             // selection against every line, on a list that redraws several times a second
             // while a pass is running.
@@ -583,7 +587,7 @@ struct TranscriptPane: View {
             // it can come back on under the keyboard — tapping another line to hear it
             // again mid-correction does exactly that — and the next line spoken then
             // scrolls the field being typed in off the screen.
-            .onChange(of: transcript.currentLine(at: currentTime)?.start) { _, start in
+            .onChange(of: spokenStart) { _, start in
                 guard isFollowing, editingStart == nil, let start else { return }
                 withAnimation(.easeOut(duration: 0.25)) { scrollProxy.scrollTo(start, anchor: .center) }
             }
