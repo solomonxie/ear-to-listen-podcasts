@@ -62,7 +62,7 @@ enum LocalBackups {
     }
 
     @discardableResult
-    static func writeBeforeRemovingAllData(_ archive: Data, named name: String) -> URL? {
+    static func writePreDeletion(_ archive: Data, named name: String) -> URL? {
         write(archive, named: name)
     }
 
@@ -121,6 +121,8 @@ enum LocalBackups {
     private static func isOurs(_ name: String) -> Bool {
         let stem = (name as NSString).deletingPathExtension
         if name.hasSuffix(".jsonl") { return stem.count == 8 && stem.allSatisfy(\.isNumber) }
-        return BackupArchiveName.matches(stem + ".zip") || stem.hasPrefix("\(BackupArchiveName.suffix)-before-")
+        return BackupArchiveName.matches(stem + ".zip")
+            || stem.hasPrefix("\(BackupArchiveName.suffix)-before-")
+            || stem.hasPrefix("\(BackupArchiveName.suffix)-\(BackupArchiveName.preDeletionMarker)-")
     }
 }

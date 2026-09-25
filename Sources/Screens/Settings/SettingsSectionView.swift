@@ -15,7 +15,6 @@ struct SettingsSectionView: View {
     @State private var pendingImport: URL?
     @State private var showingAddAiKey = false
     @State private var showingRemoveAllConfirmation = false
-    @State private var pendingRemoveAllExport = false
 
     /// Says which of the four reasons an iCloud folder can be unusable applies, because
     /// they need four different things said — and the explanation *replaces* the location
@@ -228,24 +227,12 @@ struct SettingsSectionView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 8)
             .confirmationDialog("Remove all app data?", isPresented: $showingRemoveAllConfirmation) {
-                Button("Export and Remove", role: .destructive) {
-                    exportDocument = viewModel.makeExportDocument()
-                    pendingRemoveAllExport = exportDocument != nil
+                Button("Remove Everything", role: .destructive) {
+                    Task { await viewModel.removeAllAppData() }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This deletes everything stored by the app on this device. First, you will be asked to export your library data to a local folder.")
-            }
-            .fileExporter(
-                isPresented: $pendingRemoveAllExport,
-                document: exportDocument,
-                contentType: .zip,
-                defaultFilename: BackupArchiveName.base()
-            ) { result in
-                exportDocument = nil
-                if case .success = result {
-                    Task { await viewModel.removeAllAppData() }
-                }
+                Text("This deletes everything stored by the app on this device. A copy is saved first, by itself: into Files, and into iCloud Drive and your bucket wherever they're connected.")
             }
         }
         .sectionRow()

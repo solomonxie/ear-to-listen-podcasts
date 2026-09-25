@@ -352,7 +352,7 @@ struct BackupService {
         try await activeRemoteProvider().uploadBackup(archive)
     }
 
-    func uploadBeforeRemovingAllData(_ archive: Data, named name: String) async throws {
+    func uploadPreDeletion(_ archive: Data, named name: String) async throws {
         try await activeRemoteProvider().uploadBackup(archive, named: name)
     }
 
