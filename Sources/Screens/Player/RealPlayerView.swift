@@ -19,6 +19,11 @@ struct RealPlayerView: View {
     /// so the gesture is answered while it happens rather than only when it ends.
     @State private var dragBack: CGFloat = 0
     @State private var isDismissing = false
+    /// Raised by the scrubber for as long as the bar is armed. The bar runs the full
+    /// width of the page, so its left end sits inside the strip the back swipe watches —
+    /// and a seek started there used to slide the whole player off instead of moving the
+    /// playhead.
+    @State private var isScrubbing = false
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
     /// at the transport, and text that scrolls itself the moment you arrive takes the
@@ -202,7 +207,10 @@ struct RealPlayerView: View {
                     artwork(for: track)
                     titles(for: track)
                 }
-                Scrubber(currentTime: engine.currentTime, duration: engine.duration) { engine.seek(to: $0) }
+                Scrubber(
+                    currentTime: engine.currentTime, duration: engine.duration,
+                    isScrubbing: $isScrubbing
+                ) { engine.seek(to: $0) }
                     .padding(.horizontal)
                 transport(for: track, proxy: proxy)
                     .background { transportVisibilityProbe }
@@ -629,10 +637,16 @@ struct RealPlayerView: View {
     /// **Only at the stack root.** Pushed pages have the system's own back swipe; letting
     /// this one through as well would take the whole player out from under a speaker page
     /// somebody meant to step back from.
+    ///
+    /// **Never while the scrubber is armed.** Edge-only isn't enough on its own: the bar
+    /// reaches within a margin of the left edge, so seeking to the first minute or two
+    /// starts the stroke inside that strip. Arming takes a deliberate hold the back swipe
+    /// can't survive (it moves at once, failing the press), so a raised flag means the
+    /// finger is plainly on the bar and the page has no claim on the stroke.
     private var backSwipe: some Gesture {
         DragGesture(minimumDistance: 20)
             .onChanged { value in
-                guard path.isEmpty,
+                guard path.isEmpty, !isScrubbing,
                       value.startLocation.x < Self.backSwipeEdge,
                       // Horizontal dominance, or a diagonal flick while reading drags the
                       // page sideways on its way down.
@@ -853,13 +867,15 @@ private extension Array {
 struct Scrubber: View {
     let currentTime: TimeInterval
     let duration: TimeInterval
+    /// Published to the page rather than kept here: the page's own left-edge back swipe
+    /// overlaps the left end of this bar and has to stand down while it's being used.
+    @Binding var isScrubbing: Bool
     let onSeek: (TimeInterval) -> Void
 
     /// Long enough not to fire on a thumb passing through, short enough that reaching for
     /// it on purpose doesn't feel like waiting.
     private static let holdToScrub = 0.22
 
-    @State private var isScrubbing = false
     @State private var dragTime: TimeInterval = 0
 
     private var displayedTime: TimeInterval { isScrubbing ? dragTime : currentTime }
