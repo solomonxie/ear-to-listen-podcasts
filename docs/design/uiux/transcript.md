@@ -5,10 +5,10 @@ Playing, lyric-style. Controls flat above the lines, never in a menu.
 
 ```
  TRANSCRIPT                              3 edits   ← text button, only when there are edits
- ┌───────────┐ ┌───────────┐ ┌───────────┐
- │     📱    │ │     ✨    │ │     ⌖     │   icon over caption, tint = running
- │ On-device │ │    AI     │ │  Follow   │
- └───────────┘ └───────────┘ └───────────┘
+ ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐
+ │     📱    │ │     ✨    │ │     ↑     │ │     ⌖     │  icon over caption,
+ │ On-device │ │    AI     │ │  Upload   │ │  Follow   │  tint = running
+ └───────────┘ └───────────┘ └───────────┘ └───────────┘
  Transcribing the whole episode · 46%          ← status line, secondary
  ⚠ Stopped at 46% — Speech recognition isn't allowed
  ───────────────────────────────────────────────
@@ -111,10 +111,50 @@ Live transcription was removed: text rewrote itself under the reader, the page
 flickered, and the same audio was recognised several times over as the playhead
 moved. A percentage says as much and costs nothing.
 
+## Uploading — a press, never a consequence
+
+**Nothing this page does reaches your storage until you press Upload.**
+Correcting a line, joining two, splitting one, running a whole fresh pass: all of
+it is written to this phone and stops there.
+
+It used to write the sidecar out on every change, immediately after a correction
+and at the end of every pass. Those files are the listener's own — they may have
+written them, edited them by hand, or handed them to someone else — and
+overwriting them as a side effect of tidying one line is not a trade to make on
+anybody's behalf.
+
+```
+ ┌──────────────────────────────────────────────┐
+ │ Overwrite the transcript in your storage?    │
+ │ This writes what's on this page over the     │
+ │ transcript files sitting beside the audio —  │
+ │ every copy of this episode, and every        │
+ │ transcript format already there. Whatever    │
+ │ they say now is gone.                        │
+ │        [ Overwrite! ]        ( Cancel )      │
+ └──────────────────────────────────────────────┘
+ → Wrote 3 files beside the audio.               ← in the status line
+```
+
+**Every copy, every format.** One recording can live in two buckets (see
+`details.md`), each with its own transcript files beside it; writing to one and
+leaving the other saying something else is the state this ends. At each copy the
+`.vtt` and its `.lrc` companion always go up, and any other transcript format
+*already sitting there* — `.srt`, `.json`, `.txt` — is rewritten too. A stale
+`.srt` next to a fresh `.vtt` is exactly the confusion pressing the button is
+meant to end. Formats that aren't there are not created: writing files nobody
+asked for into someone's bucket is its own kind of rude.
+
+The other direction — reading a file beside the audio — is unchanged and still
+automatic, because it costs nothing and takes nothing away: it happens only when
+this episode has no transcript here yet, and never once a line has been
+corrected by hand.
+
 ## Status line, all four readings
 
 ```
  Transcribing the whole episode · 46%
+ Wrote 3 files beside the audio.                  ← after an upload
  From a transcript file beside the episode        ← cost nothing to make
  Whole episode transcribed
  46% transcribed                                  ← an earlier pass, stopped
@@ -184,8 +224,8 @@ moved. A percentage says as much and costs nothing.
   made against, and both would cover exactly those. It is one line of text; it
   gets one line of UI.
 - Saving is `TranscriptStore.applyEdit`: the line is marked edited so the next
-  pass can't write over it, the correction is filed for the diff view and the
-  vocabulary hints, and the transcript goes back beside the audio at once.
+  pass can't write over it, and the correction is filed for the diff view and the
+  vocabulary hints. It stays on the phone — see **Uploading** below.
 
 `3 edits` opens the word-level diff, newest first:
 
