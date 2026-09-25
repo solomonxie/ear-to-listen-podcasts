@@ -25,6 +25,9 @@ as two unrelated lists rather than rows:
  │ Track no.  4                               │   placeholder; type to override
  │ 🌐 Language: English ▾                     │ ← Inherit (speaker) first
  │ Duration   41 min                          │
+ │ Size       24.1 MB                         │
+ │ File       s3://slmx-archives2/bible/004.mp3│ ← tap = the bucket browser,
+ │ Also at    files://Podcasts/ep-004.mp3     │   standing on this file
  │ Playlists  ( Listen Later ) ( Bible ) ( ＋ )│ ← ＋ opens Add to Playlist
  │ Topics     ( Sleep ) ( Focus ) ( ＋ )       │ ← the album's, not this one's
  │ ───────────────────────────────────────    │
@@ -44,29 +47,32 @@ as two unrelated lists rather than rows:
  ┌ NOTES ─────────────────────────────────────┐
  │ What this episode is about                 │ ← 2…8 lines, grows
  └────────────────────────────────────────────┘
- ┌ BOOKMARKS ─────────────────────────────────┐  (only when there are any)
- │ 12:14  "…pipe in personal data"         ✎  │
- └────────────────────────────────────────────┘
- ┌ FILE ──────────────────────────────────────┐
- │ Connection   slmx-archives2                │
- │ Folder       bible-audio/2026              │
- │ File         ep-004.mp3                    │
- │ Format       MP3                           │
- │ Size         24.1 MB                       │
- │ Downloaded   24.1 MB   /   Not downloaded  │
- └────────────────────────────────────────────┘
- ┌ DATES ─────────────────────────────────────┐
- │ Changed on storage  Sep 12, 2026 4:13 PM   │
- │ Last synced         Sep 16, 2026 9:02 AM   │
- │ Last played         Never                  │
- │ Details edited      —                      │
- │ Stopped at          12:14                  │
- └────────────────────────────────────────────┘
+ ┌ BOOKMARKS AND NOTES ───────────────────────┐
+ │ 12:14  "…pipe in personal data"         ✎  │ ← the marks, and what was
+ └────────────────────────────────────────────┘   typed against them
  ┌ ABOUT THE SHOW ────────────────────────────┐  (only if a summary exists)
 ```
 
 A row with no value hides itself rather than printing a dash, so a
 thin-metadata episode shows a short card, not a column of blanks.
+
+## Where the file is — one row per copy
+
+The FILE card is gone. It said in five rows (connection, folder, file, format,
+size) what one address says: `s3://bucket/folder/ep-004.mp3`, written the way
+that cloud's own tooling writes it, extension and all. It sits with Duration and
+Size, among the other facts about the recording, and tapping it opens the bucket
+browser standing on the file.
+
+**One row per copy.** The same recording in two buckets — or twice in one, under
+two names — is one episode with two addresses (`FileFingerprint`,
+`Sources/DB/Models/TrackFile.swift`). The first row is the copy it plays from;
+the rest read `Also at`. A copy the last sync didn't list says so on the row
+rather than leaving it to be discovered by tapping it.
+
+The DATES card is gone too: changed-on-storage, last-synced, last-played,
+details-edited, stopped-at — five rows answering a question nobody asks while
+listening. Every one of them is still in the database for the things that do ask.
 
 ## Commit model
 

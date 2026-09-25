@@ -27,18 +27,12 @@ struct EpisodeLanguageField: View, Equatable {
     /// What this episode would be recognised in while it has no answer of its own — the
     /// album's language, or the speaker's. Shown as the selection when there's no answer.
     let inheritedIdentifier: String?
-    /// BCP-47 languages this phone can recognise offline, so the picker can say so before
-    /// you pick one rather than after it fails.
-    let readyLanguages: Set<String>
-    let hasCheckedLanguages: Bool
     let id: String
     @Binding var open: String?
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.localeIdentifier == rhs.localeIdentifier
             && lhs.inheritedIdentifier == rhs.inheritedIdentifier
-            && lhs.hasCheckedLanguages == rhs.hasCheckedLanguages
-            && lhs.readyLanguages == rhs.readyLanguages
             && lhs.open == rhs.open
     }
 
@@ -48,23 +42,18 @@ struct EpisodeLanguageField: View, Equatable {
         UnfoldingOptionWheel(
             title: "Language", id: id, open: $open, selection: languageSelection,
             options: orderedLocales.map {
-                UnfoldingPicker.Option($0.identifier(.bcp47), label(for: $0))
+                UnfoldingPicker.Option($0.identifier(.bcp47), TranscriptPane.languageName($0))
             }
         )
     }
 
     /// English, then the Chinese variants, then the rest — the two this library is in,
-    /// where they can be reached without scrolling. Whether a model is already downloaded
-    /// is said in the row's own label rather than by reordering, so the list doesn't
-    /// rearrange itself as downloads finish.
+    /// where they can be reached without scrolling. A row says the language and nothing
+    /// else: whether its model happens to be downloaded is the phone's business, it
+    /// changes under you, and `supportsOnDeviceRecognition` reads false for languages
+    /// that transcribe perfectly well anyway.
     private var orderedLocales: [Locale] {
         SpokenLanguagePicker.ordered(AppleSpeechTranscriber.supportedLocales)
-    }
-
-    private func label(for locale: Locale) -> String {
-        let name = TranscriptPane.languageName(locale)
-        guard hasCheckedLanguages else { return name }
-        return readyLanguages.contains(locale.identifier(.bcp47)) ? "\(name) · on this iPhone" : name
     }
 
     private var languageSelection: Binding<String?> {
@@ -90,15 +79,13 @@ struct EpisodeLanguageField: View, Equatable {
 
 
 extension EpisodeLanguageField {
-    /// The field as the currently-playing episode needs it: the app's own record of which
-    /// languages are downloaded, and whose answer this episode would inherit.
-    init(playing: TranscriptRunner, languages: OnDeviceLanguages, id: String, open: Binding<String?>) {
+    /// The field as the currently-playing episode needs it — including whose answer this
+    /// episode would inherit while it has none of its own.
+    init(playing: TranscriptRunner, id: String, open: Binding<String?>) {
         let inherited = playing.inheritedLanguage
         self.init(
             localeIdentifier: playing.track?.language,
             inheritedIdentifier: inherited?.source == .episode ? nil : inherited?.identifier,
-            readyLanguages: languages.ready,
-            hasCheckedLanguages: languages.hasChecked,
             id: id,
             open: open
         )
