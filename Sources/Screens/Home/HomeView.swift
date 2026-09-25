@@ -36,6 +36,9 @@ struct HomeView: View {
             .padding(.vertical)
         }
         .background(Color.appBackground.ignoresSafeArea())
+        // Registered once for the whole stack, so a page pushed from a pushed page —
+        // a term reached from the Terms list — routes the same way.
+        .navigationDestination(for: HomeRoute.self) { destination($0) }
         .navigationTitle("Good listening")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
         .onAppear { settings.load() }
@@ -67,6 +70,41 @@ struct HomeView: View {
         }
     }
 
+    /// Looked up when the page opens rather than captured by the card that opened it —
+    /// which is the whole point of `HomeRoute`. Something deleted while its page is open
+    /// leaves an empty page rather than a stale one.
+    @ViewBuilder
+    private func destination(_ route: HomeRoute) -> some View {
+        switch route {
+        case .album(let id):
+            if let album = homeData.albums.first(where: { $0.id == id }) {
+                AlbumDetailView(album: album)
+            }
+        case .speaker(let id):
+            if let speaker = homeData.artists.first(where: { $0.id == id }) {
+                SpeakerDetailView(speaker: speaker)
+            }
+        case .playlist(let id):
+            if let playlist = homeData.playlists.first(where: { $0.id == id }) {
+                PlaylistDetailView(playlist: playlist)
+            }
+        case .fixedPlaylist(let kind):
+            FixedPlaylistView(kind: kind)
+        case .year(let year):
+            EpisodeListView(title: "\(year)", tracks: homeData.tracks(forYear: year))
+        case .term(let id):
+            if let term = homeData.terms.first(where: { $0.id == id })?.term {
+                TermDetailView(term: term)
+            }
+        case .allTerms:
+            TermsPageView(terms: homeData.terms)
+        case .topic(let id):
+            if let topic = homeData.topics.first(where: { $0.id == id }) {
+                EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
+            }
+        }
+    }
+
     private func createPlaylist() {
         let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
@@ -92,7 +130,7 @@ struct HomeView: View {
         if !homeData.albums.isEmpty {
             shelf("Albums") {
                 ForEach(homeData.albums) { album in
-                    NavigationLink { AlbumDetailView(album: album) } label: {
+                    NavigationLink(value: HomeRoute.album(album.id)) {
                         AlbumCard(album: album)
                     }
                     .buttonStyle(.plain)
@@ -103,7 +141,7 @@ struct HomeView: View {
         if !homeData.artists.isEmpty {
             shelf("Speakers") {
                 ForEach(homeData.artists) { artist in
-                    NavigationLink { SpeakerDetailView(speaker: artist) } label: {
+                    NavigationLink(value: HomeRoute.speaker(artist.id)) {
                         SpeakerCard(artist: artist)
                     }
                     .buttonStyle(.plain)
@@ -123,13 +161,13 @@ struct HomeView: View {
             }
         }) {
             ForEach(FixedPlaylist.allCases) { kind in
-                NavigationLink { FixedPlaylistView(kind: kind) } label: {
+                NavigationLink(value: HomeRoute.fixedPlaylist(kind)) {
                     FixedPlaylistCard(kind: kind, count: homeData.count(of: kind))
                 }
                 .buttonStyle(.plain)
             }
             ForEach(homeData.playlists) { playlist in
-                NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
+                NavigationLink(value: HomeRoute.playlist(playlist.id)) {
                     PlaylistCard(playlist: playlist)
                 }
                 .buttonStyle(.plain)
@@ -165,9 +203,7 @@ struct HomeView: View {
         if !homeData.years.isEmpty {
             shelf("Browse by Year") {
                 ForEach(homeData.years, id: \.self) { year in
-                    NavigationLink {
-                        EpisodeListView(title: "\(year)", tracks: homeData.tracks(forYear: year))
-                    } label: {
+                    NavigationLink(value: HomeRoute.year(year)) {
                         ChipCard(title: "\(year)", color: .gray)
                     }
                     .buttonStyle(.plain)
@@ -180,16 +216,12 @@ struct HomeView: View {
         // page with room for a chart, not a row of capsules.
         if !homeData.terms.isEmpty {
             shelf("Terms", trailing: {
-                NavigationLink {
-                    TermsPageView(terms: homeData.terms)
-                } label: {
+                NavigationLink(value: HomeRoute.allTerms) {
                     Text("More").font(.footnote)
                 }
             }) {
                 ForEach(homeData.terms.prefix(24)) { term in
-                    NavigationLink {
-                        TermDetailView(term: term.term)
-                    } label: {
+                    NavigationLink(value: HomeRoute.term(term.id)) {
                         ChipCard(title: term.name, color: LibraryArt.color(for: term.id))
                     }
                     .buttonStyle(.plain)
@@ -200,9 +232,7 @@ struct HomeView: View {
         if !homeData.topics.isEmpty {
             shelf("Topics") {
                 ForEach(homeData.topics) { topic in
-                    NavigationLink {
-                        EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
-                    } label: {
+                    NavigationLink(value: HomeRoute.topic(topic.id)) {
                         ChipCard(title: topic.name, color: LibraryArt.color(for: topic.id))
                     }
                     .buttonStyle(.plain)
@@ -218,24 +248,22 @@ struct HomeView: View {
                 .padding(.top, 40)
         } else {
             resultSection("Speakers", results.speakers) { speaker in
-                NavigationLink { SpeakerDetailView(speaker: speaker) } label: {
+                NavigationLink(value: HomeRoute.speaker(speaker.id)) {
                     resultRow(symbol: "person.fill", color: .gray, title: speaker.name, subtitle: nil)
                 }
             }
             resultSection("Albums", results.albums) { album in
-                NavigationLink { AlbumDetailView(album: album) } label: {
+                NavigationLink(value: HomeRoute.album(album.id)) {
                     resultRow(symbol: "square.stack.fill", color: LibraryArt.color(for: album.id), title: album.name, subtitle: nil)
                 }
             }
             resultSection("Playlists", results.playlists) { playlist in
-                NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
+                NavigationLink(value: HomeRoute.playlist(playlist.id)) {
                     resultRow(symbol: "square.stack.fill", color: LibraryArt.color(for: playlist.id), title: playlist.name, subtitle: nil)
                 }
             }
             resultSection("Topics", results.topics) { topic in
-                NavigationLink {
-                    EpisodeListView(title: topic.name, tracks: homeData.tracks(forTopic: topic.id))
-                } label: {
+                NavigationLink(value: HomeRoute.topic(topic.id)) {
                     resultRow(symbol: "number", color: LibraryArt.color(for: topic.id), title: topic.name, subtitle: nil)
                 }
             }

@@ -36,9 +36,7 @@ struct TermsPageView: View {
                 chart
                     .listRowSeparator(.hidden)
                 if let focused {
-                    NavigationLink {
-                        TermDetailView(term: focused.term)
-                    } label: {
+                    NavigationLink(value: HomeRoute.term(focused.id)) {
                         HStack(spacing: 8) {
                             Text(focused.name)
                                 .font(.subheadline.weight(.semibold))
@@ -56,9 +54,7 @@ struct TermsPageView: View {
 
             Section("All \(terms.count)") {
                 ForEach(terms) { term in
-                    NavigationLink {
-                        TermDetailView(term: term.term)
-                    } label: {
+                    NavigationLink(value: HomeRoute.term(term.id)) {
                         HStack {
                             Text(term.name).font(.subheadline)
                             Spacer()
