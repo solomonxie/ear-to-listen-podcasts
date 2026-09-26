@@ -26,8 +26,9 @@ as two unrelated lists rather than rows:
  │ 🌐 Language: English ▾                     │ ← Inherit (speaker) first
  │ Duration   41 min                          │
  │ Size       24.1 MB                         │
- │ File       s3://slmx-archives2/bible/004.mp3│ ← tap = the bucket browser,
- │ Also at    files://Podcasts/ep-004.mp3     │   standing on this file
+ │ File       s3://slmx-archives2/bible-aud…  │ ← tap opens it up, whole path
+ │ Also at    files://Podcasts/ep-004.mp3     │   wrapped over as many lines
+ │            ( 📁 Show in storage )          │   as it takes
  │ Playlists  ( Listen Later ) ( Bible ) ( ＋ )│ ← ＋ opens Add to Playlist
  │ Topics     ( Sleep ) ( Focus ) ( ＋ )       │ ← the album's, not this one's
  │ ───────────────────────────────────────    │
@@ -44,8 +45,8 @@ as two unrelated lists rather than rows:
  │ ✨ Suggest with AI            ⟳            │
  │ Only 40% of this episode is transcribed…   │ ← blocked reason in place
  └────────────────────────────────────────────┘
- ┌ NOTES ─────────────────────────────────────┐
- │ What this episode is about                 │ ← 2…8 lines, grows
+ ┌ MY IMPRESSIONS ────────────────────────────┐
+ │ What you made of it                        │ ← 2…8 lines, grows
  └────────────────────────────────────────────┘
  ┌ BOOKMARKS AND NOTES ───────────────────────┐
  │ 12:14  "…pipe in personal data"         ✎  │ ← the marks, and what was
@@ -69,6 +70,15 @@ two names — is one episode with two addresses (`FileFingerprint`,
 `Sources/DB/Models/TrackFile.swift`). The first row is the copy it plays from;
 the rest read `Also at`. A copy the last sync didn't list says so on the row
 rather than leaving it to be discovered by tapping it.
+
+**Tapping the path opens it, it doesn't leave the page.** A bucket, two folders and
+an episode name is easily sixty characters, and `s3://slmx-archives2/bible-au…` has
+lost the half that identifies it. So the row expands in place and the path wraps
+over as many lines as it needs, breaking mid-name — a path is one long word, and
+there is no polite place to break it. The bucket browser is then a labelled row
+underneath, which says what it does; the whole row silently meaning "leave this
+page" was only ever readable because a clipped path left nothing else a tap could
+have meant.
 
 The DATES card is gone too: changed-on-storage, last-synced, last-played,
 details-edited, stopped-at — five rows answering a question nobody asks while
@@ -96,7 +106,7 @@ long-press on any row (`Edit Details`).
  ├ EPISODE ───────────────────────────────────┤
  │ Title · Speaker · Album · Show · Year ·    │
  │ Track no. · Spoken language ▾              │
- ├ NOTES ─────────────────────────────────────┤
+ ├ MY IMPRESSIONS ─────────────────────────────┤
  ├ ✨ Suggest with AI                      ⟳  │
  │ Reads this episode's transcript — the whole│
  │ of it, which is why it waits for           │
@@ -142,6 +152,12 @@ typed shouldn't be one tap from a model's.
 Counts on the term chips are the **app's own**, taken by scanning the transcript
 for whole words. A model asked how often it said something guesses, and a
 frequency ranking built on guesses ranks nothing.
+
+Named for whose words they are rather than for their subject. "Notes" sat on the
+same page as the AI summary, which is also prose about the episode, and as the
+BOOKMARKS AND NOTES section, which is prose about one moment in it — three things
+called notes. This is the only text on the page that nobody but the listener can
+write, so it says so.
 
 ## Bookmarks
 

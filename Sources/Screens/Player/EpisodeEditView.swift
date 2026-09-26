@@ -106,7 +106,7 @@ struct EpisodeEditView: View {
                     )
                 }
 
-                Section("Notes") {
+                Section("My impressions") {
                     TextField("What this episode is about", text: $notes, axis: .vertical)
                         .lineLimit(3...)
                 }
