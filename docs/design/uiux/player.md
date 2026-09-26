@@ -45,16 +45,17 @@ edge, which is what both the swipe and the ‹ promise. Closing is a flag on the
 engine rather than `@Environment(\.dismiss)`, since there is no presentation to
 dismiss.
 
-Edge-only, in the same strip iOS reserves for its own back gesture. The page is
-full of things that answer a horizontal drag — the scrubber above all — and a
-swipe recognised anywhere would compete with all of them for every stroke. The
-page slides with the finger and springs back if the stroke is too short, so the
-gesture is answered as it happens. A flick counts as well as a full 80pt: a short
-fast stroke and a short slow one shouldn't end the same way.
+Edge-only — the page is full of things that answer a horizontal drag, the scrubber
+above all, and a swipe recognised anywhere would compete with all of them for every
+stroke. **72pt of it**, though, not the ~20 iOS watches for its own back gesture:
+this page is used one-handed with something playing, and a strip a fingertip wide
+is one you have to aim at. The page slides with the finger and springs back if the
+stroke is too short, so the gesture is answered as it happens. A flick counts as
+well as a full 80pt of travel: a short fast stroke and a short slow one shouldn't
+end the same way.
 
-**A `UIScreenEdgePanGestureRecognizer`, not a `DragGesture`**
-(`Sources/App/SwipeToGoBack.swift`). Two things were wrong with the SwiftUI one,
-and both were felt rather than seen:
+**A UIKit pan, not a `DragGesture`** (`Sources/App/SwipeToGoBack.swift`). Two things
+were wrong with the SwiftUI one, and both were felt rather than seen:
 
 - *It shared the stroke instead of winning it.* `simultaneousGesture` ran beside
   every gesture on the page, so one stroke was answered twice — seeking into the
@@ -68,6 +69,13 @@ and both were felt rather than seen:
   spring on top, which then eased the page towards where the finger had been a
   third of a second ago. That was the whole of the lag. The travel lives in the
   modifier now; nothing rebuilds.
+
+`UIScreenEdgePanGestureRecognizer` was the first answer and is the obvious one —
+scroll views defer to it without being asked — but its hot zone can't be widened,
+which is the whole of this change. So it's a plain pan that makes those decisions
+itself: it fails the moment a touch turns out to have started too far in, or to be
+going down the page rather than across it, and asks scroll views (only scroll views)
+to wait for that answer before they claim the stroke.
 
 Only at the stack root: a pushed page has the system's own back swipe, and letting
 this one through as well would take the whole player out from under a speaker page
