@@ -67,13 +67,27 @@ final class PlaybackEngine: ObservableObject {
         }
     }
 
+    /// **Nothing here touches the database.** This is the frame the episode page opens on:
+    /// what's playing is published, and everything else — where the last episode had got
+    /// to, the played-just-now mark, the transcript — happens after, off the main thread.
+    /// Two write transactions and a transcript decode in front of the page is a page that
+    /// takes a visible moment to arrive, and on a cold start, with none of it in the file
+    /// cache, longer than that.
     func play(track: Track, queue newQueue: [Track] = []) {
-        persistProgress(force: true)
+        // Read before `currentTrack` moves on: this is the *outgoing* episode's position.
+        let leaving = currentTrack.map { ($0.id, currentTime) }
         queue = newQueue.isEmpty ? [track] : newQueue
         currentTrack = track
         hasRetriedCurrentTrack = false
-        try? trackStore.touchLastPlayed(id: track.id)
         TranscriptRunner.shared.attach(track: track)
+        let store = trackStore
+        Task.detached(priority: .utility) {
+            if let leaving, leaving.1.isFinite, leaving.1 >= 0 {
+                try? store.recordProgress(id: leaving.0, positionMs: Int(leaving.1 * 1000))
+            }
+            try? store.touchLastPlayed(id: track.id)
+        }
+        lastPersistedProgressAt = Date()
         Task { await loadAndPlay(track: track) }
     }
 

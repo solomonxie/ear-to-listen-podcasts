@@ -1,7 +1,7 @@
 import GRDB
 
 /// A "Speaker" in the UI — real synced tracks read this from embedded artist metadata.
-struct Artist: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashable {
+struct Artist: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashable, Sendable {
     static let databaseTableName = "artists"
 
     var id: String
