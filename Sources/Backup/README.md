@@ -131,8 +131,18 @@ COS, OSS, Azure or Google, whichever is connected.
 
 ## Restore: merged in, or swapped in
 
-Which one depends on what's already here, because an archive holds no episodes
-or albums — a sync rebuilds those.
+**Picking a file says what's in it first.** A folder of backups is a column of
+near-identical names and byte counts, and the question anyone has — is this the
+copy with my notes in it? — can only be answered by looking inside. So the
+dialog over a picked archive reads `12 episodes · 3 speakers · 2 transcripts ·
+41 marks`, the same counts `scripts/inspect-archive.py` prints, plus when it was
+saved. `BackupService.snapshot(inArchive:)` reads the JSON out of the zip and
+nothing else: no image unpacked, nothing written. Restore isn't offered at all
+for the two archives it would only refuse — one this app can't read, and one
+holding an empty library.
+
+Which of the two restores runs depends on what's already here, because an archive
+holds no episodes or albums — a sync rebuilds those.
 
 **Onto a library with episodes in it, the archive is merged** (`BackupService.apply`,
 which only ever fills in what isn't there). A swap is the destructive move here:
