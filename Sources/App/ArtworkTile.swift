@@ -69,14 +69,20 @@ struct ArtworkTile: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-            .task(id: fileName) { load() }
+            .task(id: fileName) { await load() }
     }
 
-    private func load() {
-        guard let url = ImageFileStore.artwork.url(for: fileName), let data = try? Data(contentsOf: url) else {
+    /// Read and decoded off the main thread. It is an 800pt JPEG on the player page and
+    /// one per row in a list, and doing either where the frames are drawn is a page that
+    /// hitches as its pictures arrive.
+    private func load() async {
+        guard let url = ImageFileStore.artwork.url(for: fileName) else {
             image = nil
             return
         }
-        image = UIImage(data: data)
+        image = await Task.detached(priority: .userInitiated) {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return UIImage(data: data)
+        }.value
     }
 }

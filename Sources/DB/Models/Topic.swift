@@ -6,7 +6,7 @@ import GRDB
 /// Topics used to hang off a `Show`, which was a second grouping concept alongside
 /// `Album` that nothing in a bucket of files ever actually populated. The albums are what
 /// a synced library really has, so that's what a topic tags now.
-struct Topic: Codable, FetchableRecord, PersistableRecord, Identifiable {
+struct Topic: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendable {
     static let databaseTableName = "topics"
 
     var id: String

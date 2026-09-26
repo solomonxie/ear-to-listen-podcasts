@@ -47,8 +47,12 @@ struct EpisodeSummarizer {
     /// A summary needs words, not a complete transcript: a half-transcribed episode still
     /// summarises the half it has, and says so by the times its points carry. Only "no
     /// transcript at all" is a reason to refuse.
+    /// Asked of the row, not of its contents — a transcript with lines in it is the
+    /// answer, and reading the lines to count them is a page's worth of JSON decoded for
+    /// one bit. Says nothing about how complete it is; `EpisodeMetadataSuggester.readiness`
+    /// is the one that needs the spans.
     func hasTranscript(trackID: String) -> Bool {
-        !segments(trackID: trackID).isEmpty
+        (try? TranscriptStore(dbQueue: dbQueue).exists(trackID: trackID)) ?? false
     }
 
     /// Runs the pass and stores both halves. Returns the summary text so the card can
