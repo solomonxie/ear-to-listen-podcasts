@@ -98,8 +98,11 @@ struct EpisodeDetailsPane: View {
                     .foregroundStyle(.tertiary)
             }
 
-            DetailCard("Notes") {
-                TextField("What this episode is about", text: $notes, axis: .vertical)
+            // Named for whose words these are, not for the subject: what the episode is
+            // about is the summary's job, written from the transcript a few rows up. This
+            // is the only text on the page nobody but the listener can write.
+            DetailCard("My impressions") {
+                TextField("What you made of it", text: $notes, axis: .vertical)
                     .font(.footnote)
                     .lineLimit(2...8)
                     .focused($focusedField, equals: .notes)
@@ -183,17 +186,11 @@ struct EpisodeDetailsPane: View {
 
         DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
         DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
-        // Where the file actually is, written the way that cloud's own tooling writes it,
-        // and a tap from the bucket browser standing on it. One row per copy: the same
-        // recording in two buckets is one episode with two addresses, not two episodes.
+        // Where the file actually is, written the way that cloud's own tooling writes it.
+        // One row per copy: the same recording in two buckets is one episode with two
+        // addresses, not two episodes.
         ForEach(Array(copies.enumerated()), id: \.element.id) { index, copy in
-            LinkRow(
-                index == 0 ? "File" : "Also at",
-                value: copy.label,
-                route: .browse(
-                    providerID: copy.providerID, folder: copy.folder, highlight: copy.filePath
-                )
-            )
+            FilePathRow(label: index == 0 ? "File" : "Also at", location: copy)
         }
         // Above Topics, which belong to the album: this is the one membership that's
         // about *this episode* and the one you decide while listening to it.
@@ -669,6 +666,61 @@ private struct FileLocation: Identifiable {
     var folder: String? {
         let folder = (filePath as NSString).deletingLastPathComponent
         return folder.isEmpty ? nil : folder
+    }
+}
+
+/// The file's whole address, which is the one value on this card that routinely doesn't
+/// fit. A bucket, a couple of folders and an episode name is easily sixty characters, and
+/// a path truncated to `s3://slmx-archives2/bible-au…` has lost the part that identifies
+/// it — the end.
+///
+/// **Tapping it opens it up rather than going anywhere.** Reading the path is the common
+/// want and the one the row can answer in place; it wraps to as many lines as it takes,
+/// breaking mid-name, because a path is one long word and hyphenating it politely across
+/// a column would be worse than either. The way into the bucket browser is then a labelled
+/// row underneath, where it says what it does — rather than the whole row silently meaning
+/// "leave this page", which is how it read when the value was clipped to one line and
+/// there was nothing else a tap could have meant.
+private struct FilePathRow: View {
+    let label: String
+    let location: FileLocation
+
+    @State private var isOpen = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(label)
+                    .sectionRowSecondary()
+                    .frame(width: DetailLayout.labelWidth, alignment: .leading)
+                Text(location.label)
+                    .font(.subheadline)
+                    .lineLimit(isOpen ? nil : 1)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minHeight: DetailLayout.rowHeight)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeOut(duration: 0.18)) { isOpen.toggle() }
+            }
+
+            if isOpen {
+                NavigationLink(
+                    value: PlayerRoute.browse(
+                        providerID: location.providerID, folder: location.folder,
+                        highlight: location.filePath
+                    )
+                ) {
+                    Label("Show in storage", systemImage: "folder")
+                        .font(.footnote)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, DetailLayout.labelWidth + 8)
+            }
+        }
     }
 }
 
