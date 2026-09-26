@@ -180,6 +180,28 @@ struct LibrarySnapshot: Codable {
             && artists.isEmpty && episodes.isEmpty && transcripts.isEmpty
     }
 
+    /// What's in here, in one line, counting only what there is any of: the answer to
+    /// "which of these copies do I want?", which is otherwise unanswerable from a folder
+    /// of same-shaped names and byte counts. The same numbers
+    /// `scripts/inspect-archive.py` prints, in the order that tells two archives apart
+    /// fastest — episodes first, because an archive that lost them lost everything keyed
+    /// to them.
+    var contentsSummary: String {
+        let counts: [(String, Int)] = [
+            ("episodes", episodes.count),
+            ("speakers", artists.count),
+            ("transcripts", transcripts.count),
+            ("corrections", transcripts.reduce(0) { $0 + $1.edits.count }),
+            ("marks", episodes.reduce(0) { $0 + $1.bookmarks.count }),
+            ("playlists", playlists.count),
+            ("sources", providers.count),
+        ]
+        let said = counts.filter { $0.1 > 0 }.map { count in
+            "\(count.1) \(count.1 == 1 ? String(count.0.dropLast()) : count.0)"
+        }
+        return said.isEmpty ? "Nothing in it" : said.joined(separator: " · ")
+    }
+
     init(
         exportedAt: Date,
         playlists: [PlaylistEntry],

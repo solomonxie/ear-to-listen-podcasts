@@ -13,6 +13,8 @@ struct SettingsSectionView: View {
     @State private var showingExportPicker = false
     @State private var showingImportPicker = false
     @State private var pendingImport: URL?
+    /// What's inside the file just picked, read while the dialog asking about it is up.
+    @State private var pendingPreview: SettingsViewModel.BackupPreview?
     @State private var showingAddAiKey = false
     @State private var showingRemoveAllConfirmation = false
 
@@ -38,6 +40,23 @@ struct SettingsSectionView: View {
             return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current())"
         }
         return "Files / iCloud Drive / Ear to Listen · \(BackupArchiveName.current()) · Last: \(lastBackupAt.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    /// What's in the archive first, then what restoring it does. The counts are the whole
+    /// reason this dialog exists: two copies of a library differ by what they hold, and
+    /// nothing in a file name or its size says which one is the one with your notes in it.
+    private var importMessage: String {
+        guard let pendingPreview else {
+            return "It becomes your library. The one here now is kept on this phone for a week — you can put it back."
+        }
+        var lines = [pendingPreview.contents]
+        if let exportedAt = pendingPreview.exportedAt {
+            lines.append("Saved \(exportedAt.formatted(date: .abbreviated, time: .shortened))")
+        }
+        if pendingPreview.canRestore {
+            lines.append("It becomes your library. The one here now is kept on this phone for a week — you can put it back.")
+        }
+        return lines.joined(separator: "\n\n")
     }
 
     var body: some View {
@@ -89,6 +108,7 @@ struct SettingsSectionView: View {
                 }
                 .fileImporter(isPresented: $showingImportPicker, allowedContentTypes: [.zip]) { result in
                     if case .success(let url) = result {
+                        pendingPreview = viewModel.preview(of: url)
                         pendingImport = url
                     }
                 }
@@ -100,13 +120,17 @@ struct SettingsSectionView: View {
                     isPresented: Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } }),
                     presenting: pendingImport
                 ) { url in
-                    Button("Restore") {
-                        pendingImport = nil
-                        viewModel.importSnapshot(from: url)
+                    // Not offered for an archive a restore would only refuse — one that
+                    // isn't ours, or one holding an empty library.
+                    if pendingPreview?.canRestore != false {
+                        Button("Restore") {
+                            pendingImport = nil
+                            viewModel.importSnapshot(from: url)
+                        }
                     }
                     Button("Cancel", role: .cancel) { pendingImport = nil }
                 } message: { _ in
-                    Text("It becomes your library. The one here now is kept on this phone for a week — you can put it back.")
+                    Text(importMessage)
                 }
 
                 if let backupStatusMessage = viewModel.backupStatusMessage {

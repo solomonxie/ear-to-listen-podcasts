@@ -254,6 +254,45 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    /// What a picked archive holds, read before a thing is touched. A folder of backups is
+    /// a column of near-identical names and byte counts, and the question anyone actually
+    /// has — is this the copy with my notes in it? — can only be answered by looking
+    /// inside.
+    struct BackupPreview {
+        var exportedAt: Date?
+        /// One line of counts, or why there isn't one.
+        var contents: String
+        /// False for the two archives a restore would refuse anyway: one this app can't
+        /// read, and one holding an empty library. Better not offered than offered and
+        /// then declined.
+        var canRestore: Bool
+    }
+
+    /// Reads the JSON out of the zip and nothing else — no image unpacked, nothing written,
+    /// no library replaced.
+    func preview(of url: URL) -> BackupPreview {
+        let didStartAccess = url.startAccessingSecurityScopedResource()
+        defer { if didStartAccess { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else {
+            return BackupPreview(contents: "Couldn't read that file.", canRestore: false)
+        }
+        guard let snapshot = BackupService().snapshot(inArchive: data) else {
+            return BackupPreview(
+                contents: "This doesn't look like an Ear to Listen backup — no library data in it.",
+                canRestore: false
+            )
+        }
+        return BackupPreview(
+            exportedAt: snapshot.exportedAt,
+            contents: snapshot.isEmpty
+                // Said plainly, because this is the archive a wipe leaves behind and the
+                // one that looks newest in every listing.
+                ? "Nothing in it — this is a backup of an empty library."
+                : snapshot.contentsSummary,
+            canRestore: !snapshot.isEmpty
+        )
+    }
+
     /// `url` comes from a `.fileImporter` picker, so it's security-scoped. The archive is
     /// merged into the library that's here — or, if there isn't one, restored into a
     /// library of its own and switched to. Either way the one that was here is kept as a
