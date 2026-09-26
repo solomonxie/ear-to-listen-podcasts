@@ -116,7 +116,15 @@ struct EpisodeDetailsPane: View {
             AddToPlaylistSheet(track: track)
         }
         .task(id: playingTrack.id) { await load() }
-        .task(id: playingTrack.id) { readiness = EpisodeMetadataSuggester().readiness(track: track) }
+        // Off the main actor: it reads every timed line of the transcript to work out how
+        // much of the episode is covered, which is not something to do on the thread
+        // drawing the page it sits on.
+        .task(id: playingTrack.id) {
+            let episode = track
+            readiness = await Task.detached(priority: .utility) {
+                EpisodeMetadataSuggester().readiness(track: episode)
+            }.value
+        }
         // Sync and the other editors hold their own copies of these rows; this is what
         // puts their changes on screen without waiting for the next track change.
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
@@ -256,8 +264,7 @@ struct EpisodeDetailsPane: View {
 
     /// One listing of the sources, not one per copy: an episode with three addresses
     /// otherwise asked the same question three times.
-    private func loadCopies() -> [FileLocation] {
-        let records = (try? providerStore.all()) ?? []
+    private nonisolated static func copies(of track: Track, providers records: [ProviderRecord]) -> [FileLocation] {
         let files = (try? TrackFileStore(dbQueue: DatabaseManager.shared.dbQueue).all(forTrack: track.id)) ?? []
         // The copy it plays from reads first, whatever order they were found in.
         let ordered = files.sorted { left, _ in
@@ -286,15 +293,36 @@ struct EpisodeDetailsPane: View {
         Binding(get: { Int(trackNumber) }, set: { trackNumber = $0.map(String.init) ?? "" })
     }
 
+    /// Everything this card shows, read in one pass off the main actor and put on screen
+    /// together. Eight queries and a keychain read for the file's bucket is not much, but
+    /// it was all happening on the thread drawing the page as it slid in — the card has to
+    /// fill in *after* the page opens, not before.
     private func load() async {
-        latest = (try? trackStore.find(id: playingTrack.id)) ?? nil
-        artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
-        album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
-        // Topics tag the collection an episode belongs to.
-        topics = track.albumID.flatMap { try? libraryStore.topics(forAlbum: $0) } ?? []
-        loadPlaylists()
-        loadTerms()
-        copies = loadCopies()
+        let loaded = await Task.detached(priority: .userInitiated) { [playingTrack, libraryStore, trackStore, providerStore, playlistStore, termStore] in
+            let track = ((try? trackStore.find(id: playingTrack.id)) ?? nil) ?? playingTrack
+            return Loaded(
+                track: track,
+                artist: track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil,
+                album: track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil,
+                // Topics tag the collection an episode belongs to.
+                topics: track.albumID.flatMap { try? libraryStore.topics(forAlbum: $0) } ?? [],
+                // Listen Later first and named as itself: it's the app's own list, it isn't
+                // in the playlists table, and "on the queue" is as much an answer to "what
+                // lists is this on" as any hand-made one.
+                playlistNames: (track.listenLater ? ["Listen Later"] : [])
+                    + ((try? playlistStore.playlists(containingTrack: track.id)) ?? []).map(\.name),
+                terms: (try? termStore.terms(forTrack: track.id)) ?? [],
+                copies: Self.copies(of: track, providers: (try? providerStore.all()) ?? [])
+            )
+        }.value
+        guard playingTrack.id == loaded.track.id else { return }
+        latest = loaded.track
+        artist = loaded.artist
+        album = loaded.album
+        topics = loaded.topics
+        playlistNames = loaded.playlistNames
+        terms = loaded.terms
+        copies = loaded.copies
         // Half-typed words outrank whatever the database says — a sync landing mid-edit
         // must not pull the text out from under the cursor. A different track is the one
         // exception: those words have nowhere left to go.
@@ -303,9 +331,8 @@ struct EpisodeDetailsPane: View {
         fillFields()
     }
 
-    /// Listen Later first and named as itself: it's the app's own list, it isn't in the
-    /// playlists table, and "on the queue" is as much an answer to "what lists is this on"
-    /// as any hand-made one.
+    /// Re-read on its own after the sheet adds this episode to a list — the whole card
+    /// doesn't need rebuilding for one row.
     private func loadPlaylists() {
         let made = ((try? playlistStore.playlists(containingTrack: track.id)) ?? []).map(\.name)
         playlistNames = (track.listenLater ? ["Listen Later"] : []) + made
@@ -655,9 +682,21 @@ private struct LinkRow: View {
 
 }
 
+/// Everything the card reads from the database, in one value — so one hop off the main
+/// actor answers all of it and one assignment puts it on screen.
+private struct Loaded: Sendable {
+    var track: Track
+    var artist: Artist?
+    var album: Album?
+    var topics: [Topic]
+    var playlistNames: [String]
+    var terms: [TermCount]
+    var copies: [FileLocation]
+}
+
 /// One place the episode's audio is, ready to draw: the address as its own cloud writes
 /// it, and what the bucket browser needs to open standing on it.
-private struct FileLocation: Identifiable {
+private struct FileLocation: Identifiable, Sendable {
     let id: String
     let providerID: String
     let filePath: String

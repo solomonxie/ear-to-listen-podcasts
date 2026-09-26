@@ -9,7 +9,7 @@ import GRDB
 /// playback, the cache and the browser each need *a* file to open, and they all work in
 /// that pair. This table is the whole set, and it's what a sync pass keeps up to date —
 /// whether each copy is still there, what it weighs, and which transcript sits beside it.
-struct TrackFile: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashable {
+struct TrackFile: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashable, Sendable {
     static let databaseTableName = "trackFiles"
 
     var id: String

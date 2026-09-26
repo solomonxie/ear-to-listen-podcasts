@@ -8,7 +8,7 @@ import GRDB
 /// what one episode *mentions*, and there are dozens per episode. Keeping them apart is
 /// what lets terms be counted and ranked without a hand-made tag list turning into a
 /// frequency table nobody curated.
-struct Term: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashable {
+struct Term: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashable, Sendable {
     static let databaseTableName = "terms"
 
     var id: String
@@ -28,7 +28,7 @@ struct TrackTerm: Codable, FetchableRecord, PersistableRecord {
 
 /// A term with however many mentions the view is asking about — one episode's, an album's,
 /// or the whole library's.
-struct TermCount: Identifiable, Hashable {
+struct TermCount: Identifiable, Hashable, Sendable {
     var term: Term
     var mentions: Int
     /// How many episodes it was counted across. 1 on an episode page, more elsewhere.

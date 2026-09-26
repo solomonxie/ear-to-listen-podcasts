@@ -84,6 +84,20 @@ struct TranscriptStore {
         }
     }
 
+    /// Whether there's a transcript here, without reading one. `find` decodes every timed
+    /// line in the episode, which is a page's worth of JSON for an answer that is one bit
+    /// — and it was being asked from inside a view body.
+    func exists(trackID: String) throws -> Bool {
+        try dbQueue.read { db in
+            try Bool.fetchOne(db, sql: """
+                SELECT EXISTS(
+                    SELECT 1 FROM transcripts
+                    WHERE trackID = ? AND segmentsJSON NOT IN ('', '[]')
+                )
+                """, arguments: [trackID]) ?? false
+        }
+    }
+
     func find(trackID: String) throws -> [TranscriptSegment]? {
         try dbQueue.read { db in
             guard let record = try TranscriptRecord.fetchOne(db, key: trackID) else { return nil }

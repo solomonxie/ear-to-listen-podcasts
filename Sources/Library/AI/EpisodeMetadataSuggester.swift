@@ -39,7 +39,7 @@ struct EpisodeMetadataSuggester {
 
     /// Why an episode can't be suggested for yet — each case is something the listener can
     /// act on, so `EpisodeEditView` prints it next to the disabled button.
-    enum Readiness: Equatable {
+    enum Readiness: Equatable, Sendable {
         case ready
         case noTranscript
         case partial(coverage: Double)

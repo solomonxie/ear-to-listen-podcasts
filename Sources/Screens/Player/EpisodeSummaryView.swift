@@ -43,7 +43,10 @@ struct EpisodeSummaryView: View {
         _summary = State(initialValue: track.summary ?? "")
     }
 
-    private var hasTranscript: Bool { summarizer.hasTranscript(trackID: track.id) }
+    /// Held, not asked. It was a computed property read from inside `body`, so every pass
+    /// over an episode with no summary yet — which is most of them, and every keystroke in
+    /// the fields above — went to the database for it.
+    @State private var hasTranscript = false
 
     /// Long enough for three lines to be a clipping rather than the whole thing. A
     /// "More" that reveals nothing is worse than no More at all, so a two-line summary
@@ -74,6 +77,13 @@ struct EpisodeSummaryView: View {
         // the page shows, and the run that produced it only fills a blank. To have
         // another written, clear this one and ask again, which is the same rule the
         // fields above follow.
+        .task(id: track.id) {
+            let trackID = track.id
+            let summarizer = summarizer
+            hasTranscript = await Task.detached(priority: .utility) {
+                summarizer.hasTranscript(trackID: trackID)
+            }.value
+        }
         .task(id: analyzeRequest) {
             guard analyzeRequest > 0, summary.isEmpty, hasTranscript, !isRunning else { return }
             await analyze()

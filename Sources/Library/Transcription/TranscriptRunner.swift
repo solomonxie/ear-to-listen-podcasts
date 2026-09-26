@@ -173,17 +173,36 @@ final class TranscriptRunner: ObservableObject {
         duration = newTrack?.durationMs.map { Double($0) / 1000 } ?? 0
         guard let newTrack else { return }
         frozenLines = nil
-        segments = (try? transcriptStore.find(trackID: newTrack.id)) ?? []
-        edits = (try? transcriptStore.edits(trackID: newTrack.id)) ?? []
 
-        // A transcript already sitting beside the audio is the cheapest one there is, so
-        // look before spending anything.
-        guard segments.isEmpty else { return }
-        // Always, whenever nothing is stored — a recorded path makes it one request
-        // instead of a few, but its absence is not evidence there's no transcript.
+        // Read off the main actor, and after this returns. A stored transcript is a JSON
+        // blob of a few hundred timed lines, and decoding it before the page is allowed to
+        // open is the difference between an episode page that appears and one that
+        // arrives. The page shows an empty transcript for the moment it takes.
+        let store = transcriptStore
         sidecarTask = Task { [weak self] in
-            await self?.importSidecar(track: newTrack)
+            let stored = await Self.stored(trackID: newTrack.id, in: store)
+            guard let self, track?.id == newTrack.id else { return }
+            segments = stored.segments
+            edits = stored.edits
+
+            // A transcript already sitting beside the audio is the cheapest one there is,
+            // so look before spending anything. Always, whenever nothing is stored — a
+            // recorded path makes it one request instead of a few, but its absence is not
+            // evidence there's no transcript.
+            guard segments.isEmpty else { return }
+            await importSidecar(track: newTrack)
         }
+    }
+
+    private nonisolated static func stored(
+        trackID: String, in store: TranscriptStore
+    ) async -> (segments: [TranscriptSegment], edits: [TranscriptEdit]) {
+        await Task.detached(priority: .userInitiated) {
+            (
+                ((try? store.find(trackID: trackID)) ?? nil) ?? [],
+                (try? store.edits(trackID: trackID)) ?? []
+            )
+        }.value
     }
 
     /// Pulls the transcript the bucket holds for this episode.
