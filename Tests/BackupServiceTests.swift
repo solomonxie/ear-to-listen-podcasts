@@ -103,6 +103,28 @@ final class BackupServiceTests: XCTestCase {
         XCTAssertTrue(service.holdsData(try service.currentArchive()))
     }
 
+    /// The line that answers "which of these copies do I want?" before anything is
+    /// replaced — and the one thing said about an archive that holds nothing.
+    func testAnArchiveSaysWhatItHoldsWithoutBeingUnpacked() throws {
+        let dbQueue = try makeDatabase()
+        try ProviderStore(dbQueue: dbQueue).upsert(
+            ProviderRecord(id: "p1", type: "s3", label: "My Bucket", configJSON: "", isActive: true, createdAt: Date())
+        )
+        let artist = try LibraryStore(dbQueue: dbQueue).upsertArtist(name: "Jane Doe")
+        try LibraryStore(dbQueue: dbQueue).updateArtist(id: artist.id, name: artist.name, bio: "A great host")
+        let track = try makeTrack(providerID: "p1", filePath: "ep1.mp3", dbQueue: dbQueue)
+        try TrackStore(dbQueue: dbQueue).setFavorite(id: track.id, isFavorite: true)
+        try BookmarkStore(dbQueue: dbQueue).add(trackID: track.id, positionMs: 12_000)
+
+        let service = BackupService(dbQueue: dbQueue)
+        let snapshot = try XCTUnwrap(service.snapshot(inArchive: try service.currentArchive()))
+
+        XCTAssertEqual(snapshot.contentsSummary, "1 episode · 1 speaker · 1 mark · 1 source")
+        XCTAssertEqual(LibrarySnapshot(
+            exportedAt: Date(), playlists: [], providers: [], importSources: []
+        ).contentsSummary, "Nothing in it")
+    }
+
     func testSnapshotRoundTripsThroughJSON() throws {
         let dbQueue = try makeDatabase()
         try ProviderStore(dbQueue: dbQueue).upsert(

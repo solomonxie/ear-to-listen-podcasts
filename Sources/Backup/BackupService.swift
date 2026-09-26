@@ -367,10 +367,15 @@ struct BackupService {
     /// restore from taking the copy a wipe left behind while good ones sit beside it.
     /// Reads the JSON only: nothing is unpacked and nothing is written.
     func holdsData(_ archive: Data) -> Bool {
-        guard let entry = ZipArchive.read(archive).first(where: { $0.name == "snapshot.json" }),
-              let snapshot = try? decode(entry.data)
-        else { return false }
-        return !snapshot.isEmpty
+        snapshot(inArchive: archive).map { !$0.isEmpty } ?? false
+    }
+
+    /// The snapshot inside an archive and nothing else: the JSON is read, no image is
+    /// unpacked and nothing is written. What "is this the copy I want?" is answered from,
+    /// before anything is replaced.
+    func snapshot(inArchive archive: Data) -> LibrarySnapshot? {
+        guard let entry = ZipArchive.read(archive).first(where: { $0.name == "snapshot.json" }) else { return nil }
+        return try? decode(entry.data)
     }
 
     func upload(_ archive: Data) async throws {
