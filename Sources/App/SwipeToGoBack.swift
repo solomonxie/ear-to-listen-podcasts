@@ -14,6 +14,13 @@ extension View {
     }
 }
 
+/// How far in from the left edge a stroke may start. Wider than the strip iOS watches
+/// for its own back swipe, which is about a fingertip: this page is reached one-handed
+/// with something playing, and a gesture that only answers the outermost few points is
+/// one you have to aim at. Wide enough to hit without looking, narrow enough to leave
+/// the middle of the page — where the reading is — alone.
+private let backSwipeEdge: CGFloat = 72
+
 /// Why a UIKit recogniser rather than a `DragGesture`:
 ///
 /// **It has to win the stroke, not share it.** The page under this is a scroll view full
@@ -90,16 +97,15 @@ private struct EdgePan: UIViewRepresentable {
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var owner: EdgePan
 
-        lazy var recognizer: UIScreenEdgePanGestureRecognizer = {
-            let recognizer = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handle))
-            recognizer.edges = .left
+        lazy var recognizer: EdgePanGestureRecognizer = {
+            let recognizer = EdgePanGestureRecognizer(target: self, action: #selector(handle))
             recognizer.delegate = self
             return recognizer
         }()
 
         init(_ owner: EdgePan) { self.owner = owner }
 
-        @objc func handle(_ recognizer: UIScreenEdgePanGestureRecognizer) {
+        @objc func handle(_ recognizer: UIPanGestureRecognizer) {
             let translation = recognizer.translation(in: recognizer.view).x
             switch recognizer.state {
             case .changed:
@@ -125,6 +131,45 @@ private struct EdgePan: UIViewRepresentable {
             guard window?.rootViewController?.presentedViewController == nil else { return false }
             return owner.canBegin()
         }
+
+        /// Scrolling waits to see whether this is a back swipe first — and only scrolling,
+        /// and only for a stroke that began inside the strip, since anything starting
+        /// outside it has already failed by the time this is asked. A screen-edge pan gets
+        /// this deference from `UIScrollView` for free; a plain one has to ask for it, or
+        /// the scroller claims the stroke a few points before this recogniser has decided.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer
+        ) -> Bool {
+            other.view is UIScrollView
+        }
+    }
+}
+
+/// A pan that only ever answers a stroke starting near the left edge and heading right.
+///
+/// `UIScreenEdgePanGestureRecognizer` would be the obvious choice and was the first one:
+/// it is what the system uses, and scroll views defer to it without being asked. Its hot
+/// zone is not adjustable, though, and it is about a fingertip wide — enough for a
+/// gesture you know is there, not enough for one made without looking while listening.
+///
+/// So the two decisions it made for free are made here instead: fail at once for a touch
+/// that began too far in, and fail as soon as the stroke shows itself to be vertical or
+/// going the other way. Failing early is the point — a recogniser that stays undecided is
+/// a scroll view held up waiting for it.
+private final class EdgePanGestureRecognizer: UIPanGestureRecognizer {
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard let touch = touches.first, let view else { return }
+        if touch.location(in: view).x > backSwipeEdge { state = .failed }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard state == .possible else { return }
+        let moved = translation(in: view)
+        // Sideways, and the way the page goes. A drag down the left edge of a transcript
+        // is reading, not leaving.
+        if abs(moved.y) > abs(moved.x) || moved.x < 0 { state = .failed }
     }
 }
 
