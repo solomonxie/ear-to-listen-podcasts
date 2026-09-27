@@ -59,6 +59,14 @@ struct SettingsSectionView: View {
         return lines.joined(separator: "\n\n")
     }
 
+    /// Version and build as shipped, so a bug report can name the build it came from.
+    private var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(short) (\(build))"
+    }
+
     var body: some View {
         // Rows inherit `.sectionRow()`; headings and hints opt out explicitly. Without it
         // every Label falls back to `.body`, dwarfing its own section heading.
@@ -235,6 +243,18 @@ struct SettingsSectionView: View {
                     options: AppLanguage.allCases.map { UnfoldingPicker.Option($0, $0.displayName) },
                     valueAlignment: .leading
                 )
+            }
+            .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeading(
+                    title: "ABOUT",
+                    info: "No accounts, no sign-in, no analytics, no ads, no tracking, and no server of ours to send anything to — there isn't one. Episodes play from the storage you picked, and backups go to storage you picked; both stay yours. The app reaches the network for two things only: the buckets and folders you added, and — if you add a key — the AI vendor that key belongs to, straight from this device. Transcription runs on the phone."
+                )
+                Text("Ear to Listen \(appVersion)").sectionHint()
+                Text("An offline audio player. It collects no data about you, has no backend server, plays audio from storage you choose, and backs up to storage you choose.")
+                    .sectionHint()
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal)
 
