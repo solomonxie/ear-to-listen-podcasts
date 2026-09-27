@@ -8,8 +8,15 @@ import GRDB
 /// log is a record of everything since, so nothing between copies is unrecoverable.
 /// Local only — it names row ids that are regenerated on the next install, so it is never
 /// replayed on restore. It still travels inside the archive (`BackupService.archive`) so
-/// the record outlives the phone, and `LocalBackups` prunes it on the same seven-day age
-/// rule as every other tier-1 file.
+/// the record outlives the phone.
+///
+/// Unlike the copies beside it, it is never pruned. The copies age out after a week
+/// because each one is the whole library again; the log is a few hundred bytes a day and
+/// is the only thing that reaches back past them. Ageing it out would mean the archive
+/// written today carried a week of history, tomorrow's another week, and the question it
+/// exists to answer — when did this change, and what was it before — would only ever be
+/// answerable about the last seven days. It holds counts rather than text for anything
+/// long (`TranscriptStore`), so the one thing that grows is the number of hand edits made.
 ///
 /// Only the tables a backup carries are logged. Synced track and library rows are left
 /// out on purpose: a sync rebuilds them from the files themselves, so logging them would
@@ -66,7 +73,7 @@ enum ChangeLog {
         try? handle.write(contentsOf: line)
     }
 
-    /// One file per day, named so it sorts by date and prunes by reading its own name.
+    /// One file per day, named so a folder listing reads as a history and sorts by date.
     static func fileName(for date: Date, calendar: Calendar = .current) -> String {
         let day = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d%02d%02d.jsonl", day.year ?? 0, day.month ?? 0, day.day ?? 0)

@@ -4,7 +4,7 @@ Three tiers, each answering a failure the others don't.
 
 | Tier | Answers | Survives deleting the app | Cadence | Retention |
 |---|---|---|---|---|
-| **1. This phone** — `LocalBackups`, `ChangeLog` | the data is still here and now **wrong**: a bad import, the wrong archive restored, an edit nobody meant | No | on app-background, max daily; plus before any large operation; log on every write | 7 days, by age |
+| **1. This phone** — `LocalBackups`, `ChangeLog` | the data is still here and now **wrong**: a bad import, the wrong archive restored, an edit nobody meant | No | on app-background, max daily; plus before any large operation; log on every write | copies 7 days, by age; the log for the life of the install |
 | **2. iCloud Drive** — `CloudDrive` | phone lost or app reinstalled; also "let me see the file myself" | Yes | daily, only if changed | latest 10, older pruned |
 | **3. The bucket** — any connected cloud | everything else, plus "what did this look like in March" | Yes | daily, only if changed | never deleted |
 
@@ -46,7 +46,7 @@ What ships is a zip (`BackupService.archive`/`unarchive`, via the hand-rolled
 ├── snapshot.json        version, user-authored data, connection list (no secrets)
 ├── photos/<file>.jpg    speaker photos referenced by snapshot.json
 ├── artwork/<file>.jpg   episode artwork
-└── change-log/<day>.jsonl   what was written, and when — carried, never replayed
+└── change-log/<day>.jsonl   every write since day one, and when — carried, never replayed
 ```
 
 ## Tier 1: the copies that stay here
@@ -66,6 +66,11 @@ It keeps three different things:
   Only the tables a backup carries are logged; synced rows are left out, since
   a library re-scan would bury the handful of lines anyone would want to read.
   It also supplies the high-water mark every other tier's schedule gate reads.
+  It is the one thing here that is never pruned: the copies age out because each
+  is the whole library again, while the log is a few hundred bytes a day and the
+  only record reaching back past the oldest copy still on the phone. So every
+  archive written carries the history from day one, and the copies answer what
+  the library looks like while the log answers what changed and when.
 - **Archive zips** in the Documents folder (`UIFileSharingEnabled`), so one can
   be dragged out to anywhere.
 
