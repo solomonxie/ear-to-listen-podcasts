@@ -35,11 +35,24 @@ final class LocalBackupsTests: XCTestCase {
         try write("20260901-ear-to-listen.zip", daysAgo: 17)
         try write("20260918-ear-to-listen.sqlite", daysAgo: 1)
         try write("20260901-ear-to-listen.sqlite", daysAgo: 30)
-        try write("20260910.jsonl", daysAgo: 8)
 
         LocalBackups.prune(in: [directory])
 
         XCTAssertEqual(try remaining(), ["20260918-ear-to-listen.zip", "20260912-ear-to-listen.zip", "20260918-ear-to-listen.sqlite"])
+    }
+
+    /// The copies age out because each one is the whole library again. The log is the only
+    /// record of what happened before the oldest of them, so it is kept for the life of the
+    /// install — and a prune pointed at its folder by mistake still can't take it.
+    func testTheChangeLogIsNeverPruned() throws {
+        XCTAssertFalse(LocalBackups.prunedDirectories.contains(ChangeLog.directory))
+
+        try write("20240101.jsonl", daysAgo: 900)
+        try write("20260910.jsonl", daysAgo: 8)
+
+        LocalBackups.prune(in: [directory])
+
+        XCTAssertEqual(try remaining(), ["20240101.jsonl", "20260910.jsonl"])
     }
 
     /// A copy taken before a large operation ages out like everything else — but it is
