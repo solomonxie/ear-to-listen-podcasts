@@ -247,8 +247,15 @@ struct NotesPane: View {
 /// One box and two buttons. It was a full-page form with sections for tags and for the
 /// transcript line — a screen's worth of chrome around the one field anybody fills in,
 /// and a page that had to be scrolled to reach Save. The moment is identified above the
-/// box by its timestamp and the words that were being spoken, which is all the context a
-/// note needs, and neither is editable because neither is the thing being written.
+/// box by its timestamp and the words that were being spoken.
+///
+/// **The timestamp has a chevron on either side, because a mark is nearly always made
+/// late.** You hear the sentence, then you reach for the button — the moment saved is a
+/// second or two past the one you meant, which lands it on the following line. The
+/// chevrons walk the mark back and forth a spoken line at a time, and the words under
+/// them change as it moves, so the right one can be picked by reading rather than by
+/// scrubbing. They only appear once the episode has a transcript: with no lines there is
+/// nothing to step through.
 ///
 /// Deleting is a trash glyph in the card's top corner, as far from Save as the card is
 /// wide — and also on the row's own long-press menu, for throwing one away without
@@ -260,6 +267,12 @@ struct BookmarkEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var note: String
+    /// The moment as the card has it. Held here rather than written straight through, so
+    /// stepping to the wrong line and stepping back again costs nothing — Cancel leaves
+    /// the mark exactly where it was.
+    @State private var positionMs: Int
+    @State private var spoken: String?
+    @State private var lines: [TranscriptSegment] = []
 
     private let store = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
 
@@ -267,6 +280,41 @@ struct BookmarkEditorView: View {
         self.bookmark = bookmark
         self.episodeTitle = episodeTitle
         _note = State(initialValue: bookmark.note ?? "")
+        _positionMs = State(initialValue: bookmark.positionMs)
+        _spoken = State(initialValue: bookmark.transcriptText)
+    }
+
+    /// The line being spoken at the mark — or, when the mark landed in a silence, the one
+    /// just before it, since that's the line it belongs to.
+    private var lineIndex: Int? {
+        guard !lines.isEmpty else { return nil }
+        let position = Double(positionMs) / 1000
+        return lines.lastIndex { $0.start <= position } ?? 0
+    }
+
+    private func canShift(by offset: Int) -> Bool {
+        guard let lineIndex else { return false }
+        return lines.indices.contains(lineIndex + offset)
+    }
+
+    private func shift(by offset: Int) {
+        guard let lineIndex, lines.indices.contains(lineIndex + offset) else { return }
+        let line = lines[lineIndex + offset]
+        positionMs = Int(line.start * 1000)
+        spoken = line.text
+    }
+
+    private func stepButton(_ offset: Int, systemImage: String, label: LocalizedStringKey) -> some View {
+        Button { shift(by: offset) } label: {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+                .padding(4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(canShift(by: offset) ? Color.accentColor : Color.secondary.opacity(0.4))
+        .disabled(!canShift(by: offset))
+        .accessibilityLabel(label)
     }
 
     var body: some View {
@@ -278,9 +326,15 @@ struct BookmarkEditorView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
-                    Text(Scrubber.formatted(bookmark.position))
+                    if !lines.isEmpty {
+                        stepButton(-1, systemImage: "chevron.left", label: "The line before this one")
+                    }
+                    Text(Scrubber.formatted(TimeInterval(positionMs) / 1000))
                         .font(.subheadline.monospacedDigit().weight(.semibold))
                         .foregroundStyle(Color.accentColor)
+                    if !lines.isEmpty {
+                        stepButton(1, systemImage: "chevron.right", label: "The line after this one")
+                    }
                     if let episodeTitle {
                         Text(episodeTitle)
                             .font(.caption)
@@ -298,11 +352,14 @@ struct BookmarkEditorView: View {
                     .foregroundStyle(.red)
                     .accessibilityLabel("Delete this bookmark")
                 }
-                if let spoken = bookmark.transcriptText?.nilIfEmpty {
+                if let spoken = spoken?.nilIfEmpty {
                     Text(spoken)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .lineLimit(3)
+                        // So a step reads as the words changing under a moment that moved,
+                        // rather than the card redrawing.
+                        .animation(.easeOut(duration: 0.15), value: positionMs)
                 }
 
                 // Grows with what's typed rather than scrolling inside itself: a note is
@@ -329,10 +386,17 @@ struct BookmarkEditorView: View {
             .padding(.horizontal, 20)
         }
         .presentationBackground(.clear)
+        // Read once, off the body: `find` decodes every line in the episode.
+        .task {
+            lines = (try? TranscriptStore(dbQueue: DatabaseManager.shared.dbQueue)
+                .find(trackID: bookmark.trackID)).flatMap { $0 } ?? []
+        }
     }
 
     private func save() {
         var updated = bookmark
+        updated.positionMs = positionMs
+        updated.transcriptText = spoken
         updated.note = note.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         try? store.update(updated)
         NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
