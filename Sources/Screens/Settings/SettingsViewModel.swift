@@ -9,6 +9,10 @@ final class SettingsViewModel: ObservableObject {
     @Published var aiKeyStrategy: AiKeyStrategy = .sequential
     @Published var errorMessage: String?
     @Published var backupStatusMessage: String?
+    /// What the library still can't say about its episodes. Counted on load rather than
+    /// watched: it changes when a sync or a transcription lands, not while this page is
+    /// being read.
+    @Published var flagged = FlaggedEpisodes.Summary()
 
     /// Not private: `AiKeyStore` reads the same Keychain entry to migrate it into the
     /// new multi-key list the first time that's read after this feature shipped.
@@ -31,6 +35,7 @@ final class SettingsViewModel: ObservableObject {
             spotifyClientID = try credentials.get(SpotifyImportSource.clientIDKey) ?? ""
             aiKeys = try aiKeyStore.all()
             aiKeyStrategy = AiRouter.strategy
+            flagged = try TrackStore(dbQueue: DatabaseManager.shared.dbQueue).flagged()
         } catch {
             errorMessage = error.localizedDescription
         }
