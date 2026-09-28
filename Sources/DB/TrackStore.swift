@@ -267,12 +267,16 @@ struct TrackStore {
         }
     }
 
+    /// Ordered in Swift rather than by `ORDER BY`: SQLite sorts a missing number first
+    /// and compares filenames byte by byte, which puts `ep-10` before `ep-9` — see
+    /// `EpisodeNumbers`.
     func tracks(forAlbum albumID: String) throws -> [Track] {
         try dbQueue.read { db in
-            try Track
-                .filter(Column("albumID") == albumID && Column("isLost") == false)
-                .order(Column("trackNumber"), Column("title"))
-                .fetchAll(db)
+            EpisodeNumbers.ordered(
+                try Track
+                    .filter(Column("albumID") == albumID && Column("isLost") == false)
+                    .fetchAll(db)
+            )
         }
     }
 
@@ -421,6 +425,35 @@ struct TrackStore {
                 }
             }
             return renamed
+        }
+    }
+
+    /// Gives every episode of a collection the number it's missing. Returns how many
+    /// were filled in.
+    ///
+    /// Album by album, like the title pass: a number means "second in *this* series", so
+    /// the siblings are what it has to be worked out against. Episodes with no album have
+    /// no series to be numbered within and are left alone.
+    @discardableResult
+    func numberEpisodes(inAlbum albumID: String? = nil) throws -> Int {
+        try dbQueue.write { db in
+            let all = try Track.filter(Column("isLost") == false).fetchAll(db)
+            let byAlbum = Dictionary(grouping: all) { $0.albumID }
+            var filled = 0
+            for (id, tracks) in byAlbum {
+                guard let id, albumID == nil || id == albumID else { continue }
+                for (trackID, number) in EpisodeNumbers.assigned(tracks) {
+                    guard var track = try Track.fetchOne(db, key: trackID) else { continue }
+                    track.trackNumber = number
+                    // Not `metadataEditedAt`: this is the app filling a blank, not the
+                    // listener stating something, and marking it would stop tags ever
+                    // being re-read for this episode.
+                    track.updatedAt = Date()
+                    try track.update(db)
+                    filled += 1
+                }
+            }
+            return filled
         }
     }
 
