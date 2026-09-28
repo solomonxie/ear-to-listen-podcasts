@@ -34,7 +34,8 @@ final class HomeLibraryViewModel: ObservableObject {
         tracks = (try? trackStore.all()) ?? []
         recentTracks = (try? trackStore.recentlyPlayed()) ?? []
         albums = (try? libraryStore.albums()) ?? []
-        artists = (try? libraryStore.artists()) ?? []
+        // Not the order the table hands them back in — see `SpeakerOrder`.
+        artists = SpeakerOrder.byLastActivity((try? libraryStore.artists()) ?? [], tracks: tracks)
         topics = (try? libraryStore.topics()) ?? []
         terms = (try? termStore.topTerms()) ?? []
         playlists = (try? playlistStore.all()) ?? []
