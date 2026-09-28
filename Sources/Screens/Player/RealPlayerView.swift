@@ -248,6 +248,10 @@ struct RealPlayerView: View {
         // Square and whole, the way every music player shows a cover: a 220pt band cropped
         // the top and bottom off pictures that are square to begin with, and nothing is
         // drawn over it — the title and speaker have their own line underneath.
+        //
+        // Full width, and it stays that way: it was capped at 220pt to bring the transport
+        // up the page, and the transport turned out not to need it — what made the buttons
+        // hard to hit was their own size, which is fixed where they are.
         ArtworkTile(track: track, cornerRadius: 16, symbolSize: 64)
             .aspectRatio(1, contentMode: .fit)
             .padding(.horizontal)
@@ -345,28 +349,29 @@ struct RealPlayerView: View {
     /// supposed to avoid. The [ Bookmarks ] pill below is the other half: it goes to the
     /// marks without making one.
     private func transport(for track: Track, proxy: ScrollViewProxy) -> some View {
-        HStack(spacing: 28) {
-            Button {
+        HStack(spacing: 0) {
+            transportButton(track.isFavorite ? "Remove from favourites" : "Add to favourites") {
                 toggleFavorite(track)
-            } label: {
+            } glyph: {
                 Image(systemName: track.isFavorite ? "heart.fill" : "heart")
-                    .font(.title3)
                     .foregroundStyle(track.isFavorite ? AnyShapeStyle(Color.pink) : AnyShapeStyle(HierarchicalShapeStyle.primary))
             }
-            .accessibilityLabel(track.isFavorite ? "Remove from favourites" : "Add to favourites")
 
             // Ten seconds, not the next episode. Spoken audio is missed a sentence at a
             // time — "what did they just say" is what anyone reaches for mid-episode,
             // while moving to another one is a decision made from Up Next, a tap below.
             // The arrow-round-a-10 glyph says the interval, so neither needs a label.
-            Button { engine.skip(by: -10) } label: { Image(systemName: "gobackward.10").font(.title) }
-                .accessibilityLabel("Back ten seconds")
-            Button { engine.togglePlayPause() } label: {
-                Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 56))
+            transportButton("Back ten seconds") { engine.skip(by: -10) } glyph: {
+                Image(systemName: "gobackward.10")
             }
-            Button { engine.skip(by: 10) } label: { Image(systemName: "goforward.10").font(.title) }
-                .accessibilityLabel("Forward ten seconds")
+            transportButton(engine.isPlaying ? "Pause" : "Play", glyphSize: 50) {
+                engine.togglePlayPause()
+            } glyph: {
+                Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+            }
+            transportButton("Forward ten seconds") { engine.skip(by: 10) } glyph: {
+                Image(systemName: "goforward.10")
+            }
 
             // Marks and stays put: nothing is asked at the moment of marking — a dialog
             // over what you're listening to is how a mark gets made too late — and the
@@ -376,14 +381,41 @@ struct RealPlayerView: View {
             // and asks nothing otherwise looks like it did nothing, and the number going
             // up is both "that worked" and "this is your fourth" — which is the thing
             // worth knowing before you mark the same minute twice.
-            Button { markMoment(track) } label: {
+            transportButton("Bookmark this moment") { markMoment(track) } glyph: {
                 Image(systemName: "bookmark.fill")
-                    .font(.title3)
                     .overlay(alignment: .topTrailing) { markCount() }
             }
-            .accessibilityLabel("Bookmark this moment")
             .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
         }
+        .padding(.horizontal, 8)
+    }
+
+    /// One size for all five, each in an equal share of the width.
+    ///
+    /// They used to be three sizes — a 56pt play circle between two `.title` skips, with a
+    /// `.title3` heart and bookmark on the ends — and the small outer two were the ones
+    /// being missed. A 20pt glyph is a 20pt target: the thumb arrives from below, covers
+    /// the whole row, and lands on whichever neighbour it overlapped. Equal columns of
+    /// equal height mean every button is the same size as the gap around it, so a tap that
+    /// is a few points off still hits what it was aimed at.
+    ///
+    /// **The targets are equal; the glyphs are not.** Play is drawn half as big again as
+    /// the rest, because a transport where every control looks alike is a row you have to
+    /// read before you can use it — the big circle in the middle is how the thumb finds
+    /// the one button it presses most, without looking. What made the old row miss was
+    /// never the size of the play circle, it was the 20pt heart and bookmark on the ends,
+    /// and those are gone: the column is what's tapped, and every column is the same.
+    private func transportButton<Glyph: View>(
+        _ label: LocalizedStringKey, glyphSize: CGFloat = 30,
+        action: @escaping () -> Void, @ViewBuilder glyph: () -> Glyph
+    ) -> some View {
+        Button(action: action) {
+            glyph()
+                .font(.system(size: glyphSize))
+                .frame(maxWidth: .infinity, minHeight: 64)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(label)
     }
 
     /// How many marks this episode has, on the shoulder of the button that makes them.
