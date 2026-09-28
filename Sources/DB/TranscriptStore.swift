@@ -126,6 +126,16 @@ struct TranscriptStore {
         }
     }
 
+    /// Which episodes have a transcript at all, in one query — for counting across the
+    /// whole library, where an `exists` per episode is a round trip per row.
+    func transcribedTrackIDs() throws -> Set<String> {
+        try dbQueue.read { db in
+            Set(try String.fetchAll(db, sql: """
+                SELECT trackID FROM transcripts WHERE segmentsJSON NOT IN ('', '[]')
+                """))
+        }
+    }
+
     /// Every stored transcript, for backup. Returns the raw rows rather than segments so
     /// the caller keeps the engine/updatedAt alongside them.
     func allRecords() throws -> [TranscriptRecord] {

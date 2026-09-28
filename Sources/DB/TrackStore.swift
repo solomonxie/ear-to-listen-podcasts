@@ -457,6 +457,16 @@ struct TrackStore {
         }
     }
 
+    /// What the library still can't say about its episodes — see `FlaggedEpisodes`.
+    /// Lost episodes are left out: the file is gone, so nothing can be filled in for it.
+    func flagged() throws -> FlaggedEpisodes.Summary {
+        let transcribed = try TranscriptStore(dbQueue: dbQueue).transcribedTrackIDs()
+        let tracks = try dbQueue.read { db in
+            try Track.filter(Column("isLost") == false).fetchAll(db)
+        }
+        return FlaggedEpisodes.summary(tracks: tracks, transcribed: transcribed)
+    }
+
     /// An episode is lost when every copy of it is. One that has gone from this bucket but
     /// still sits in another isn't missing — it moves onto the copy that's still there, so
     /// it keeps playing instead of greying out.
