@@ -932,38 +932,83 @@ struct Scrubber: View {
     }
 }
 
+/// The queue, whole — what's coming, what's playing, and what came before it.
+///
+/// It listed the queue flat and called the lot "Up Next", which was only true of the part
+/// below the row with the speaker glyph on it. Half an album in, the sheet opened on the
+/// first episode of the collection with no sign of which one was playing, and the episode
+/// you'd just finished and wanted back looked like something scheduled to come.
+///
+/// Three headings say which part is which, and the sheet opens on the one playing rather
+/// than at the top — the queue is as long as the collection it came from.
 private struct UpNextView: View {
     @ObservedObject var engine = PlaybackEngine.shared
 
+    private var currentIndex: Int? {
+        guard let current = engine.currentTrack else { return nil }
+        return engine.queue.firstIndex { $0.id == current.id }
+    }
+
     var body: some View {
         NavigationStack {
-            List(engine.queue) { track in
-                Button {
-                    engine.play(track: track, queue: engine.queue)
-                } label: {
-                    HStack {
-                        if track.id == engine.currentTrack?.id {
-                            Image(systemName: "speaker.wave.2.fill").foregroundStyle(.tint)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(track.title).lineLimit(1)
-                            Text(TrackRow.fileName(for: track))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.head)
-                        }
+            ScrollViewReader { proxy in
+                List {
+                    if let currentIndex {
+                        // "Earlier", not "Played": these are the episodes before this one
+                        // in the collection, and whether they were listened to is a
+                        // different question this list can't answer.
+                        section("Earlier", Array(engine.queue[..<currentIndex]))
+                        section("Now Playing", [engine.queue[currentIndex]])
+                        section("Coming Up", Array(engine.queue[(currentIndex + 1)...]))
+                    } else {
+                        section(nil, engine.queue)
                     }
                 }
-                .buttonStyle(.plain)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.appBackground.ignoresSafeArea())
+                .navigationTitle("Up Next")
+                .navigationBarTitleDisplayMode(.inline)
+                .onAppear {
+                    guard let current = engine.currentTrack else { return }
+                    proxy.scrollTo(current.id, anchor: .center)
+                }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(Color.appBackground.ignoresSafeArea())
-            .navigationTitle("Up Next")
-            .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
+    }
+
+    @ViewBuilder
+    private func section(_ title: LocalizedStringKey?, _ tracks: [Track]) -> some View {
+        if !tracks.isEmpty {
+            Section {
+                ForEach(tracks) { row($0) }
+            } header: {
+                if let title { Text(title) }
+            }
+        }
+    }
+
+    private func row(_ track: Track) -> some View {
+        Button {
+            engine.play(track: track, queue: engine.queue)
+        } label: {
+            HStack {
+                if track.id == engine.currentTrack?.id {
+                    Image(systemName: "speaker.wave.2.fill").foregroundStyle(.tint)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(track.title).lineLimit(1)
+                    Text(TrackRow.fileName(for: track))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .id(track.id)
     }
 }
 
