@@ -127,17 +127,6 @@ struct HomeView: View {
             }
         }
 
-        if !homeData.albums.isEmpty {
-            shelf("Albums") {
-                ForEach(homeData.albums) { album in
-                    NavigationLink(value: HomeRoute.album(album.id)) {
-                        AlbumCard(album: album)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-
         if !homeData.artists.isEmpty {
             shelf("Speakers") {
                 ForEach(homeData.artists) { artist in
@@ -398,20 +387,6 @@ private struct PlaylistCard: View {
                 .frame(width: 120, height: 120)
                 .overlay { Image(systemName: "square.stack.fill").font(.largeTitle).foregroundStyle(.white) }
             Text(playlist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-        }
-        .frame(width: 120)
-    }
-}
-
-private struct AlbumCard: View {
-    let album: Album
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(LibraryArt.color(for: album.id).gradient)
-                .frame(width: 120, height: 120)
-                .overlay { Image(systemName: "square.stack.fill").font(.largeTitle).foregroundStyle(.white) }
-            Text(album.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 120)
     }
