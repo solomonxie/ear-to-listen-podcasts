@@ -13,10 +13,10 @@ struct RealPlayerView: View {
     /// The mark just made, lit for a moment so the jump to Notes lands on something the
     /// eye can find.
     @State private var highlightedBookmark: String?
-    /// Raised by the scrubber while the bar is armed. The bar runs the full width of the
-    /// page, so its left end sits inside the strip the back swipe watches — and a seek
-    /// started there used to slide the whole player off instead of moving the playhead.
-    @State private var scrub = ScrubState()
+    /// Where the scrubber is on screen. The bar runs the full width of the page, so its
+    /// left end sits inside the strip the back swipe watches — and a seek started there
+    /// used to slide the whole player off instead of moving the playhead.
+    @State private var scrubberArea: CGRect = .zero
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
     /// at the transport, and text that scrolls itself the moment you arrive takes the
@@ -173,7 +173,7 @@ struct RealPlayerView: View {
         // Stood down the moment anything is pushed: a pushed page has the system's own
         // back swipe, and a page that can't be swiped back from is a page with no way out
         // for anyone who doesn't look for the ‹.
-        .swipeToGoBack(canBegin: { path.isEmpty && !scrub.isLive }, perform: close)
+        .swipeToGoBack(canBegin: { path.isEmpty && !scrubberArea.contains($0) }, perform: close)
     }
 
     /// Split out of `body` purely so the type-checker can cope — it timed out once the
@@ -192,7 +192,7 @@ struct RealPlayerView: View {
                 }
                 Scrubber(
                     currentTime: engine.currentTime, duration: engine.duration,
-                    scrub: $scrub
+                    area: $scrubberArea
                 ) { engine.seek(to: $0) }
                     .padding(.horizontal)
                 transport(for: track, proxy: proxy)
@@ -801,41 +801,39 @@ private extension Array {
     var nilIfEmpty: [Element]? { isEmpty ? nil : self }
 }
 
-/// Drives itself from a locally-held drag position while the user's finger is down, so
-/// `PlaybackEngine`'s periodic `currentTime` publishing (every 0.5s) can't yank the thumb
-/// back mid-drag. A zero-distance drag gesture also means tapping anywhere on the track
-/// jumps straight there, not just dragging the thumb.
 /// Where you are in the episode, and the way to move it.
 ///
-/// **It has to be taken hold of first.** A bare drag gesture across the width of the
-/// screen is a trap on a page you scroll: a thumb brushing the bar on the way past threw
-/// away the place you were listening to, with nothing to undo it. A press of a moment
-/// arms it — the bar thickens, the handle appears under the finger and the app taps back
-/// — and only then does sliding move anything. A stroke that keeps moving never arms it,
-/// so the page scrolls as it should.
+/// **Touch it and it moves.** The handle sits on the line at all times, a tap anywhere on
+/// the bar goes there, and a drag tracks the finger from the first frame. An earlier
+/// version asked for a short hold first, to keep a stroke meant for the page from being
+/// read as a seek; it cost every deliberate seek a wait, which is the wrong trade on the
+/// one control this page exists for.
 ///
-/// The handle is hidden until then, the way every music player does it: a dot sitting on
-/// the line is an invitation to drag, and this one shouldn't be taken up by accident.
+/// Drives itself from a locally-held drag position while the finger is down, so
+/// `PlaybackEngine`'s periodic `currentTime` publishing (every 0.5s) can't yank the handle
+/// back mid-drag.
+///
+/// It reports where it is on screen, because the page's left-edge back swipe overlaps its
+/// left end. Without a hold there is no moment at which to raise a flag — the swipe has
+/// already claimed the stroke by then — so the swipe keeps off the bar's rectangle
+/// instead, decided at touch-down. The bar keeps its full width: the first minute of an
+/// episode stays as reachable as the last.
 struct Scrubber: View {
     let currentTime: TimeInterval
     let duration: TimeInterval
-    /// Published to the page rather than kept here: the page's own left-edge back swipe
-    /// overlaps the left end of this bar and has to stand down while it's being used.
-    @Binding var scrub: ScrubState
-
-    private var isScrubbing: Bool { scrub.isArmed }
+    /// The bar's place in the window, for the back swipe to stand off.
+    @Binding var area: CGRect
     let onSeek: (TimeInterval) -> Void
 
-    /// Long enough not to fire on a thumb passing through, short enough that reaching for
-    /// it on purpose doesn't feel like waiting.
-    private static let holdToScrub = 0.22
-
+    @State private var isScrubbing = false
     @State private var dragTime: TimeInterval = 0
 
     private var displayedTime: TimeInterval { isScrubbing ? dragTime : currentTime }
     private var progress: Double { duration > 0 ? min(max(displayedTime / duration, 0), 1) : 0 }
     private var trackHeight: CGFloat { isScrubbing ? 7 : 4 }
-    private var knobSize: CGFloat { isScrubbing ? 18 : 0 }
+    /// Always shown, and grown under the finger: a dot on the line is what tells you the
+    /// line can be dragged.
+    private var knobSize: CGFloat { isScrubbing ? 18 : 12 }
 
     var body: some View {
         VStack(spacing: 4) {
@@ -851,10 +849,12 @@ struct Scrubber: View {
                 }
                 .animation(.easeOut(duration: 0.15), value: isScrubbing)
                 .frame(maxHeight: .infinity, alignment: .center)
+                // Taller than it looks, so the bar can be caught without aiming.
                 .contentShape(Rectangle())
                 .gesture(scrub(width: geo.size.width))
+                .onChange(of: geo.frame(in: .global), initial: true) { area = $1 }
             }
-            .frame(height: 24)
+            .frame(height: 32)
             HStack {
                 Text(Self.formatted(displayedTime))
                     .foregroundStyle(isScrubbing ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
@@ -866,44 +866,22 @@ struct Scrubber: View {
         }
     }
 
-    /// Hold, then slide. `maximumDistance` is what lets a scroll through the bar fail the
-    /// press instead of arming it.
+    /// Zero minimum distance: the first touch already moves the playhead, so a tap seeks
+    /// and a drag needs no run-up.
     private func scrub(width: CGFloat) -> some Gesture {
-        LongPressGesture(minimumDuration: Self.holdToScrub, maximumDistance: 12)
-            .sequenced(before: DragGesture(minimumDistance: 0))
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
-                switch value {
-                case .first(true):
-                    take(hold: true)
-                case .second(true, let drag):
-                    take(hold: true)
-                    if let drag {
-                        dragTime = time(atX: drag.location.x, width: width)
-                        scrub.touch()
-                    }
-                default:
-                    break
+                if !isScrubbing {
+                    isScrubbing = true
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                 }
+                dragTime = time(atX: value.location.x, width: width)
             }
             .onEnded { value in
-                // Lowered first and unconditionally: an end that arrives with nothing
-                // armed still has to leave the bar unarmed.
-                defer { scrub.disarm() }
-                guard isScrubbing else { return }
-                if case .second(true, let drag?) = value {
-                    dragTime = time(atX: drag.location.x, width: width)
-                }
+                dragTime = time(atX: value.location.x, width: width)
+                isScrubbing = false
                 onSeek(dragTime)
             }
-    }
-
-    /// Arms once per hold: the gesture reports `.first`/`.second` repeatedly, and the
-    /// starting time must not be re-read after the finger has begun to move it.
-    private func take(hold: Bool) {
-        guard hold, !isScrubbing else { return }
-        dragTime = currentTime
-        scrub.arm()
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
     }
 
     private func time(atX x: CGFloat, width: CGFloat) -> TimeInterval {
@@ -967,39 +945,6 @@ private extension View {
 
 /// Where the player can push to. A route rather than a view, so the stack has a path the
 /// docked bar can read and pop.
-/// Whether the scrubber is being used right now, for the one other thing on the page that
-/// has to know: the back swipe, which otherwise reads a seek that starts near the left
-/// edge as "take this page away".
-///
-/// **It expires.** A plain flag is raised by the hold and lowered by the end of the
-/// stroke — and a stroke cancelled part-way through, which this page invites by redrawing
-/// itself twice a second while playing and faster while a transcription runs, has no end.
-/// One left raised is a player that can never be swiped away again for the rest of the
-/// session, with nothing on screen to say why. A stamp that has to be refreshed can only
-/// ever be wrong for a moment: a real scrub touches it as the finger moves, and anything
-/// that stopped touching it was over two seconds ago.
-struct ScrubState: Equatable {
-    private(set) var isArmed = false
-    private var at = Date.distantPast
-
-    /// Armed, and touched recently enough to still be a finger on the bar.
-    var isLive: Bool { isArmed && Date().timeIntervalSince(at) < 2 }
-
-    mutating func arm() {
-        isArmed = true
-        at = Date()
-    }
-
-    mutating func touch() {
-        at = Date()
-    }
-
-    mutating func disarm() {
-        isArmed = false
-        at = .distantPast
-    }
-}
-
 enum PlayerRoute: Hashable {
     case speaker(String)
     case album(String)

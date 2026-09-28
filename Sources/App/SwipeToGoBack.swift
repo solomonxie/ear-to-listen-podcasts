@@ -5,10 +5,11 @@ extension View {
     /// Leave a page that isn't in a navigation stack the way a pushed one leaves: a swipe
     /// in from the left edge, the page following the finger.
     ///
-    /// `canBegin` is asked once per stroke, as it starts, so a page can stand the gesture
-    /// down while something else on it owns horizontal strokes.
+    /// `canBegin` is asked once per stroke, at touch-down, with where the touch landed in
+    /// the window — so a page can stand the gesture down for a control of its own that
+    /// reaches into the edge strip, before either gesture has moved anything.
     func swipeToGoBack(
-        canBegin: @escaping () -> Bool = { true }, perform: @escaping () -> Void
+        canBegin: @escaping (CGPoint) -> Bool = { _ in true }, perform: @escaping () -> Void
     ) -> some View {
         modifier(SwipeToGoBack(canBegin: canBegin, perform: perform))
     }
@@ -36,7 +37,7 @@ private let backSwipeEdge: CGFloat = 72
 /// towards where the finger had been a third of a second ago. That is the whole of the
 /// lag. The travel lives here now: nothing rebuilds, and the offset tracks the finger.
 private struct SwipeToGoBack: ViewModifier {
-    let canBegin: () -> Bool
+    let canBegin: (CGPoint) -> Bool
     let perform: () -> Void
 
     @State private var travel: CGFloat = 0
@@ -74,7 +75,7 @@ private struct SwipeToGoBack: ViewModifier {
 }
 
 private struct EdgePan: UIViewRepresentable {
-    let canBegin: () -> Bool
+    let canBegin: (CGPoint) -> Bool
     let onChange: (CGFloat) -> Void
     let onEnd: (CGFloat, CGFloat) -> Void
 
@@ -100,6 +101,7 @@ private struct EdgePan: UIViewRepresentable {
         lazy var recognizer: EdgePanGestureRecognizer = {
             let recognizer = EdgePanGestureRecognizer(target: self, action: #selector(handle))
             recognizer.delegate = self
+            recognizer.beginsAt = { [weak self] point in self?.owner.canBegin(point) ?? false }
             return recognizer
         }()
 
@@ -119,17 +121,17 @@ private struct EdgePan: UIViewRepresentable {
             }
         }
 
-        /// Declining here fails the recogniser for this stroke rather than swallowing it,
-        /// so whatever else wanted it — a pushed page's own back swipe — still gets it.
-        ///
         /// Never while something is presented over the page. The recogniser lives on the
         /// window, which is the only place it can see the touches it needs; a sheet over
         /// this page is in that same window, and swiping inside one would otherwise slide
         /// the page out from underneath it.
+        ///
+        /// The page's own say is taken earlier, at touch-down — see `beginsAt`. By the time
+        /// this is asked the stroke has already moved, and a control that wants it has
+        /// already been handed it.
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             let window = recognizer.view as? UIWindow
-            guard window?.rootViewController?.presentedViewController == nil else { return false }
-            return owner.canBegin()
+            return window?.rootViewController?.presentedViewController == nil
         }
 
         /// Scrolling waits to see whether this is a back swipe first — and only scrolling,
@@ -157,10 +159,17 @@ private struct EdgePan: UIViewRepresentable {
 /// going the other way. Failing early is the point — a recogniser that stays undecided is
 /// a scroll view held up waiting for it.
 private final class EdgePanGestureRecognizer: UIPanGestureRecognizer {
+    /// Asked with the touch's place in the window. Failing here rather than in
+    /// `gestureRecognizerShouldBegin` is what lets a control under the touch keep the
+    /// whole stroke: shouldBegin comes after the finger has moved, which is already too
+    /// late for anything that acts on contact.
+    var beginsAt: ((CGPoint) -> Bool)?
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesBegan(touches, with: event)
         guard let touch = touches.first, let view else { return }
-        if touch.location(in: view).x > backSwipeEdge { state = .failed }
+        let start = touch.location(in: view)
+        if start.x > backSwipeEdge || beginsAt?(start) == false { state = .failed }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
