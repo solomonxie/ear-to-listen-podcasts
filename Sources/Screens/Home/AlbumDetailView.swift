@@ -510,6 +510,9 @@ struct AlbumDetailView: View {
 
     private func load() async {
         current = (try? libraryStore.album(id: album.id)) ?? nil
+        // Before the fetch, so an episode that arrived since the last visit is listed in
+        // its place in the series rather than at the end of it.
+        try? trackStore.numberEpisodes(inAlbum: album.id)
         tracks = (try? trackStore.tracks(forAlbum: album.id)) ?? []
         artistName = (shown.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name
         allSpeakers = (try? libraryStore.artists()) ?? []
