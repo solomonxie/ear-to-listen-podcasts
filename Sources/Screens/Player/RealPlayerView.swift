@@ -679,8 +679,12 @@ struct RealPlayerView: View {
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
                 // Already on this page, so the bar's job is the way back up rather than
-                // a screen transition to where you already are.
+                // a screen transition to where you already are — and following goes off
+                // with it, exactly as it does for "Top". Leaving it on made the tap look
+                // broken: the page went up and the next spoken line pulled it straight
+                // back down to the transcript.
                 onTapBar: {
+                    isFollowingTranscript = false
                     withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
                 }
             )
