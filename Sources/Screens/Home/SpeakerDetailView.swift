@@ -32,6 +32,11 @@ struct SpeakerDetailView: View {
     @State private var bookmarks: [Bookmark] = []
     /// Which unfolding picker is open — one at a time, across the whole form.
     @State private var openPicker: String?
+    /// The metadata sections start shut — see `FoldHeader`. What this page is for is the
+    /// albums and episodes at the bottom of it.
+    @State private var showingDetails = false
+    @State private var showingProfile = false
+    @State private var showingPhoto = false
     @FocusState private var focusedField: SpeakerField?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -75,6 +80,7 @@ struct SpeakerDetailView: View {
             }
 
             Section {
+              if showingDetails {
                 StackedField("Bio", placeholder: "One line — what they're known for", text: $bio)
                     .focused($focusedField, equals: .bio)
                 rejectNote("bio")
@@ -108,10 +114,10 @@ struct SpeakerDetailView: View {
                     }
                 }
                 rejectNote("link")
+              }
             } header: {
                 HStack {
-                    Text("Details")
-                    Spacer()
+                    FoldHeader("Details", isOpen: $showingDetails)
                     SuggestWithAiButton(isRunning: isSuggesting) { Task { await suggest() } }
                         .disabled(tracks.isEmpty && albums.isEmpty)
                 }
@@ -123,14 +129,18 @@ struct SpeakerDetailView: View {
 
             // Its own section rather than a fourth row: it's paragraphs, and it's the part
             // of the page worth actually reading.
-            Section("Profile") {
-                TextField(
-                    "Who they are and what they cover — or fill it in from ⋯ → Build profile with AI",
-                    text: $profile, axis: .vertical
-                )
-                .lineLimit(3...)
-                .focused($focusedField, equals: .profile)
-                rejectNote("profile")
+            Section {
+                if showingProfile {
+                    TextField(
+                        "Who they are and what they cover — or fill it in from ⋯ → Build profile with AI",
+                        text: $profile, axis: .vertical
+                    )
+                    .lineLimit(3...)
+                    .focused($focusedField, equals: .profile)
+                    rejectNote("profile")
+                }
+            } header: {
+                FoldHeader("Profile", isOpen: $showingProfile)
             }
 
             // Below the writing rather than under the name: a picture is the last thing
@@ -139,7 +149,8 @@ struct SpeakerDetailView: View {
             //
             // A real person's face is the one picture that must never be drawn — Search
             // is the answer here, and it's why that button exists.
-            Section("Photo") {
+            Section {
+              if showingPhoto {
                 ArtworkSourceRow(
                     subject: ArtworkSubject(
                         kind: .speaker,
@@ -159,6 +170,9 @@ struct SpeakerDetailView: View {
                     onUse: { data in Task { await savePhoto(data) } },
                     onRemove: { removePhoto() }
                 )
+              }
+            } header: {
+                FoldHeader("Photo", isOpen: $showingPhoto)
             }
             .listRowSeparator(.hidden)
 
@@ -166,7 +180,7 @@ struct SpeakerDetailView: View {
                 if albums.isEmpty {
                     Text("No albums yet").foregroundStyle(.secondary)
                 }
-                ForEach(albums) { album in
+                ShowMoreList(items: albums) { album in
                     NavigationLink { AlbumDetailView(album: album) } label: {
                         AlbumRow(album: album)
                     }
@@ -190,8 +204,9 @@ struct SpeakerDetailView: View {
             }
 
             Section("Episodes") {
-                ForEach(tracks) { track in
+                ShowMoreList(items: tracks) { track in
                     Button {
+                        // Everything of theirs is the queue, however few rows are shown.
                         PlaybackEngine.shared.open(track: track, queue: tracks)
                     } label: {
                         TrackRow(track: track)
