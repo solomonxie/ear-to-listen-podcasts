@@ -9,6 +9,8 @@ final class PlaybackEngine: ObservableObject {
 
     @Published private(set) var currentTrack: Track?
     @Published private(set) var queue: [Track] = []
+    /// Non-zero while a seek is in flight.
+    private var seekGeneration = 0
     @Published private(set) var isPlaying = false
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
@@ -344,7 +346,14 @@ final class PlaybackEngine: ObservableObject {
     }
 
     func seek(to time: TimeInterval) {
-        player.seek(to: CMTime(seconds: time, preferredTimescale: 600))
+        seekGeneration += 1
+        let generation = seekGeneration
+        player.seek(to: CMTime(seconds: time, preferredTimescale: 600)) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.seekGeneration == generation else { return }
+                self.seekGeneration = 0
+            }
+        }
         currentTime = time
         // Straight away, so a scrub in the app doesn't leave the lock screen sitting on
         // the old position until the next time observer fires.
@@ -378,7 +387,9 @@ final class PlaybackEngine: ObservableObject {
         player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
                 guard let self else { return }
-                if time.seconds.isFinite { self.currentTime = time.seconds }
+                // Mid-seek ticks still carry the old position; taking them snapped the
+                // transcript back to the line you'd just tapped away from.
+                if self.seekGeneration == 0, time.seconds.isFinite { self.currentTime = time.seconds }
                 // `duration` is NaN (indefinite) until the asset finishes resolving it — e.g.
                 // while a real, possibly-VBR mp3 is still parsing. Feeding that straight into
                 // the now-playing slider's range (`0...duration`) crashes it.
