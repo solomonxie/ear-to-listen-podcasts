@@ -77,7 +77,7 @@ has been spoken, and an episode played past the end of a part-finished transcrip
 has nothing at that second either.
 
 `Follow` is disabled while already following or with no lines — it also floats
-beside "Back to top" once the transport scrolls off, as a toggle (see
+beside Mark once the transport scrolls off, as a toggle (see
 `player.md`).
 
 Correcting a line happens in the line itself — see "Editing a phrase, in place"
