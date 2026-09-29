@@ -80,6 +80,12 @@ struct EpisodeMetadataSuggester {
     /// rather than failing after the listener taps it.
     func readiness(track: Track) -> Readiness {
         let segments = (try? TranscriptStore(dbQueue: dbQueue).find(trackID: track.id)) ?? []
+        return Self.readiness(track: track, segments: segments)
+    }
+
+    /// The same answer from segments already in hand — for asking about many episodes
+    /// after one batched fetch rather than a query and a decode each.
+    static func readiness(track: Track, segments: [TranscriptSegment]) -> Readiness {
         guard !segments.filter({ !$0.text.isEmpty }).isEmpty else { return .noTranscript }
         guard let durationMs = track.durationMs, durationMs > 0 else { return .unknownDuration }
         let duration = Double(durationMs) / 1000
