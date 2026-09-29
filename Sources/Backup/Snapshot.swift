@@ -92,6 +92,9 @@ struct LibrarySnapshot: Codable {
         /// References an entry under `artwork/` in the same zip archive, not a device path.
         var artworkFileName: String?
         var isFavorite: Bool = false
+        /// When it was finished. Done by hand or by listening — either way not something a
+        /// re-sync can work out again.
+        var listenedAt: Date?
         var bookmarks: [BookmarkEntry] = []
         /// Nil for an episode that travels only for its favourite/bookmarks — nobody
         /// edited its details.
@@ -114,6 +117,7 @@ struct LibrarySnapshot: Codable {
             terms = try container.decodeIfPresent([String: Int].self, forKey: .terms) ?? [:]
             artworkFileName = try container.decodeIfPresent(String.self, forKey: .artworkFileName)
             isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+            listenedAt = try container.decodeIfPresent(Date.self, forKey: .listenedAt)
             bookmarks = try container.decodeIfPresent([BookmarkEntry].self, forKey: .bookmarks) ?? []
             editedAt = try container.decodeIfPresent(Date.self, forKey: .editedAt)
         }
@@ -122,7 +126,7 @@ struct LibrarySnapshot: Codable {
             providerID: String, filePath: String, title: String, artistName: String?, albumName: String?,
             year: Int?, trackNumber: Int?, notes: String?, summary: String? = nil,
             terms: [String: Int] = [:], artworkFileName: String?,
-            isFavorite: Bool = false, bookmarks: [BookmarkEntry] = [], editedAt: Date?
+            isFavorite: Bool = false, listenedAt: Date? = nil, bookmarks: [BookmarkEntry] = [], editedAt: Date?
         ) {
             self.providerID = providerID
             self.filePath = filePath
@@ -136,6 +140,7 @@ struct LibrarySnapshot: Codable {
             self.terms = terms
             self.artworkFileName = artworkFileName
             self.isFavorite = isFavorite
+            self.listenedAt = listenedAt
             self.bookmarks = bookmarks
             self.editedAt = editedAt
         }

@@ -58,6 +58,9 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendabl
     /// Put aside to hear soon. The other half of favouriting: a favourite is what you
     /// keep after listening, this is what you line up before.
     var listenLater: Bool = false
+    /// When it was finished — set on reaching the end, or by hand. Nil means not
+    /// listened. A date rather than a flag so the Listened list reads newest first.
+    var listenedAt: Date? = nil
     /// What says this episode and another one are the same recording, however they're
     /// named and whichever bucket each came out of — see `FileFingerprint`. Nil when the
     /// file didn't give enough to be sure, which means it is never folded with anything.

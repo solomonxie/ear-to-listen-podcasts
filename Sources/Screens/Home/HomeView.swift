@@ -191,6 +191,11 @@ struct HomeView: View {
             )
         }
 
+        // Under the marks: both are "where was I", this one for everything played.
+        if !homeData.history.isEmpty {
+            ListenHistorySection(tracks: homeData.history)
+        }
+
         if !homeData.years.isEmpty {
             shelf("Browse by Year") {
                 ForEach(homeData.years, id: \.self) { year in

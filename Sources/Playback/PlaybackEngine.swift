@@ -204,8 +204,10 @@ final class PlaybackEngine: ObservableObject {
     /// finished episode resumes half a second from its own end.
     private func markFinished(_ track: Track) {
         let endMs = track.durationMs ?? (duration.isFinite && duration > 0 ? Int(duration * 1000) : nil)
-        guard let endMs else { return }
-        try? trackStore.recordProgress(id: track.id, positionMs: endMs)
+        if let endMs { try? trackStore.recordProgress(id: track.id, positionMs: endMs) }
+        // Reaching the end is what "listened" means — no button to remember to press.
+        try? trackStore.setListened(ids: [track.id], listened: true)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
     private func handlePlaybackFailure(track: Track) async {

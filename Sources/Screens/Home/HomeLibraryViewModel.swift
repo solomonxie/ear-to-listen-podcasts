@@ -18,6 +18,10 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var bookmarks: [Bookmark] = []
     @Published private(set) var favoriteTracks: [Track] = []
     @Published private(set) var listenLaterTracks: [Track] = []
+    @Published private(set) var listenedCount = 0
+    /// Everything played, most recent first — Home's Listen History. From `tracks`, which
+    /// is already loaded, rather than another query.
+    @Published private(set) var history: [Track] = []
     /// Folded once here rather than rebuilt per keystroke — see `LibrarySearch`.
     @Published private(set) var searchIndex = LibrarySearch.Index()
     /// Bookmarks as Home shows them: per episode, in episode order.
@@ -29,6 +33,8 @@ final class HomeLibraryViewModel: ObservableObject {
     private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let termStore = TermStore()
     private var refreshTask: Task<Void, Never>?
+    /// Enough history to be useful when expanded; past this it's a list nobody scrolls.
+    static let historyLimit = 100
 
     func refresh() async {
         tracks = (try? trackStore.all()) ?? []
@@ -43,6 +49,10 @@ final class HomeLibraryViewModel: ObservableObject {
         bookmarks = (try? bookmarkStore.recent()) ?? []
         favoriteTracks = (try? trackStore.favorites()) ?? []
         listenLaterTracks = (try? trackStore.listenLater()) ?? []
+        listenedCount = tracks.lazy.filter { $0.listenedAt != nil && !$0.isLost }.count
+        history = tracks.filter { $0.lastPlayedAt != nil && !$0.isLost }
+            .sorted { ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast) }
+            .prefix(Self.historyLimit).map { $0 }
 
         // One directory listing, then a pure hash check per track. Asking the cache per
         // track cost four filesystem calls each — including an attribute *write* that
@@ -96,6 +106,7 @@ final class HomeLibraryViewModel: ObservableObject {
         switch kind {
         case .listenLater: return listenLaterTracks.count
         case .favorites: return favoriteTracks.count
+        case .listened: return listenedCount
         case .downloaded: return downloadedTracks.count
         }
     }

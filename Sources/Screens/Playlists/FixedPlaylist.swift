@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The three playlists the app owns rather than the listener: **Listen Later**,
-/// **Favorites** and **Downloaded**.
+/// The playlists the app owns rather than the listener: **Listen Later**, **Favorites**,
+/// **Downloaded** and **Listened**.
 ///
 /// They're computed, not stored — the first two from a flag on the track, downloads from
 /// what's actually in `AudioCache` — so there's no row to delete and nothing to keep in
@@ -17,6 +17,8 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
     case listenLater
     case favorites
     case downloaded
+    /// Last: it fills itself as episodes are finished, and is where done ones go.
+    case listened
 
     var id: String { rawValue }
 
@@ -25,6 +27,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .listenLater: return "Listen Later"
         case .favorites: return "Favorites"
         case .downloaded: return "Downloaded"
+        case .listened: return "Listened"
         }
     }
 
@@ -33,6 +36,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .listenLater: return "clock.fill"
         case .favorites: return "heart.fill"
         case .downloaded: return "arrow.down.circle.fill"
+        case .listened: return "checkmark.circle.fill"
         }
     }
 
@@ -41,6 +45,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .listenLater: return .indigo
         case .favorites: return .pink
         case .downloaded: return .teal
+        case .listened: return .green
         }
     }
 
@@ -50,6 +55,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .listenLater: return "Nothing lined up yet. Hold an episode anywhere in the library and choose Listen Later."
         case .favorites: return "Nothing favourited yet. Tap the heart on an episode to keep it here."
         case .downloaded: return "Nothing downloaded yet. Anything you play is saved here automatically."
+        case .listened: return "Nothing finished yet. An episode lands here when it plays to the end, or when you mark it listened."
         }
     }
 }

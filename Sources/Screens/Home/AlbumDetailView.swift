@@ -233,6 +233,10 @@ struct AlbumDetailView: View {
                     // ✨ button on the Details header rather than in here.
                     Button("Analyze with AI…", systemImage: "sparkles") { showingAnalysis = true }
                         .disabled(transcribedCount == 0)
+                    Button("Mark All as Listened", systemImage: "checkmark.circle") { setAllListened(true) }
+                        .disabled(tracks.isEmpty || tracks.allSatisfy { $0.listenedAt != nil })
+                    Button("Mark All as Not Listened", systemImage: "circle") { setAllListened(false) }
+                        .disabled(tracks.allSatisfy { $0.listenedAt == nil })
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -511,6 +515,11 @@ struct AlbumDetailView: View {
         let folders = tracks.map { ($0.filePath as NSString).deletingLastPathComponent }
         guard let first = folders.first, !first.isEmpty, folders.allSatisfy({ $0 == first }) else { return nil }
         return first
+    }
+
+    private func setAllListened(_ listened: Bool) {
+        try? trackStore.setListened(ids: tracks.map(\.id), listened: listened)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
     private func load() async {

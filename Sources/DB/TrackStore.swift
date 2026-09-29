@@ -217,6 +217,33 @@ struct TrackStore {
         }
     }
 
+    /// Marks episodes listened (now) or not, in one write — an album's worth at once from
+    /// its page, one at a time everywhere else. An episode already marked keeps its date.
+    func setListened(ids: [String], listened: Bool) throws {
+        guard !ids.isEmpty else { return }
+        let now = Date()
+        try dbQueue.write { db in
+            for var track in try Track.fetchAll(db, keys: ids) {
+                let wanted: Date? = listened ? (track.listenedAt ?? now) : nil
+                guard wanted != track.listenedAt else { continue }
+                track.listenedAt = wanted
+                try track.update(db)
+            }
+        }
+        for id in ids {
+            ChangeLog.record("episodes", key: id, new: ["listened": listened], in: dbQueue)
+        }
+    }
+
+    /// Most recently finished first.
+    func listened() throws -> [Track] {
+        try dbQueue.read { db in
+            try Track.filter(Column("listenedAt") != nil && Column("isLost") == false)
+                .order(Column("listenedAt").desc)
+                .fetchAll(db)
+        }
+    }
+
     func setListenLater(id: String, listenLater: Bool) throws {
         let was: Bool? = try dbQueue.write { db in
             guard var track = try Track.fetchOne(db, key: id) else { return nil }

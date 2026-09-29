@@ -177,3 +177,16 @@ the player — not only on the player itself. The episode keeps playing while yo
 browse, so the moment worth keeping arrives off the player as often as on it,
 and having to open the player first is how a mark gets made too late. Marks and
 stays put, count on its shoulder, same dedupe as the transport's.
+
+## Listen History
+
+Under Bookmarks. Text rows, most recently played first — title, then
+`Sep 27, 9:14 PM · stopped at 12:14 / 41:02` (or `finished`), ✓ when listened.
+Five shown, `Show all N` expands (up to 100, lazy). Tap resumes where it stopped;
+a finished one starts from the top.
+
+**Listened** is a fourth fixed playlist (green ✓) after Downloaded: set when an
+episode plays to its end, or by hand — ✓ in the player's top-right, "Mark as
+Listened" on any episode row's menu, "Mark All as Listened" in an album's ⋯.
+Swipe a row in the list to unmark. Computed from `Track.listenedAt`, so it can't
+be deleted; carried in backups.

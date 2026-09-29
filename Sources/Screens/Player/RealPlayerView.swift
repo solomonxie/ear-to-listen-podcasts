@@ -151,6 +151,17 @@ struct RealPlayerView: View {
                     }
                     // Tapping the title goes back to the top, as it does in every iOS app
                     // whose content runs past the fold.
+                    // Marked automatically at the end of playback; this is for the ones
+                    // you're done with before then, or want back in the running.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        if let track = engine.currentTrack {
+                            Button { toggleListened(track) } label: {
+                                Image(systemName: track.listenedAt == nil ? "checkmark.circle" : "checkmark.circle.fill")
+                                    .foregroundStyle(track.listenedAt == nil ? AnyShapeStyle(HierarchicalShapeStyle.primary) : AnyShapeStyle(Color.green))
+                            }
+                            .accessibilityLabel(track.listenedAt == nil ? "Mark as listened" : "Mark as not listened")
+                        }
+                    }
                     ToolbarItem(placement: .principal) {
                         Button {
                             isFollowingTranscript = false
@@ -495,6 +506,11 @@ struct RealPlayerView: View {
         // capsules ran wider than every other component on the page and read as a
         // different screen's worth of controls sitting on top of this one.
         .padding(.horizontal)
+    }
+
+    private func toggleListened(_ track: Track) {
+        try? trackStore.setListened(ids: [track.id], listened: track.listenedAt == nil)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
     private func toggleFavorite(_ track: Track) {
