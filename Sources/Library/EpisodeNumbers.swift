@@ -19,8 +19,10 @@ import Foundation
 /// no two offer the same one — one ambiguous name and the whole album falls back to
 /// counting in filename order, which is at least always right about the *order*.
 ///
-/// A number already in the metadata is never overwritten: someone typed it, or a previous
-/// pass settled it, and re-deriving it every sync would undo hand corrections.
+/// **Only a number someone typed is fixed.** One the app filled in is worked out again
+/// on every pass, from the filenames alone — so a pass that once read a name wrong, or
+/// files that arrived later and belong in the middle, don't leave the album out of order
+/// for good. Hand edits (`metadataEditedAt`) are never touched.
 enum EpisodeNumbers {
     /// The episodes of one collection, in the order to list and play them: by number
     /// where there is one, then by filename.
@@ -39,17 +41,19 @@ enum EpisodeNumbers {
         }
     }
 
-    /// The number to write for each episode that hasn't got one, keyed by track id.
-    /// Empty when they all have one.
+    /// The number each episode that isn't fixed should carry, keyed by track id. By default
+    /// only unnumbered episodes are open; the library pass also opens every number the app
+    /// assigned itself, so it can be worked out afresh.
     ///
-    /// Numbers already in use are never handed out twice, so an album where half the
-    /// episodes were numbered by hand gets the rest placed after them rather than on top
-    /// of them.
-    static func assigned(_ tracks: [Track]) -> [String: Int] {
-        let missing = ordered(tracks.filter { $0.trackNumber == nil })
+    /// Fixed numbers are never handed out twice, so an album where half the episodes were
+    /// numbered by hand gets the rest placed after them rather than on top of them.
+    static func assigned(_ tracks: [Track], isFixed: (Track) -> Bool = { $0.trackNumber != nil }) -> [String: Int] {
+        // Ordered by filename alone: an open episode's old number is what's in question,
+        // so it can't be allowed to decide its own place.
+        let missing = ordered(tracks.filter { !isFixed($0) }.map { var open = $0; open.trackNumber = nil; return open })
         guard !missing.isEmpty else { return [:] }
 
-        var taken = Set(tracks.compactMap(\.trackNumber))
+        var taken = Set(tracks.filter(isFixed).compactMap(\.trackNumber))
         let fromNames = missing.map { number(inFileName: $0.filePath) }
         let usable = fromNames.compactMap { $0 }
         let namesAgree = usable.count == missing.count
@@ -74,12 +78,22 @@ enum EpisodeNumbers {
 
     /// The episode number a filename states, or nil when it doesn't state one plainly.
     ///
-    /// Plainly means one of two things: a number right after a word that introduces one
-    /// (`ep`, `episode`, `part`, `#`, `第`…), or a name whose digits all belong to a
-    /// single run. Anything else — `2024-05-03 show.mp3` — is a name with a date in it,
-    /// and guessing which run is the episode is how a library ends up numbered by year.
+    /// Plainly means one of three things, in this order: a sequence number the name starts
+    /// with (`013_…`), a number right after a word that introduces one (`ep`, `episode`,
+    /// `part`, `#`, `第`…), or a name whose digits all belong to a single run. Anything
+    /// else — `2024-05-03 show.mp3` — is a name with a date in it, and guessing which run
+    /// is the episode is how a library ends up numbered by year.
+    ///
+    /// The leading number wins over "Part 1": `013_Jesus Before Pilate, Part 1` is 13th in
+    /// the folder, and the part is within a sermon series that started elsewhere. Reading
+    /// the part first numbered that album against its own filenames.
     static func number(inFileName path: String) -> Int? {
         let name = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        // Short or zero-padded, then a separator, then words: a year (`2024 Episode 12`)
+        // or a date (`2024-05-03`) isn't a place in the folder.
+        if let leading = name.firstMatch(of: /^(0\d{3,4}|\d{1,3})[\s._\-]+(?=\D)/) {
+            return Int(leading.1)
+        }
         if let marked = name.firstMatch(of: /(?i)(?:ep|episode|part|pt|no|track|第)[\s._\-#]*(\d{1,5})/) {
             return Int(marked.1)
         }
