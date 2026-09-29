@@ -21,6 +21,8 @@ struct TrackFile: Codable, FetchableRecord, PersistableRecord, Identifiable, Has
     /// The transcript beside *this* copy. Two copies in two buckets can each have their
     /// own, and an upload writes over every one of them.
     var transcriptPath: String? = nil
+    /// One per language — see `Track.transcriptPaths`.
+    var transcriptPaths: [String]? = nil
     var remoteModifiedAt: Date? = nil
     /// True when the last sync of this copy's source no longer listed it. The episode is
     /// only lost once every copy is.
@@ -30,6 +32,7 @@ struct TrackFile: Codable, FetchableRecord, PersistableRecord, Identifiable, Has
     init(
         id: String = UUID().uuidString, trackID: String, providerID: String, filePath: String,
         sizeBytes: Int64? = nil, contentHash: String? = nil, transcriptPath: String? = nil,
+        transcriptPaths: [String]? = nil,
         remoteModifiedAt: Date? = nil, isLost: Bool = false, addedAt: Date = Date()
     ) {
         self.id = id
@@ -39,6 +42,7 @@ struct TrackFile: Codable, FetchableRecord, PersistableRecord, Identifiable, Has
         self.sizeBytes = sizeBytes
         self.contentHash = contentHash
         self.transcriptPath = transcriptPath
+        self.transcriptPaths = transcriptPaths
         self.remoteModifiedAt = remoteModifiedAt
         self.isLost = isLost
         self.addedAt = addedAt
@@ -49,7 +53,8 @@ struct TrackFile: Codable, FetchableRecord, PersistableRecord, Identifiable, Has
         self.init(
             trackID: track.id, providerID: track.providerID, filePath: track.filePath,
             sizeBytes: track.sizeBytes, contentHash: track.contentHash,
-            transcriptPath: track.transcriptPath, remoteModifiedAt: track.remoteModifiedAt,
+            transcriptPath: track.transcriptPath, transcriptPaths: track.transcriptPaths,
+            remoteModifiedAt: track.remoteModifiedAt,
             isLost: track.isLost
         )
     }

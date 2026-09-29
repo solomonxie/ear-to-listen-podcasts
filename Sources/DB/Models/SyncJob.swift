@@ -43,6 +43,8 @@ struct SyncJob: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var remoteModifiedAt: Date?
     /// The transcript sitting beside this file in the listing, if there was one.
     var transcriptPath: String?
+    /// Every language's transcript beside it — see `Track.transcriptPaths`.
+    var transcriptPaths: [String]? = nil
     /// Set only on a job that has to *put* the file there first: a security-scoped
     /// bookmark to the episode the listener picked out of Files. The bookmark rather than
     /// a copy, so a queue of ten episodes doesn't hold ten of them twice on the disk.
