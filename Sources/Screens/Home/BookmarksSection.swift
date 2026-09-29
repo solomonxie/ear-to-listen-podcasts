@@ -14,6 +14,7 @@ struct BookmarksSection: View {
     let onEdit: (Bookmark) -> Void
 
     @State private var expanded: Set<String> = []
+    @State private var showingInsights = false
 
     /// Enough to show what the section is; past this, the full page is the better place.
     private static let episodeLimit = 4
@@ -26,6 +27,14 @@ struct BookmarksSection: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Bookmarks").font(.title3.bold())
+                // Beside the heading it's about, like the ✨ on the Episode card: it reads
+                // every mark, not the folded few shown here.
+                Button { showingInsights = true } label: {
+                    Image(systemName: "sparkles").font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("Insights from your bookmarks and notes")
                 Spacer()
                 if groups.count > Self.episodeLimit {
                     NavigationLink {
@@ -65,6 +74,7 @@ struct BookmarksSection: View {
             }
             .padding(.horizontal)
         }
+        .sheet(isPresented: $showingInsights) { BookmarkInsightsView() }
     }
 
     private func toggle(_ id: String) {
@@ -85,6 +95,7 @@ struct BookmarksView: View {
 
     @State private var groups: [BookmarkGroup] = []
     @State private var expanded: Set<String> = []
+    @State private var showingInsights = false
 
     private let bookmarkStore = BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -115,6 +126,12 @@ struct BookmarksView: View {
         }
         .navigationTitle("Bookmarks")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !groups.isEmpty {
+                Button("Insights", systemImage: "sparkles") { showingInsights = true }
+            }
+        }
+        .sheet(isPresented: $showingInsights) { BookmarkInsightsView() }
         .task { load() }
         .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in load() }
     }
