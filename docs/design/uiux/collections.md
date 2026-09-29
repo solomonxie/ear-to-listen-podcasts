@@ -195,8 +195,12 @@ One pass over the album, reading **only transcripts already on the phone**.
 
 `⋯ → Build profile with AI` (speaker) and `⋯ → Describe this collection…`
 (album) fill in the fields above from what the library already holds — names,
-episode titles, years, collections, folders. **No audio, no transcripts**, so
-both work on a bucket where nothing has been transcribed yet. That's the whole
+episode titles, years, collections, folders. No audio, so both work on a bucket
+where nothing has been transcribed yet. Where episodes *are* transcribed, the
+album pass also reads the terms counted across them and a spread of episode
+summaries, and its topics must come from that evidence — never from what the
+speaker is known for elsewhere (titles alone once tagged an Ecclesiastes series
+"predestination"). That's the whole
 reason they're separate from the album's `Analyze with AI…`, which reads
 finished transcripts to rewrite each *episode's* title and is disabled without
 them.
