@@ -25,18 +25,47 @@ enum TranscriptSidecar {
     /// a build before the column existed, or added between listings, has a nil path and a
     /// perfectly good `.vtt` sitting beside it.
     /// The recorded path if there is one, every conventional candidate if there isn't.
-    static func pathsToTry(for track: Track) -> [String] {
+    ///
+    /// With several languages beside it, they're all tried, the episode's own language
+    /// first (`TranscriptFile.preferred`).
+    static func pathsToTry(for track: Track, episodeLanguage: String? = nil) -> [String] {
+        if let known = track.transcriptPaths?.filter({ !$0.isEmpty }), !known.isEmpty {
+            return TranscriptFile.preferred(known, episodeLanguage: episodeLanguage, appLanguages: Locale.preferredLanguages)
+        }
         if let known = track.transcriptPath?.nilIfEmpty { return [known] }
         return TranscriptFile.candidatePaths(forAudioPath: track.filePath)
     }
 
-    static func load(track: Track, provider: CloudProvider, duration: Double?) async -> [TranscriptSegment]? {
-        for path in pathsToTry(for: track) {
+    /// The languages an episode has a transcript file in, as recorded by the last sync —
+    /// nil for an untagged file. Empty or one means there's nothing to switch between.
+    static func languages(for track: Track) -> [String?] {
+        (track.transcriptPaths ?? []).map(TranscriptFile.language(ofSidecar:))
+    }
+
+    /// The first file that parses, and the language it's tagged with.
+    static func load(
+        track: Track, provider: CloudProvider, duration: Double?, episodeLanguage: String? = nil
+    ) async -> (segments: [TranscriptSegment], language: String?)? {
+        await load(paths: pathsToTry(for: track, episodeLanguage: episodeLanguage), provider: provider, duration: duration)
+    }
+
+    /// One language's file, picked from the transcript's language chips.
+    static func load(
+        track: Track, language: String?, provider: CloudProvider, duration: Double?
+    ) async -> (segments: [TranscriptSegment], language: String?)? {
+        let paths = (track.transcriptPaths ?? []).filter { TranscriptFile.language(ofSidecar: $0) == language }
+        return await load(paths: paths, provider: provider, duration: duration)
+    }
+
+    private static func load(
+        paths: [String], provider: CloudProvider, duration: Double?
+    ) async -> (segments: [TranscriptSegment], language: String?)? {
+        for path in paths {
             guard let text = await contents(at: path, provider: provider) else { continue }
             let segments = TranscriptFile.parse(
                 text, extension: (path as NSString).pathExtension, duration: duration
             )
-            if !segments.isEmpty { return segments }
+            if !segments.isEmpty { return (segments, TranscriptFile.language(ofSidecar: path)) }
         }
         return nil
     }
@@ -59,16 +88,18 @@ enum TranscriptSidecar {
     /// Throws only on a write that was attempted and failed — a read-only source is a
     /// normal answer, not a problem to report.
     @discardableResult
+    /// `language` writes that language's files (`ep1.zh.vtt`) — the one on screen, so an
+    /// upload of the Chinese text never lands on the English file.
     static func upload(
         _ segments: [TranscriptSegment], beside audioPath: String, provider: CloudProvider,
-        title: String?, artist: String?
+        title: String?, artist: String?, language: String? = nil
     ) async throws -> [String] {
         guard provider.isWritable else { return [] }
         guard segments.contains(where: { !$0.text.isEmpty }) else { return [] }
 
         var written: [String] = []
         for ext in TranscriptFile.writableExtensions {
-            guard let path = TranscriptFile.sidecarPath(forAudioPath: audioPath, extension: ext) else { continue }
+            guard let path = TranscriptFile.sidecarPath(forAudioPath: audioPath, extension: ext, language: language) else { continue }
             let isOurs = ext == TranscriptFile.canonicalExtension || ext == TranscriptFile.companionExtension
             // One HEAD per extra format, on a button press, for one episode — the rule
             // against per-item probing is about listings of thousands, not this.

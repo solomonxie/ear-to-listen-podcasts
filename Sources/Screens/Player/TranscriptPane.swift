@@ -143,6 +143,8 @@ struct TranscriptPane: View {
             }
             .id(Self.searchAnchor)
 
+            if transcript.sidecarLanguages.count > 1 { languageChips }
+
             if isSearching { searchBar }
 
             // Offered only until the next pass or a change of episode — it restores from a
@@ -190,6 +192,37 @@ struct TranscriptPane: View {
             }
         }
         .padding(.horizontal)
+    }
+
+    /// One chip per transcript file beside the episode (`ep1.zh.vtt`, `ep1.en.vtt`), the
+    /// one on screen filled. Greyed once the transcript is the listener's — a hand edit or
+    /// a pass they ran — because switching replaces it, and theirs is never replaced.
+    private var languageChips: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(transcript.sidecarLanguages.enumerated()), id: \.offset) { _, language in
+                let isOn = transcript.isFromSidecar && transcript.sidecarLanguage == language
+                Button { transcript.showSidecar(language: language) } label: {
+                    Text(Self.chipName(language))
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(HierarchicalShapeStyle.primary))
+                        .background(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
+        }
+        .disabled(!transcript.canSwitchSidecarLanguage)
+        .opacity(transcript.canSwitchSidecarLanguage ? 1 : 0.5)
+    }
+
+    /// The language in the listener's own words — "中文", "English" — or "Default" for the
+    /// file with no language in its name.
+    static func chipName(_ language: String?) -> String {
+        guard let language else { return String(localized: "Default") }
+        return Locale.current.localizedString(forIdentifier: language)?.localizedCapitalized ?? language
     }
 
     /// Where the page scrolls to when the bar opens.
@@ -361,7 +394,12 @@ struct TranscriptPane: View {
         if let report = transcript.uploadReport { return "\(report)" }
         if transcript.lines.isEmpty { return nil }
         // Nothing was spent making this one — it was already in the bucket.
-        if transcript.isFromSidecar { return "From a transcript file beside the episode" }
+        if transcript.isFromSidecar {
+            if let language = transcript.sidecarLanguage {
+                return "From the \(Self.chipName(language)) transcript file beside the episode"
+            }
+            return "From a transcript file beside the episode"
+        }
         return transcript.isComplete ? "Whole episode transcribed" : "\(coverage) transcribed"
     }
 

@@ -21,6 +21,9 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendabl
     /// The transcript file beside this episode in its bucket, as of the last sync. Nil
     /// means the last listing had none — not "not looked at yet".
     var transcriptPath: String? = nil
+    /// Every transcript beside it, one per language (`ep1.zh.vtt`, `ep1.en.vtt`), as of
+    /// the last sync. `transcriptPath` is the first of these.
+    var transcriptPaths: [String]? = nil
     var remoteModifiedAt: Date? = nil
     /// True when the last sync no longer found this file in the bucket listing.
     var isLost: Bool = false

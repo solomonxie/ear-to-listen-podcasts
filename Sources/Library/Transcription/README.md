@@ -8,6 +8,16 @@ the background, with a percentage while it runs and the text all at once when it
 **Convention: same basename as the audio, different extension.** `shows/ep1.mp3` →
 `shows/ep1.vtt`. Nothing else is inspected — no manifest, no naming scheme, no index.
 
+**One per language, too:** `ep1.zh.vtt`, `ep1.en.srt`, `ep1.zh-CN.vtt` — an ISO code
+before the extension, the video-subtitle convention. An exact basename always wins
+(`show.the.vtt` belongs to `show.the.mp3`); a tag is only peeled off to reach audio the full
+stem doesn't name. Sync records every language's file (`Track.transcriptPaths`, first =
+`transcriptPath`). First import picks the episode's language, then the app's, then the
+untagged file. The transcript header shows a chip per language; switching replaces the
+stored text, so it's offered only while that text is an untouched file import — never over
+hand edits or a pass someone ran. The loaded language rides on the segments' engine
+(`sidecar:zh`), and Upload writes back to that language's own files.
+
 Sidecar extensions are absent from `audioExtensions` (`Sources/Library/Sync.swift:7`), so
 they never sync as tracks.
 

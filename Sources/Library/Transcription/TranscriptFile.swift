@@ -29,14 +29,35 @@ enum TranscriptFile {
     /// uploading is meant to end.
     static let writableExtensions = [canonicalExtension, companionExtension, "srt", "json", "txt"]
 
-    /// `podcast/ep1.mp3` → `podcast/ep1.vtt`. Matching on basename is the whole convention.
+    /// `podcast/ep1.mp3` → `podcast/ep1.vtt`, or `podcast/ep1.zh.vtt` for a language.
+    /// Matching on basename is the whole convention.
     ///
     /// A path with nothing left once its extension is off has no sidecar name to give, and
     /// the answer to that is nothing — the old fallback returned the audio path itself,
     /// which is the one string this must never hand to a writer.
-    static func sidecarPath(forAudioPath path: String, extension ext: String) -> String? {
+    static func sidecarPath(forAudioPath path: String, extension ext: String, language: String? = nil) -> String? {
         let base = (path as NSString).deletingPathExtension
-        return base.isEmpty ? nil : "\(base).\(ext)"
+        guard !base.isEmpty else { return nil }
+        return language.map { "\(base).\($0).\(ext)" } ?? "\(base).\(ext)"
+    }
+
+    /// The language a sidecar is tagged with: `ep1.zh-CN.vtt` → `zh-CN`, `ep1.vtt` → nil.
+    /// The same `name.lang.ext` convention video players use for subtitles.
+    static func language(ofSidecar path: String) -> String? {
+        let stem = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        let tag = (stem as NSString).pathExtension
+        return languageTag(tag)
+    }
+
+    /// A tag only counts when it's a real ISO language, optionally with a region or
+    /// script — `zh`, `en-US`, `zh-Hans`, `yue`. Anything else after a dot is part of
+    /// the name: `show.part.vtt` is a file called "show.part", not Part-language.
+    static func languageTag(_ tag: String) -> String? {
+        guard tag.wholeMatch(of: /[a-zA-Z]{2,3}([-_][a-zA-Z0-9]{2,8})*/) != nil else { return nil }
+        let normalized = tag.replacingOccurrences(of: "_", with: "-")
+        let base = String(normalized.prefix { $0 != "-" }).lowercased()
+        guard Locale.LanguageCode(base).isISOLanguage else { return nil }
+        return normalized
     }
 
     /// Pairs each audio path in a listing with the transcript beside it, matched on
@@ -44,26 +65,63 @@ enum TranscriptFile {
     /// episode costs no probing — and so "there is no transcript" is a fact we know
     /// rather than five failed requests.
     ///
-    /// `readableExtensions` is in preference order, so a folder holding both `.vtt` and
-    /// `.txt` for one episode yields the `.vtt`.
+    /// The episode's first transcript — see `sidecarSetsByAudioPath` for all of them.
     static func sidecarsByAudioPath(in files: [CloudFile]) -> [String: String] {
-        var byStem: [String: String] = [:]
+        sidecarSetsByAudioPath(in: files).compactMapValues(\.first)
+    }
+
+    /// Every transcript beside each episode, one per language: the untagged one first,
+    /// then the tagged ones by tag. `readableExtensions` is in preference order, so a
+    /// language held as both `.vtt` and `.txt` yields the `.vtt`.
+    ///
+    /// An exact basename is always the untagged file of that audio — `show.the.vtt` beside
+    /// `show.the.mp3` belongs to it, whatever "the" might be. The tag is only peeled off
+    /// to find an audio file that the full stem doesn't name.
+    static func sidecarSetsByAudioPath(in files: [CloudFile]) -> [String: [String]] {
+        let audioStems = Set(files.filter { FileKind(path: $0.path).isPlayable }
+            .map { ($0.path as NSString).deletingPathExtension })
+
+        // stem of the audio → language ("" for untagged) → best path
+        var byStem: [String: [String: String]] = [:]
         for file in files {
             let ext = (file.path as NSString).pathExtension.lowercased()
             guard readableExtensions.contains(ext) else { continue }
-            let stem = (file.path as NSString).deletingPathExtension
-            let existing = byStem[stem].map { ($0 as NSString).pathExtension.lowercased() }
+            var stem = (file.path as NSString).deletingPathExtension
+            var language = ""
+            if !audioStems.contains(stem), let tag = languageTag((stem as NSString).pathExtension) {
+                stem = (stem as NSString).deletingPathExtension
+                language = tag
+            }
+            guard audioStems.contains(stem) else { continue }
+            let existing = byStem[stem]?[language].map { ($0 as NSString).pathExtension.lowercased() }
             let rank = readableExtensions.firstIndex(of: ext) ?? .max
             let existingRank = existing.flatMap { readableExtensions.firstIndex(of: $0) } ?? .max
-            if rank < existingRank { byStem[stem] = file.path }
+            if rank < existingRank { byStem[stem, default: [:]][language] = file.path }
         }
 
-        var byAudio: [String: String] = [:]
+        var byAudio: [String: [String]] = [:]
         for file in files where FileKind(path: file.path).isPlayable {
             let stem = (file.path as NSString).deletingPathExtension
-            if let sidecar = byStem[stem] { byAudio[file.path] = sidecar }
+            guard let set = byStem[stem] else { continue }
+            byAudio[file.path] = set.keys.sorted().compactMap { set[$0] }
         }
         return byAudio
+    }
+
+    /// Of an episode's transcripts, the one to show first: the episode's own language,
+    /// then the app's, then the untagged file, then whatever there is. Languages compare
+    /// on the base code, so a `zh-CN` episode takes `ep1.zh.vtt`.
+    static func preferred(_ paths: [String], episodeLanguage: String?, appLanguages: [String]) -> [String] {
+        func base(_ tag: String?) -> String? { tag.map { String($0.prefix { $0 != "-" && $0 != "_" }).lowercased() } }
+        let wanted = ([episodeLanguage] + appLanguages.map(Optional.some)).compactMap(base)
+        func rank(_ path: String) -> Int {
+            let tag = base(language(ofSidecar: path))
+            if let tag, let index = wanted.firstIndex(of: tag) { return index }
+            return tag == nil ? wanted.count : wanted.count + 1
+        }
+        return paths.enumerated()
+            .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+            .map(\.element)
     }
 
     static func candidatePaths(forAudioPath path: String) -> [String] {

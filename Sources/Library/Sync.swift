@@ -118,7 +118,7 @@ struct SyncEngine {
         // Listed whole, filtered after: the non-audio entries are what say which
         // episodes have a transcript sitting beside them.
         let listing = try await provider.listFiles(inFolder: nil)
-        let sidecars = TranscriptFile.sidecarsByAudioPath(in: listing)
+        let sidecars = TranscriptFile.sidecarSetsByAudioPath(in: listing)
         let files = listing.filter { FileKind(path: $0.path).isPlayable }
 
         // Taken from the listing rather than accumulated as the loop goes: what exists
@@ -144,7 +144,7 @@ struct SyncEngine {
                 _ = try jobStore.enqueue(
                     providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
                     contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt,
-                    transcriptPath: sidecars[file.path]
+                    transcriptPath: sidecars[file.path]?.first, transcriptPaths: sidecars[file.path]
                 )
                 queued += 1
             } catch {
@@ -191,7 +191,7 @@ struct SyncEngine {
             )
             try await importFileIfNeeded(
                 file, providerRecord: record, provider: provider, jobID: job.id,
-                transcriptPath: job.transcriptPath
+                transcriptPath: job.transcriptPath, transcriptPaths: job.transcriptPaths
             )
             try? jobStore.markDone(id: job.id)
         } catch {
@@ -207,7 +207,7 @@ struct SyncEngine {
     @discardableResult
     func importFileIfNeeded(
         _ file: CloudFile, providerRecord record: ProviderRecord, provider: CloudProvider,
-        jobID: String? = nil, transcriptPath: String? = nil
+        jobID: String? = nil, transcriptPath: String? = nil, transcriptPaths: [String]? = nil
     ) async throws -> Bool {
         /// Reported per stage rather than per file, so the queue can say what's slow —
         /// reading tags off a remote file and waiting on an AI call take very different
@@ -260,6 +260,7 @@ struct SyncEngine {
             sizeBytes: file.sizeBytes,
             contentHash: file.contentHash,
             transcriptPath: transcriptPath,
+            transcriptPaths: transcriptPaths,
             remoteModifiedAt: file.modifiedAt,
             isLost: false,
             updatedAt: Date()

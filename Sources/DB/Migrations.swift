@@ -585,6 +585,16 @@ enum Migrations {
             try TrackMerge.foldDuplicates(in: db)
         }
 
+        // Transcripts in more than one language beside an episode (`ep1.zh.vtt`,
+        // `ep1.en.vtt`). A JSON list of paths, filled in by the next sync's listing.
+        migrator.registerMigration("v33_transcript_languages") { db in
+            for table in ["tracks", "trackFiles", "syncJobs"] {
+                try db.alter(table: table) { t in
+                    t.add(column: "transcriptPaths", .text)
+                }
+            }
+        }
+
         return migrator
     }
 }
