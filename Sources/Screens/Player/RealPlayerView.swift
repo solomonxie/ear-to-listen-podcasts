@@ -205,7 +205,7 @@ struct RealPlayerView: View {
                     currentTime: engine.currentTime, duration: engine.duration,
                     area: $scrubberArea
                 ) { engine.seek(to: $0) }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 36)
                 transport(for: track, proxy: proxy)
                     .background { transportVisibilityProbe }
                 queueControls(proxy)
@@ -858,8 +858,7 @@ private extension Array {
 /// It reports where it is on screen, because the page's left-edge back swipe overlaps its
 /// left end. Without a hold there is no moment at which to raise a flag — the swipe has
 /// already claimed the stroke by then — so the swipe keeps off the bar's rectangle
-/// instead, decided at touch-down. The bar keeps its full width: the first minute of an
-/// episode stays as reachable as the last.
+/// instead, decided at touch-down.
 struct Scrubber: View {
     let currentTime: TimeInterval
     let duration: TimeInterval
@@ -1024,10 +1023,10 @@ private struct UpNextView: View {
                         .foregroundStyle(isPast ? .tertiary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
-                Spacer(minLength: 0)
                 }
-            .contentShape(Rectangle())
+                Spacer(minLength: 0)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .id(track.id)
