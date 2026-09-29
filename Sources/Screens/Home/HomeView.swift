@@ -122,7 +122,9 @@ struct HomeView: View {
         if !homeData.recentTracks.isEmpty {
             shelf("Continue Listening") {
                 ForEach(homeData.recentTracks) { track in
-                    TrackCard(track: track) { play(track, queue: homeData.recentTracks) }
+                    // Just the episode: the engine queues its collection in episode order. The
+                    // shelf itself is a mix of shows, and Up Next is about track order.
+                    TrackCard(track: track) { play(track, queue: [track]) }
                 }
             }
         }

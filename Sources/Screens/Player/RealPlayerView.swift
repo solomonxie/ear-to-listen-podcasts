@@ -930,7 +930,9 @@ struct Scrubber: View {
 /// you'd just finished and wanted back looked like something scheduled to come.
 ///
 /// Three headings say which part is which, and the sheet opens on the one playing rather
-/// than at the top — the queue is as long as the collection it came from.
+/// than at the top — the queue is as long as the collection it came from. An episode
+/// opened on its own gets its whole collection as the queue (`PlaybackEngine`), so
+/// track 14 has 1–13 above it here.
 private struct UpNextView: View {
     @ObservedObject var engine = PlaybackEngine.shared
 
@@ -947,7 +949,7 @@ private struct UpNextView: View {
                         // "Earlier", not "Played": these are the episodes before this one
                         // in the collection, and whether they were listened to is a
                         // different question this list can't answer.
-                        section("Earlier", Array(engine.queue[..<currentIndex]))
+                        section("Earlier", Array(engine.queue[..<currentIndex]), isPast: true)
                         section("Now Playing", [engine.queue[currentIndex]])
                         section("Coming Up", Array(engine.queue[(currentIndex + 1)...]))
                     } else {
@@ -959,27 +961,37 @@ private struct UpNextView: View {
                 .background(Color.appBackground.ignoresSafeArea())
                 .navigationTitle("Up Next")
                 .navigationBarTitleDisplayMode(.inline)
-                .onAppear {
-                    guard let current = engine.currentTrack else { return }
-                    proxy.scrollTo(current.id, anchor: .center)
+                // Keyed on the queue too: an episode opened on its own gets its collection a
+                // moment later, and the row has to be centred again once 1–13 land above it.
+                // The wait is for the rows to lay out and the sheet to finish rising —
+                // scrolled any sooner, the row isn't there yet and it's a no-op.
+                .task(id: "\(engine.currentTrack?.id ?? "")|\(engine.queue.count)") {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    scrollToCurrent(proxy)
                 }
             }
         }
         .presentationDetents([.medium, .large])
     }
 
+    private func scrollToCurrent(_ proxy: ScrollViewProxy) {
+        guard let current = engine.currentTrack else { return }
+        proxy.scrollTo(current.id, anchor: .center)
+    }
+
     @ViewBuilder
-    private func section(_ title: LocalizedStringKey?, _ tracks: [Track]) -> some View {
+    private func section(_ title: LocalizedStringKey?, _ tracks: [Track], isPast: Bool = false) -> some View {
         if !tracks.isEmpty {
             Section {
-                ForEach(tracks) { row($0) }
+                ForEach(tracks) { row($0, isPast: isPast) }
             } header: {
                 if let title { Text(title) }
             }
         }
     }
 
-    private func row(_ track: Track) -> some View {
+    /// Past rows are greyed, not disabled: behind you is still somewhere to go back to.
+    private func row(_ track: Track, isPast: Bool) -> some View {
         Button {
             engine.play(track: track, queue: engine.queue)
         } label: {
@@ -988,16 +1000,19 @@ private struct UpNextView: View {
                     Image(systemName: "speaker.wave.2.fill").foregroundStyle(.tint)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(track.title).lineLimit(1)
+                    Text(track.title)
+                        .lineLimit(1)
+                        .foregroundStyle(isPast ? .secondary : .primary)
                     Text(TrackRow.fileName(for: track))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(isPast ? .tertiary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
                 }
             }
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
         .id(track.id)
     }
 }

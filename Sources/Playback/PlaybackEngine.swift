@@ -87,8 +87,26 @@ final class PlaybackEngine: ObservableObject {
             }
             try? store.touchLastPlayed(id: track.id)
         }
+        if queue.count == 1, let albumID = track.albumID {
+            Task { await fillQueueFromAlbum(albumID, around: track) }
+        }
         lastPersistedProgressAt = Date()
         Task { await loadAndPlay(track: track) }
+    }
+
+    /// An episode opened on its own — a bookmark, a search hit, a shelf on Home — queues
+    /// only itself, so Up Next had nothing either side of it and the episode after it
+    /// never came. The queue is its collection, in episode order: 1–13 before track 14,
+    /// 15 onwards after. Read after playback starts, and dropped if the listener has
+    /// moved on or queued something else in the meantime.
+    private func fillQueueFromAlbum(_ albumID: String, around track: Track) async {
+        let store = trackStore
+        let album = await Task.detached(priority: .userInitiated) {
+            (try? store.tracks(forAlbum: albumID)) ?? []
+        }.value
+        guard album.count > 1, album.contains(where: { $0.id == track.id }),
+              currentTrack?.id == track.id, queue.map(\.id) == [track.id] else { return }
+        queue = album
     }
 
     private func loadAndPlay(track: Track) async {
