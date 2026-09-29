@@ -193,7 +193,7 @@ struct SpeakerDetailView: View {
                 ShowMoreList(items: tracks) { track in
                     Button {
                         // Everything of theirs is the queue, however few rows are shown.
-                        PlaybackEngine.shared.open(track: track, queue: tracks)
+                        PlaybackEngine.shared.open(track: track, queue: [track])
                     } label: {
                         TrackRow(track: track)
                     }
@@ -221,7 +221,7 @@ struct SpeakerDetailView: View {
 
     private func play(_ bookmark: Bookmark) {
         guard let track = tracks.first(where: { $0.id == bookmark.trackID }) else { return }
-        PlaybackEngine.shared.open(track: track, queue: tracks, startingAt: bookmark.position)
+        PlaybackEngine.shared.open(track: track, queue: [track], startingAt: bookmark.position)
     }
 
     private func savePhoto(_ data: Data) async {

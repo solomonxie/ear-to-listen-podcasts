@@ -12,14 +12,14 @@ final class EpisodeNumbersTests: XCTestCase {
         )
     }
 
-    func testNumberedEpisodesComeFirstAndInNumberOrder() {
+    func testFilenameOrderWinsOverAStaleNumber() {
         let ordered = EpisodeNumbers.ordered([
-            track("c", path: "show/zeta.mp3"),
-            track("b", path: "show/talk.mp3", number: 10),
-            track("a", path: "show/intro.mp3", number: 2),
+            track("c", path: "show/003_c.mp3", number: 1),
+            track("b", path: "show/014_b.mp3", number: 3),
+            track("a", path: "show/002_a.mp3", number: 2),
         ])
 
-        XCTAssertEqual(ordered.map(\.id), ["a", "b", "c"])
+        XCTAssertEqual(ordered.map(\.id), ["a", "c", "b"])
     }
 
     func testFilenamesSortTheWayAPersonReadsThem() {

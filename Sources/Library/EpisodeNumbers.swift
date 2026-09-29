@@ -2,16 +2,9 @@ import Foundation
 
 /// What order the episodes of one collection are in, and the number each of them carries.
 ///
-/// **The number in the metadata wins, and every episode ends up with one.** A collection
-/// is a series — episode 2 follows episode 1 — and the only field that says so is
-/// `Track.trackNumber`. Files arrive without it: nothing in the app reads a track-number
-/// tag, so until someone typed one in, an album listed itself by title, which puts
-/// "Episode 10" before "Episode 9" and scatters a hundred identically-tagged files at
-/// random.
-///
-/// **Filenames are the fallback, read the way a person reads them.** `ep-9` before
-/// `ep-10`, because `localizedStandardCompare` compares digit runs as numbers — plain
-/// `<` is what makes 10 sort before 9 in the first place.
+/// **Filename order is the order.** `ep-9` before `ep-10`, because
+/// `localizedStandardCompare` compares digit runs as numbers. `Track.trackNumber` is
+/// what's shown, not what's sorted by.
 ///
 /// **Filling in a missing number takes the filename's own, when the filenames agree on
 /// one.** `ep-007.mp3` should become episode 7, not episode 3 because it happens to be
@@ -24,21 +17,11 @@ import Foundation
 /// files that arrived later and belong in the middle, don't leave the album out of order
 /// for good. Hand edits (`metadataEditedAt`) are never touched.
 enum EpisodeNumbers {
-    /// The episodes of one collection, in the order to list and play them: by number
-    /// where there is one, then by filename.
+    /// The episodes of one collection, in the order to list and play them: by filename.
+    /// Not by number — any edit pins a row's number (`metadataEditedAt`), so a number the
+    /// app once misread stayed forever and put 014 right after 002.
     static func ordered(_ tracks: [Track]) -> [Track] {
-        tracks.sorted { first, second in
-            switch (first.trackNumber, second.trackNumber) {
-            case let (first?, second?) where first != second:
-                return first < second
-            case (nil, .some):
-                return false
-            case (.some, nil):
-                return true
-            default:
-                return isBefore(first, second)
-            }
-        }
+        tracks.sorted(by: isBefore)
     }
 
     /// The number each episode that isn't fixed should carry, keyed by track id. By default
