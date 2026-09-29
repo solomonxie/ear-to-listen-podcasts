@@ -102,7 +102,7 @@ struct TermDetailView: View {
             // The term came out of the AI pass but isn't said in those words — it
             // paraphrased. There's still an episode to play.
             Button {
-                PlaybackEngine.shared.open(track: track, queue: episodes.map(\.track))
+                PlaybackEngine.shared.open(track: track, queue: [track])
             } label: {
                 Label("Not said in those words — play the episode", systemImage: "play.circle")
                     .font(.caption)
@@ -114,7 +114,7 @@ struct TermDetailView: View {
             ForEach(found) { mention in
                 Button {
                     PlaybackEngine.shared.open(
-                        track: track, queue: episodes.map(\.track), startingAt: mention.start
+                        track: track, queue: [track], startingAt: mention.start
                     )
                 } label: {
                     HStack(alignment: .top, spacing: 8) {

@@ -264,7 +264,7 @@ struct HomeView: View {
                 }
             }
             resultSection(episodesTitle, results.tracks) { track in
-                Button { play(track, queue: results.tracks) } label: {
+                Button { play(track, queue: [track]) } label: {
                     TrackRow(track: track)
                 }
                 .buttonStyle(.plain)
