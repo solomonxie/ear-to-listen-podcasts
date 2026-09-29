@@ -1,0 +1,9 @@
+# System: brew install ffmpeg
+funasr>=1.3.0
+torch
+torchaudio
+numpy
+soundfile
+mlx-whisper
+mutagen
+openai>=1.0.0
