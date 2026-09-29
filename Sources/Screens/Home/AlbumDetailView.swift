@@ -26,16 +26,10 @@ struct AlbumDetailView: View {
     @State private var suggestionError: String?
     /// Which unfolding picker is open — one at a time, across the whole form.
     @State private var openPicker: String?
-    /// Every metadata section starts shut — see `FoldHeader`. The page is about its
-    /// episodes; the fields are for the visit where something needs correcting.
-    @State private var showingDetails = false
-    @State private var showingProfile = false
-    @State private var showingPicture = false
-    @State private var showingTerms = false
-    @State private var showingStats = false
     @State private var allSpeakers: [Artist] = []
     @State private var bookmarks: [Bookmark] = []
     @State private var terms: [TermCount] = []
+    @State private var reloadTask: Task<Void, Never>?
     /// Pushed by the speaker row's icon — see the comment where it's built.
     @State private var openSpeaker: Artist?
     @State private var artworkItem: PhotosPickerItem?
@@ -63,7 +57,6 @@ struct AlbumDetailView: View {
             }
 
             Section {
-              if showingDetails {
                 // Picked, not typed: a speaker already exists as a row with a page of
                 // their own, and typing their name again by hand is how you end up with
                 // two of them differing by a space.
@@ -109,10 +102,10 @@ struct AlbumDetailView: View {
                         .focused($focusedField, equals: .notes)
                 }
                 rejectNote("notes")
-              }
             } header: {
                 HStack {
-                    FoldHeader("Details", isOpen: $showingDetails)
+                    Text("Details")
+                    Spacer()
                     SuggestWithAiButton(isRunning: isSuggesting) { Task { await suggest() } }
                         .disabled(tracks.isEmpty)
                 }
@@ -124,25 +117,20 @@ struct AlbumDetailView: View {
 
             // Its own section rather than another row: it's paragraphs, and it's the
             // part of the page worth actually reading.
-            Section {
-                if showingProfile {
-                    TextField(
-                        "What this collection is — or fill it in from ⋯ → Describe this collection",
-                        text: $profile, axis: .vertical
-                    )
-                    .lineLimit(3...)
-                    .focused($focusedField, equals: .profile)
-                    rejectNote("profile")
-                }
-            } header: {
-                FoldHeader("Profile", isOpen: $showingProfile)
+            Section("Profile") {
+                TextField(
+                    "What this collection is — or fill it in from ⋯ → Describe this collection",
+                    text: $profile, axis: .vertical
+                )
+                .lineLimit(3...)
+                .focused($focusedField, equals: .profile)
+                rejectNote("profile")
             }
 
             // Below the writing, like the speaker page: the cover is the last thing anyone
             // sorts out, and a row of capsules under the name made the top of the page a
             // toolbar instead of a cover and a title.
-            Section {
-                if showingPicture {
+            Section("Picture") {
                     ArtworkSourceRow(
                     subject: artworkSubject,
                     hasArtwork: shown.artworkFileName != nil,
@@ -154,9 +142,6 @@ struct AlbumDetailView: View {
                         onUse: { data in Task { await saveArtwork(data) } },
                         onRemove: { removeArtwork() }
                     )
-                }
-            } header: {
-                FoldHeader("Picture", isOpen: $showingPicture)
             }
             .listRowSeparator(.hidden)
 
@@ -165,28 +150,23 @@ struct AlbumDetailView: View {
             // rather than tagged.
             if !terms.isEmpty {
                 Section {
-                    if showingTerms {
-                        TermChips(terms: terms) { term in
-                            NavigationLink {
-                                TermDetailView(term: term.term)
-                            } label: {
-                                TermChip(term: term)
-                            }
-                            .buttonStyle(.plain)
+                    TermChips(terms: terms) { term in
+                        NavigationLink {
+                            TermDetailView(term: term.term)
+                        } label: {
+                            TermChip(term: term)
                         }
+                        .buttonStyle(.plain)
                     }
                 } header: {
-                    FoldHeader("Terms", isOpen: $showingTerms, detail: "\(terms.count)")
+                    Text("Terms")
                 } footer: {
-                    if showingTerms {
-                        Text("Times said across this collection's episodes — counted in the transcripts, not guessed.")
-                    }
+                    Text("Times said across this collection's episodes — counted in the transcripts, not guessed.")
                 }
                 .listRowSeparator(.hidden)
             }
 
-            Section {
-              if showingStats {
+            Section("Stats") {
                 LabeledContent("Episodes", value: "\(tracks.count)")
                 if let totalDuration { LabeledContent("Total length", value: totalDuration) }
                 if let years { LabeledContent("Episode years", value: years) }
@@ -198,9 +178,6 @@ struct AlbumDetailView: View {
                 if let edited = shown.metadataEditedAt {
                     LabeledContent("Edited", value: edited.formatted(date: .abbreviated, time: .shortened))
                 }
-              }
-            } header: {
-                FoldHeader("Stats", isOpen: $showingStats)
             }
             .font(.footnote)
 
@@ -235,6 +212,9 @@ struct AlbumDetailView: View {
             }
         }
         .listStyle(.plain)
+        // Room to scroll "Show all" clear of the docked now-playing bar, which otherwise
+        // sits on it — same margin as the other list pages under that bar.
+        .contentMargins(.bottom, 72, for: .scrollContent)
         // Leaving a field is the save, as everywhere else in the app: no Save button to
         // find, and nothing lost by scrolling away or closing the page.
         .onChange(of: focusedField) { previous, _ in
