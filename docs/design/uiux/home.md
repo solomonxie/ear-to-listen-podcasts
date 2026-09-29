@@ -22,7 +22,7 @@ page. Reached at launch; nothing pushes back to it but Back.
  └──────┘ └──────┘ └──────┘
  Favorites Downloaded Night li…
  12        128        9         ← count under the name
- Bookmarks                  14 in 5 episodes
+ Bookmarks ✨                14 in 5 episodes  ← ✨ = AI insights sheet
  ┌─────────────────────────────────────────┐
  │ 第 3 集 — 人物志                        │  ← episode, once, not per mark
  │ ① 12:14  "…pipe in personal data"    ✎  │
@@ -104,6 +104,12 @@ time within it, so "the second mark in that one" is something you can say and
 then find. The old version was a horizontal row of one box per mark, each
 repeating its episode title, with marks from the same episode scattered along
 the row and no count anywhere.
+
+**✨ beside the heading reads every mark** — notes, tags, the line spoken — and
+writes Themes / Connections / What your notes say / Next, citing
+"Episode @ m:ss". The last result is kept (with its date and mark count), so
+reopening costs nothing; Regenerate asks again, and the footnote says how many
+marks were added since. Also in the toolbar of the full Bookmarks page.
 
 Everything else still hides itself when empty.
 
