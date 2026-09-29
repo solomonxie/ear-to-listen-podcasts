@@ -160,6 +160,15 @@ struct TrackStore {
         try dbQueue.read { db in try Track.fetchOne(db, key: id) }
     }
 
+    /// Many rows in one query, keyed by id.
+    func find(ids: [String]) throws -> [String: Track] {
+        guard !ids.isEmpty else { return [:] }
+        return try dbQueue.read { db in
+            let rows = try Track.fetchAll(db, keys: ids)
+            return Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+
     /// What the episode is about, however it got written — the AI pass and the text
     /// field it lands in both come through here, so an edit and a generated one are the
     /// same kind of change.
