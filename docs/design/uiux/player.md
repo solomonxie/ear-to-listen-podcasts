@@ -85,11 +85,15 @@ rather than swallowing it, so whatever else wanted it still gets it.
 ## Once the transport scrolls off
 
 ```
- ( 🔖 Mark ③ ) ( ↑ Top ) ( ⌖ Follow )              tap marks · hold → marks
+ ( ⌖ Follow ) ( 🔖 Mark ③ )                        tap marks · hold → marks
  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂  progress, 60% height
  ▦ Sleep Toolkit · Huberman           ⏪10   ⏸   docked bar, appears only
-   12:14 / 41:02                                 when the big transport is gone
+   12:14 / 41:02                                 when the big transport is gone;
+                                                  tap it = back to top
 ```
+
+**No Top pill.** Tapping the docked bar already scrolls to the top (and stops
+following), so a floating ( ↑ Top ) a hand's width above it was the same job twice.
 
 **No 🔖 on the bar, anywhere.** It used to carry one on every page but the
 player's, which made the bar a different control depending where you met it — and
@@ -111,28 +115,20 @@ Two thresholds, not one (`edge < 0` to show, `edge > 96` to hide): the bar
 shortens the scroller, which would otherwise push the transport back into view
 and flicker.
 
-**Mark leads.** It is the only one of the three with a deadline: it is pressed
+**Mark takes the trailing end.** It is the only one of the two with a deadline: it is pressed
 because of something just heard, and the sentence worth keeping is a few seconds
-wide. Follow and Top can both be pressed at leisure — the line being spoken will
-still be the line being spoken — so the one that cannot wait gets the end of the
-row the thumb is already resting on.
+wide. Follow can be pressed at leisure — the line being spoken will still be the
+line being spoken — so the one that cannot wait gets the end of the row the thumb
+is already resting on.
 
-**All three carry a caption.** A lone glyph among labelled pills reads as a
-different kind of control, and the bookmark is the only one of the three that
-*changes* something — the last place to be coy about what it does. "Top" rather
-than "Back to top" so three pills fit a phone, and not "Back", which in iOS means
-leaving the screen — something this sheet's Close chevron already does. The arrow
-carries the rest; VoiceOver still hears the long form, where there is no width to
-save. "Mark" is the verb, which also keeps it distinct from the `[ 🔖 Bookmarks ]`
-pill above, the noun that goes to them. The copy above the transcript only turns following on —
-this one toggles, because stopping is as likely to be the ask as starting. One
-label and one icon either way: colour alone says whether it's on, so the button
-doesn't change shape under the thumb that just pressed it.
-
-**None of the three takes you anywhere you didn't ask for.** Back to top moves
-the page because that is the whole request, and stops the page moving itself
-while it's at it — following and reading the top of the page are contradictory
-things to want.
+**Both carry a caption.** A lone glyph beside a labelled pill reads as a
+different kind of control, and the bookmark is the one that *changes* something —
+the last place to be coy about what it does. "Mark" is the verb, which also keeps
+it distinct from the `[ 🔖 Bookmarks ]` pill above, the noun that goes to them.
+The copy of Follow above the transcript only turns following on — this one
+toggles, because stopping is as likely to be the ask as starting. One label and
+one icon either way: colour alone says whether it's on, so the button doesn't
+change shape under the thumb that just pressed it.
 
 **🔖 is both halves of the subject, split by how long you hold it.**
 
