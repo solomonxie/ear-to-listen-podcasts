@@ -93,4 +93,30 @@ final class EpisodeNumbersTests: XCTestCase {
         XCTAssertNil(EpisodeNumbers.number(inFileName: "show/2024-05-03 talk.mp3"))
         XCTAssertNil(EpisodeNumbers.number(inFileName: "show/finale.mp3"))
     }
+
+    /// Real names from a library that came out numbered by the part, not the folder.
+    func testLeadingSequenceWinsOverAPartNumber() {
+        XCTAssertEqual(EpisodeNumbers.number(inFileName: "013_Jesus Appears Before Pilate, Part 1.m4a"), 13)
+        XCTAssertEqual(EpisodeNumbers.number(inFileName: "001_Christian Ethics, Pt. 4 Submission.m4a"), 1)
+        XCTAssertEqual(EpisodeNumbers.number(inFileName: "0013 - talk.mp3"), 13)
+        XCTAssertEqual(EpisodeNumbers.number(inFileName: "2024 Episode 12.mp3"), 12)
+    }
+
+    /// A number the app assigned is open to correction on the next pass; one typed by hand
+    /// is not.
+    func testAppAssignedNumbersAreRederivedFromFilenames() {
+        let tracks = [
+            track("a", path: "v9/013_Jesus Appears Before Pilate, Part 1.m4a", number: 1),
+            track("b", path: "v9/001_The Lord's Greatest Prayer, Part 5.m4a", number: 5),
+            track("c", path: "v9/003_The Lord's Greatest Prayer, Part 6.m4a", number: 6),
+        ]
+        let fresh = EpisodeNumbers.assigned(tracks) { _ in false }
+        XCTAssertEqual(fresh, ["b": 1, "c": 3, "a": 13])
+
+        let typed = EpisodeNumbers.assigned(tracks) { $0.id == "a" }
+        XCTAssertNil(typed["a"])
+        // 1 is typed, so the names no longer agree and the rest count on after it, in
+        // filename order.
+        XCTAssertEqual(typed, ["b": 2, "c": 3])
+    }
 }
