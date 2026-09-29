@@ -249,12 +249,15 @@ struct RealPlayerView: View {
         // the top and bottom off pictures that are square to begin with, and nothing is
         // drawn over it — the title and speaker have their own line underneath.
         //
-        // Full width, and it stays that way: it was capped at 220pt to bring the transport
-        // up the page, and the transport turned out not to need it — what made the buttons
-        // hard to hit was their own size, which is fixed where they are.
-        ArtworkTile(track: track, cornerRadius: 16, symbolSize: 64)
+        // Inset, not full width: edge to edge its corners crowded the screen's own rounded
+        // corners and the cover took most of the first screen. About 70% of the width,
+        // capped for bigger phones, with room above it.
+        ArtworkTile(track: track, cornerRadius: 14, symbolSize: 56)
             .aspectRatio(1, contentMode: .fit)
-            .padding(.horizontal)
+            .frame(maxWidth: 300)
+            .padding(.horizontal, 56)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity)
             .id(Self.topAnchor)
             // The big empty area at the top of the page doubles as "I'm done typing".
             .contentShape(Rectangle())
@@ -551,32 +554,38 @@ struct RealPlayerView: View {
     }
 
     /// What you want from deep inside a 40-minute transcript: a mark on the second you just
-    /// heard, the top of the page, and the line being spoken. All three are a reach from the
-    /// bottom of the page, where the thumb already is — the copies at the top are a scroll
-    /// away by the time you need them.
+    /// heard, and the line being spoken. Both are a reach from the bottom of the page, where
+    /// the thumb already is. The way back up is the docked bar — tapping it — so there's no
+    /// Top pill here doing the same job a hand's width above it.
     ///
-    /// **Mark leads.** It is the only one of the three with a deadline: it's pressed because
-    /// of something just heard, and the sentence worth keeping is a few seconds wide. Follow
-    /// and Top can both be pressed at leisure — the line being spoken will still be the line
-    /// being spoken — so the one that can't wait gets the end of the row the thumb is already
-    /// resting on.
+    /// **Mark takes the trailing end**, under the right thumb. It is the only one with a
+    /// deadline: it's pressed because of something just heard, and the sentence worth
+    /// keeping is a few seconds wide.
     ///
-    /// **None of them takes you anywhere you didn't ask for.** "Back to top" moves the
-    /// page because that is the whole request, and it stops the page moving itself while
-    /// it's at it: following and reading the top of the page are contradictory things to
-    /// want. The mark deliberately does *not* jump to Notes — the reason to mark from
-    /// here is that the line worth marking is on screen, and going to the mark would
-    /// leave it. It saves, the count ticks up, and the page stays exactly where it was.
+    /// **Neither takes you anywhere you didn't ask for.** The mark deliberately does *not*
+    /// jump to Notes — the reason to mark from here is that the line worth marking is on
+    /// screen, and going to the mark would leave it. It saves, the count ticks up, and the
+    /// page stays exactly where it was.
     @ViewBuilder
     private func floatingControls(_ proxy: ScrollViewProxy) -> some View {
         // Gone while a line is open for correction: this row is an overlay, so it sits *on*
         // the text, and the field is the one piece of text that must not be sat on.
         if isTransportOffscreen, !isEditingLine {
             HStack(spacing: 10) {
+                if !transcript.lines.isEmpty {
+                    // A toggle here, where the one above the transcript only turns it on:
+                    // this one is in reach of the thumb that just scrolled away from the
+                    // spoken line, and stopping is as likely to be the ask as starting.
+                    // One label, one icon — colour alone says whether it's on, so the
+                    // button doesn't change shape under the thumb that just pressed it.
+                    floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
+                        if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
+                    }
+                }
                 if let track = engine.currentTrack {
-                    // Captioned like the two beside it. A lone glyph in a row of labelled
-                    // pills reads as a different kind of control, and this is the only one
-                    // of the three that changes something — the last place to be coy about
+                    // Captioned like Follow beside it. A lone glyph beside a labelled pill
+                    // reads as a different kind of control, and this is the one that
+                    // changes something — the last place to be coy about
                     // what it does.
                     //
                     // "Mark" rather than "Bookmark": it's the verb, and it keeps this
@@ -599,7 +608,8 @@ struct RealPlayerView: View {
                         .overlay(alignment: .topTrailing) { markCount(offset: CGSize(width: 5, height: -3)) }
                         .contentShape(Capsule())
                         .onTapGesture { markMoment(track) }
-                        .onLongPressGesture(minimumDuration: 0.4) {
+                        // Short hold: 0.4s felt like waiting. Much under 0.25 starts eating taps.
+                        .onLongPressGesture(minimumDuration: 0.25) {
                             UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                             showBookmarks(proxy)
                         }
@@ -610,25 +620,6 @@ struct RealPlayerView: View {
                         // A hold is invisible to VoiceOver, and this is the only way to the
                         // marks now that the pill has gone.
                         .accessibilityAction(named: "Go to bookmarks") { showBookmarks(proxy) }
-                }
-                // "Top", not "Back to top": three labelled pills have to fit a phone, and
-                // not "Back" — in iOS that means leaving the screen, which this sheet's
-                // Close chevron already does. The arrow carries the rest of the meaning.
-                // VoiceOver still hears the long form, where there's no width to save.
-                floatingButton("Top", systemImage: "arrow.up", isOn: false) {
-                    isFollowingTranscript = false
-                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                }
-                .accessibilityLabel("Back to top")
-                if !transcript.lines.isEmpty {
-                    // A toggle here, where the one above the transcript only turns it on:
-                    // this one is in reach of the thumb that just scrolled away from the
-                    // spoken line, and stopping is as likely to be the ask as starting.
-                    // One label, one icon — colour alone says whether it's on, so the
-                    // button doesn't change shape under the thumb that just pressed it.
-                    floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
-                        if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
-                    }
                 }
             }
             .padding(.bottom, 12)
@@ -712,7 +703,7 @@ struct RealPlayerView: View {
                 onTogglePlay: { engine.togglePlayPause() },
                 // Already on this page, so the bar's job is the way back up rather than
                 // a screen transition to where you already are — and following goes off
-                // with it, exactly as it does for "Top". Leaving it on made the tap look
+                // with it. Leaving it on made the tap look
                 // broken: the page went up and the next spoken line pulled it straight
                 // back down to the transcript.
                 onTapBar: {
@@ -765,11 +756,10 @@ struct NowPlayingBarContent: View {
     let onTogglePlay: () -> Void
     let onTapBar: () -> Void
 
-    /// Bigger than the `.title2` it was: it's the one control on the bar and the one
-    /// reached for in a hurry — often without looking — so it's sized for that rather
-    /// than to match the text beside it. `@ScaledMetric` keeps it growing with Dynamic
-    /// Type the way a text style would.
-    @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 26
+    /// Sized for a thumb in a hurry, not to match the text beside it — as big as fits in
+    /// the height the three text lines already give the bar, so the bar doesn't grow.
+    /// `@ScaledMetric` keeps it growing with Dynamic Type the way a text style would.
+    @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 34
 
     var body: some View {
         if let track {
@@ -806,8 +796,8 @@ struct NowPlayingBarContent: View {
 
                     Button(action: onSkipBack) {
                         Image(systemName: "gobackward.10")
-                            .font(.system(size: glyphSize - 5))
-                            .frame(width: 44, height: 52)
+                            .font(.system(size: glyphSize - 6))
+                            .frame(width: 50, height: 52)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -816,7 +806,7 @@ struct NowPlayingBarContent: View {
                     Button(action: onTogglePlay) {
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: glyphSize))
-                            .frame(width: 52, height: 52)
+                            .frame(width: 56, height: 52)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -1021,6 +1011,9 @@ private extension View {
         lineLimit(1)
             .minimumScaleFactor(0.8)
             .frame(maxWidth: .infinity)
+            // ~1.5x a stock bordered capsule: these are reached for mid-listen, often
+            // without looking.
+            .padding(.vertical, 8)
     }
 }
 
@@ -1045,17 +1038,19 @@ enum PlayerRoute: Hashable {
 /// happen the next time any of it is adjusted.
 private extension View {
     func floatingPill(isOn: Bool) -> some View {
+        // On is solid accent, not a tint: over transcript text a see-through blue read
+        // as neither on nor off.
         font(.footnote.weight(.semibold))
-            .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.primary))
+            .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(HierarchicalShapeStyle.primary))
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .background(
-                isOn ? AnyShapeStyle(Color.accentColor.opacity(0.22)) : AnyShapeStyle(Material.ultraThin),
+                isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Material.ultraThin),
                 in: Capsule()
             )
             .overlay(
                 Capsule().stroke(
-                    isOn ? AnyShapeStyle(Color.accentColor.opacity(0.6)) : AnyShapeStyle(HierarchicalShapeStyle.quaternary)
+                    isOn ? AnyShapeStyle(Color.clear) : AnyShapeStyle(HierarchicalShapeStyle.quaternary)
                 )
             )
     }
