@@ -63,8 +63,24 @@ final class TranscriptRunner: ObservableObject {
     @Published private(set) var isFromSidecar = false
 
     /// Recorded against segments that came from a file beside the audio rather than a
-    /// recognizer, so it's clear nothing was spent making them.
+    /// recognizer, so it's clear nothing was spent making them. A language-tagged file
+    /// records its language too — `sidecar:zh` — which is how the page knows which of an
+    /// episode's transcript files is the one on screen.
     static let sidecarEngine = "sidecar"
+
+    static func sidecarEngine(language: String?) -> String {
+        language.map { "\(sidecarEngine):\($0)" } ?? sidecarEngine
+    }
+
+    static func isSidecarEngine(_ engine: String?) -> Bool {
+        engine == sidecarEngine || engine?.hasPrefix(sidecarEngine + ":") == true
+    }
+
+    /// The languages this episode has a transcript file in — nil for an untagged one.
+    /// Chips appear on the page only when there's more than one.
+    @Published private(set) var sidecarLanguages: [String?] = []
+    /// Which of them is on screen, when the transcript came from one of those files.
+    @Published private(set) var sidecarLanguage: String?
 
     private static let localeDefaultsKey = "transcript.locale"
 
@@ -112,7 +128,44 @@ final class TranscriptRunner: ObservableObject {
     private func rebuildLines() {
         let shown = frozenLines ?? segments.filter { !$0.text.isEmpty }
         lines = shown
-        isFromSidecar = !shown.isEmpty && shown.allSatisfy { $0.engine == Self.sidecarEngine }
+        isFromSidecar = !shown.isEmpty && shown.allSatisfy { Self.isSidecarEngine($0.engine) }
+        sidecarLanguage = isFromSidecar ? shown.first?.engine.flatMap(Self.language(fromEngine:)) : nil
+    }
+
+    private static func language(fromEngine engine: String) -> String? {
+        guard engine.hasPrefix(sidecarEngine + ":") else { return nil }
+        return String(engine.dropFirst(sidecarEngine.count + 1))
+    }
+
+    /// Switching is only offered while the transcript is still an untouched file import
+    /// (or there's none yet): a hand edit, or a pass someone ran and maybe paid for, is
+    /// never thrown away for a different file.
+    var canSwitchSidecarLanguage: Bool {
+        sidecarLanguages.count > 1 && edits.isEmpty && !isRunning && (segments.isEmpty || isFromSidecar)
+    }
+
+    /// Shows that language's file instead. Replaces what's stored — safe only because
+    /// `canSwitchSidecarLanguage` has already said there's nothing of the listener's in it.
+    func showSidecar(language: String?) {
+        guard let track, canSwitchSidecarLanguage, language != sidecarLanguage || segments.isEmpty else { return }
+        sidecarTask?.cancel()
+        sidecarTask = Task { [weak self] in
+            guard let self,
+                  let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
+                  let provider = try? ProviderManager.shared.provider(for: record),
+                  let found = await TranscriptSidecar.load(
+                      track: track, language: language, provider: provider, duration: duration > 0 ? duration : nil
+                  ),
+                  self.track?.id == track.id, canSwitchSidecarLanguage else { return }
+            let stamped = Self.stamped(found.segments, language: found.language)
+            try? transcriptStore.save(trackID: track.id, segments: stamped, engine: Self.sidecarEngine(language: found.language))
+            segments = stamped
+        }
+    }
+
+    private static func stamped(_ segments: [TranscriptSegment], language: String?) -> [TranscriptSegment] {
+        let engine = sidecarEngine(language: language)
+        return segments.map { var segment = $0; segment.engine = engine; return segment }
     }
 
     /// Binary search rather than a scan: this is asked once per redraw of a list that can
@@ -171,6 +224,7 @@ final class TranscriptRunner: ObservableObject {
         lastError = nil
         uploadReport = nil
         duration = newTrack?.durationMs.map { Double($0) / 1000 } ?? 0
+        sidecarLanguages = newTrack.map(TranscriptSidecar.languages(for:)) ?? []
         guard let newTrack else { return }
         frozenLines = nil
 
@@ -221,13 +275,24 @@ final class TranscriptRunner: ObservableObject {
         guard let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
               let provider = try? ProviderManager.shared.provider(for: record) else { return }
         let found = await TranscriptSidecar.load(
-            track: track, provider: provider, duration: duration > 0 ? duration : nil
+            track: track, provider: provider, duration: duration > 0 ? duration : nil,
+            episodeLanguage: episodeLanguage(for: track)
         )
-        guard let found, !found.isEmpty, self.track?.id == track.id else { return }
+        guard let found, !found.segments.isEmpty, self.track?.id == track.id else { return }
         guard force || segments.isEmpty else { return }
-        segments = (try? transcriptStore.merge(
-            trackID: track.id, incoming: found, engine: Self.sidecarEngine
-        )) ?? found
+        let stamped = Self.stamped(found.segments, language: found.language)
+        let engine = Self.sidecarEngine(language: found.language)
+        segments = (try? transcriptStore.merge(trackID: track.id, incoming: stamped, engine: engine)) ?? stamped
+    }
+
+    /// The language this episode is set to, at whichever level it was set — what picks
+    /// among `ep1.zh.vtt` and `ep1.en.vtt` the first time.
+    private func episodeLanguage(for track: Track) -> String? {
+        Self.resolveLanguage(
+            track: track,
+            album: track.albumID.flatMap { (try? libraryStore.album(id: $0)) ?? nil },
+            artist: track.artistID.flatMap { (try? libraryStore.artist(id: $0)) ?? nil }
+        )?.identifier
     }
 
     /// **The Upload button, and the only way a transcript leaves this device.**
@@ -249,6 +314,10 @@ final class TranscriptRunner: ObservableObject {
         uploadReport = nil
         let snapshot = segments
         let title = track.title
+        // Written back as the language it was read as. Only a transcript that came from
+        // one of this episode's language files knows that; anything else goes to the
+        // plain `ep1.vtt`, as before.
+        let language = sidecarLanguage
         Task { [weak self] in
             guard let self else { return }
             let copies = (try? trackFileStore.all(forTrack: track.id)).flatMap { $0.isEmpty ? nil : $0 }
@@ -261,7 +330,8 @@ final class TranscriptRunner: ObservableObject {
                       let provider = try? ProviderManager.shared.provider(for: record) else { continue }
                 do {
                     written += try await TranscriptSidecar.upload(
-                        snapshot, beside: copy.filePath, provider: provider, title: title, artist: nil
+                        snapshot, beside: copy.filePath, provider: provider, title: title, artist: nil,
+                        language: language
                     )
                 } catch {
                     failure = error.localizedDescription

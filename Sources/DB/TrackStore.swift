@@ -69,6 +69,7 @@ struct TrackStore {
         file.sizeBytes = track.sizeBytes
         file.contentHash = track.contentHash
         file.transcriptPath = track.transcriptPath
+        file.transcriptPaths = track.transcriptPaths
         file.remoteModifiedAt = track.remoteModifiedAt
         file.isLost = track.isLost
         try file.save(db)
@@ -145,6 +146,7 @@ struct TrackStore {
         track.sizeBytes = file.sizeBytes
         track.contentHash = file.contentHash
         track.transcriptPath = file.transcriptPath
+        track.transcriptPaths = file.transcriptPaths
         track.remoteModifiedAt = file.remoteModifiedAt
         track.isLost = file.isLost
         track.updatedAt = Date()
@@ -381,21 +383,26 @@ struct TrackStore {
     /// Points each track at the transcript now sitting beside it, and un-points the ones
     /// whose sidecar has gone. A transcript added to a bucket later never changes the
     /// audio, so nothing else in a sync pass would ever notice it.
-    func updateTranscriptPaths(providerID: String, sidecars: [String: String]) throws {
+    ///
+    /// Takes every language's file per episode (`TranscriptFile.sidecarSetsByAudioPath`);
+    /// the first is also kept as `transcriptPath`.
+    func updateTranscriptPaths(providerID: String, sidecars: [String: [String]]) throws {
         try dbQueue.write { db in
             // Per copy: two buckets holding the same episode can each have a transcript
             // beside it, and an upload writes over both.
             for var file in try TrackFile.filter(Column("providerID") == providerID).fetchAll(db) {
                 let found = sidecars[file.filePath]
-                guard found != file.transcriptPath else { continue }
-                file.transcriptPath = found
+                guard found != file.transcriptPaths || found?.first != file.transcriptPath else { continue }
+                file.transcriptPath = found?.first
+                file.transcriptPaths = found
                 try file.update(db)
             }
             let tracks = try Track.filter(Column("providerID") == providerID).fetchAll(db)
             for var track in tracks {
                 let found = sidecars[track.filePath]
-                guard found != track.transcriptPath else { continue }
-                track.transcriptPath = found
+                guard found != track.transcriptPaths || found?.first != track.transcriptPath else { continue }
+                track.transcriptPath = found?.first
+                track.transcriptPaths = found
                 try track.update(db)
             }
         }
