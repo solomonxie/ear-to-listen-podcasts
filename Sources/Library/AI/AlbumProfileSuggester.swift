@@ -59,11 +59,15 @@ struct AlbumProfileSuggester {
         let more = tracks.count > Self.titleLimit ? "\n…and \(tracks.count - Self.titleLimit) more." : ""
         let years = Set(tracks.compactMap(\.year)).sorted()
         let folder = commonFolder(tracks)
+        let evidence = Self.evidence(
+            terms: (try? TermStore(dbQueue: dbQueue).terms(forAlbum: album.id)) ?? [],
+            summaries: tracks.compactMap { track in track.summary?.nilIfEmpty.map { (track.title, $0) } }
+        )
 
         let prompt = """
-        You are describing one collection in someone's personal podcast library. Everything
-        below is file and collection metadata. You have not heard the episodes and no
-        transcript is included.
+        You are describing one collection in someone's personal podcast library. Below is
+        its metadata and, where episodes have been transcribed, what they actually say:
+        the names and terms counted across their transcripts and some episode summaries.
 
         Collection: \(album.name)
         Speaker: \(artistName?.nilIfEmpty ?? "none")
@@ -73,6 +77,7 @@ struct AlbumProfileSuggester {
         Folder: \(folder ?? "episodes are spread across folders")
         Episodes (\(tracks.count) total):
         \(titles.joined(separator: "\n"))\(more)
+        \(evidence)
 
         The titles are your evidence for what this collection covers; anything about the
         speaker or a named series comes from what you already know, which may be nothing.
@@ -91,7 +96,11 @@ struct AlbumProfileSuggester {
           it clear. Null otherwise.
         - topics: 1-5 short subject tags for the whole collection — the words someone would
           browse by, like "history" or "meditation". One or two words each, no sentences.
-          Empty array if the titles don't support any.
+          Each must be something the collection itself is about, backed by the terms, the
+          summaries or many of the titles — what it keeps coming back to across episodes,
+          not what one episode mentions, and never what the speaker is known for
+          elsewhere. For a book or series, the book's own themes come before any
+          doctrine. Empty array if the evidence doesn't support any.
 
         Strict JSON only, no other text, null for anything you can't improve on:
         {"notes": string|null, "profile": string|null, "year": number|null, "topics": [string]}
@@ -105,6 +114,31 @@ struct AlbumProfileSuggester {
             throw EpisodeMetadataSuggester.UnreadableSuggestionError()
         }
         return suggestion
+    }
+
+    static let termLimit = 40
+    static let summaryLimit = 12
+    static let summaryCharacters = 280
+
+    /// What the transcripts say, for the prompt: the terms the collection says most —
+    /// with how many episodes each is in, since a term in thirty episodes is a theme and a
+    /// term in one is a mention — and a spread of episode summaries. Empty when nothing
+    /// has been transcribed, and the prompt falls back to titles.
+    static func evidence(terms: [TermCount], summaries: [(title: String, summary: String)]) -> String {
+        var parts: [String] = []
+        if !terms.isEmpty {
+            let listed = terms.prefix(termLimit).map { "\($0.name) (\($0.mentions)× in \($0.episodes) ep)" }
+            parts.append("Most-said names and terms across the transcripts:\n" + listed.joined(separator: ", "))
+        }
+        if !summaries.isEmpty {
+            // Spread across the collection rather than the first dozen: a series often
+            // opens on introductions that don't say what the rest is about.
+            let step = max(1, summaries.count / summaryLimit)
+            let picked = stride(from: 0, to: summaries.count, by: step).prefix(summaryLimit).map { summaries[$0] }
+            let listed = picked.map { "- \($0.title): \(String($0.summary.prefix(summaryCharacters)))" }
+            parts.append("Some episode summaries:\n" + listed.joined(separator: "\n"))
+        }
+        return parts.joined(separator: "\n\n")
     }
 
     /// The deepest folder every episode shares, when there is one — it's often the
