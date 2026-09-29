@@ -250,9 +250,7 @@ struct AlbumDetailView: View {
             AlbumAnalysisView(album: shown, artistName: artistName, tracks: tracks)
         }
         .task { await load() }
-        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
-            Task { await load() }
-        }
+        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in loadSoon() }
     }
 
     /// Picture, name, size — and the one button anyone came here to press. The picture
@@ -517,28 +515,78 @@ struct AlbumDetailView: View {
         return first
     }
 
+    /// Everything the page reads, in one hop off the main actor and one assignment back.
+    ///
+    /// It used to run on the main actor: renumbering (a write), a transcript decode per
+    /// episode to count the finished ones, and four filesystem calls per episode to count
+    /// the downloaded ones — a few hundred of each on a big collection, all in front of
+    /// the page and of whatever was tapped next.
+    private func load() async {
+        let albumID = album.id
+        let loaded = await Task.detached(priority: .userInitiated) { Self.read(albumID: albumID) }.value
+        let keys = await AudioCache.shared.cachedKeys()
+        current = loaded.album
+        tracks = loaded.tracks
+        artistName = loaded.artistName
+        allSpeakers = loaded.speakers
+        transcribedCount = loaded.transcribedCount
+        bookmarks = loaded.bookmarks
+        terms = loaded.terms
+        downloadedCount = loaded.tracks.filter {
+            AudioCache.shared.isCached(keys, providerID: $0.providerID, filePath: $0.filePath)
+        }.count
+        seedFields()
+    }
+
     private func setAllListened(_ listened: Bool) {
         try? trackStore.setListened(ids: tracks.map(\.id), listened: listened)
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
-    private func load() async {
-        current = (try? libraryStore.album(id: album.id)) ?? nil
+    /// A burst of library changes — one per file while a sync imports — is one reload,
+    /// not one each.
+    private func loadSoon() {
+        reloadTask?.cancel()
+        reloadTask = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await load()
+        }
+    }
+
+    private struct Loaded: Sendable {
+        var album: Album?
+        var tracks: [Track]
+        var artistName: String?
+        var speakers: [Artist]
+        var transcribedCount: Int
+        var bookmarks: [Bookmark]
+        var terms: [TermCount]
+    }
+
+    private nonisolated static func read(albumID: String) -> Loaded {
+        let dbQueue = DatabaseManager.shared.dbQueue
+        let libraryStore = LibraryStore(dbQueue: dbQueue)
+        let trackStore = TrackStore(dbQueue: dbQueue)
+        let album = (try? libraryStore.album(id: albumID)) ?? nil
         // Before the fetch, so an episode that arrived since the last visit is listed in
         // its place in the series rather than at the end of it.
-        try? trackStore.numberEpisodes(inAlbum: album.id)
-        tracks = (try? trackStore.tracks(forAlbum: album.id)) ?? []
-        artistName = (shown.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name
-        allSpeakers = (try? libraryStore.artists()) ?? []
-        transcribedCount = AlbumMetadataSuggester().partition(tracks: tracks).ready.count
-        bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
-        terms = (try? TermStore().terms(forAlbum: album.id)) ?? []
-        var downloaded = 0
-        for track in tracks where await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) != nil {
-            downloaded += 1
-        }
-        downloadedCount = downloaded
-        seedFields()
+        try? trackStore.numberEpisodes(inAlbum: albumID)
+        let tracks = (try? trackStore.tracks(forAlbum: albumID)) ?? []
+        // One query for every transcript, not one per episode.
+        let transcripts = (try? TranscriptStore(dbQueue: dbQueue).find(trackIDs: tracks.map(\.id))) ?? [:]
+        let transcribed = tracks.filter {
+            EpisodeMetadataSuggester.readiness(track: $0, segments: transcripts[$0.id] ?? []).isReady
+        }.count
+        return Loaded(
+            album: album,
+            tracks: tracks,
+            artistName: (album?.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name,
+            speakers: (try? libraryStore.artists()) ?? [],
+            transcribedCount: transcribed,
+            bookmarks: (try? BookmarkStore(dbQueue: dbQueue).all(forTracks: tracks.map(\.id))) ?? [],
+            terms: (try? TermStore(dbQueue: dbQueue).terms(forAlbum: albumID)) ?? []
+        )
     }
 }
 

@@ -35,6 +35,7 @@ struct EpisodeDetailsPane: View {
     @State private var artistName = ""
     @State private var albumName = ""
     @State private var year = ""
+    @State private var reloadTask: Task<Void, Never>?
     @State private var trackNumber = ""
     @State private var notes = ""
     /// What the fields held the last time they matched the database — the test for
@@ -127,8 +128,15 @@ struct EpisodeDetailsPane: View {
         }
         // Sync and the other editors hold their own copies of these rows; this is what
         // puts their changes on screen without waiting for the next track change.
+        // Coalesced: a sync posts one of these per imported file, and each reload redraws
+        // the card on the page being read.
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
-            Task { await load() }
+            reloadTask?.cancel()
+            reloadTask = Task {
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                await load()
+            }
         }
         // Leaving a field is the commit. Scrolling away, or the page closing, counts too.
         .onChange(of: focusedField) { previous, _ in

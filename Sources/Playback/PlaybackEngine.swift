@@ -24,6 +24,7 @@ final class PlaybackEngine: ObservableObject {
     private let player = AVQueuePlayer()
     private let providerStore = ProviderStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+    private var metadataReload: Task<Void, Never>?
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
     /// This app's copy of what Control Center is showing — see `updateNowPlayingInfo`.
     private var nowPlayingInfo: [String: Any] = [:]
@@ -45,17 +46,48 @@ final class PlaybackEngine: ObservableObject {
     /// An episode can be renamed or re-arted (`EpisodeEditView`) while it's playing, so
     /// re-read the rows behind the player — title, artwork and lock screen follow the
     /// edit, playback itself is left alone.
+    ///
+    /// **One query, off the main actor, once per burst.** It was a `find` per queued
+    /// episode on the main actor for every `libraryDidChange` — and that fires once per
+    /// imported file during a sync, while a queue is a whole album of a few hundred. The
+    /// player redrew on each one too, since both properties were republished unchanged.
     private func observeLibraryChanges() {
         NotificationCenter.default.addObserver(forName: .libraryDidChange, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.reloadTrackMetadata() }
+            Task { @MainActor in self?.reloadTrackMetadataSoon() }
         }
     }
 
-    private func reloadTrackMetadata() {
-        queue = queue.map { ((try? trackStore.find(id: $0.id)) ?? nil) ?? $0 }
-        guard let current = currentTrack else { return }
-        currentTrack = queue.first { $0.id == current.id } ?? ((try? trackStore.find(id: current.id)) ?? nil) ?? current
-        if let track = currentTrack { updateNowPlayingInfo(track: track) }
+    private func reloadTrackMetadataSoon() {
+        metadataReload?.cancel()
+        metadataReload = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await self?.reloadTrackMetadata()
+        }
+    }
+
+    private func reloadTrackMetadata() async {
+        let ids = Array(Set(queue.map(\.id) + (currentTrack.map { [$0.id] } ?? [])))
+        guard !ids.isEmpty else { return }
+        let store = trackStore
+        let fresh = await Task.detached(priority: .utility) { (try? store.find(ids: ids)) ?? [:] }.value
+        guard !Task.isCancelled else { return }
+        let refreshed = queue.map { fresh[$0.id] ?? $0 }
+        if refreshed.map(Self.displayKey) != queue.map(Self.displayKey) { queue = refreshed }
+        guard let current = currentTrack, let updated = fresh[current.id] else { return }
+        if Self.displayKey(updated) != Self.displayKey(current) {
+            currentTrack = updated
+            updateNowPlayingInfo(track: updated)
+        }
+    }
+
+    /// What the player and the lock screen draw from a track — the fields an edit can
+    /// change. Compared so an unrelated change elsewhere in the library doesn't redraw.
+    private static func displayKey(_ track: Track) -> String {
+        [track.id, track.title, track.artistID ?? "", track.albumID ?? "", track.artworkFileName ?? "",
+         track.trackNumber.map(String.init) ?? "", track.summary ?? "", track.language ?? "",
+         track.transcriptPaths?.joined(separator: "|") ?? "", track.isFavorite ? "1" : "0",
+         track.listenedAt.map { "\($0.timeIntervalSince1970)" } ?? ""].joined(separator: "\u{1}")
     }
 
     private func configureAudioSession() {
