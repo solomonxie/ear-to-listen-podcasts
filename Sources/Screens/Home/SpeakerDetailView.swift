@@ -32,11 +32,6 @@ struct SpeakerDetailView: View {
     @State private var bookmarks: [Bookmark] = []
     /// Which unfolding picker is open — one at a time, across the whole form.
     @State private var openPicker: String?
-    /// The metadata sections start shut — see `FoldHeader`. What this page is for is the
-    /// albums and episodes at the bottom of it.
-    @State private var showingDetails = false
-    @State private var showingProfile = false
-    @State private var showingPhoto = false
     @FocusState private var focusedField: SpeakerField?
 
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -80,7 +75,6 @@ struct SpeakerDetailView: View {
             }
 
             Section {
-              if showingDetails {
                 StackedField("Bio", placeholder: "One line — what they're known for", text: $bio)
                     .focused($focusedField, equals: .bio)
                 rejectNote("bio")
@@ -114,10 +108,10 @@ struct SpeakerDetailView: View {
                     }
                 }
                 rejectNote("link")
-              }
             } header: {
                 HStack {
-                    FoldHeader("Details", isOpen: $showingDetails)
+                    Text("Details")
+                    Spacer()
                     SuggestWithAiButton(isRunning: isSuggesting) { Task { await suggest() } }
                         .disabled(tracks.isEmpty && albums.isEmpty)
                 }
@@ -129,18 +123,14 @@ struct SpeakerDetailView: View {
 
             // Its own section rather than a fourth row: it's paragraphs, and it's the part
             // of the page worth actually reading.
-            Section {
-                if showingProfile {
-                    TextField(
-                        "Who they are and what they cover — or fill it in from ⋯ → Build profile with AI",
-                        text: $profile, axis: .vertical
-                    )
-                    .lineLimit(3...)
-                    .focused($focusedField, equals: .profile)
-                    rejectNote("profile")
-                }
-            } header: {
-                FoldHeader("Profile", isOpen: $showingProfile)
+            Section("Profile") {
+                TextField(
+                    "Who they are and what they cover — or fill it in from ⋯ → Build profile with AI",
+                    text: $profile, axis: .vertical
+                )
+                .lineLimit(3...)
+                .focused($focusedField, equals: .profile)
+                rejectNote("profile")
             }
 
             // Below the writing rather than under the name: a picture is the last thing
@@ -149,8 +139,7 @@ struct SpeakerDetailView: View {
             //
             // A real person's face is the one picture that must never be drawn — Search
             // is the answer here, and it's why that button exists.
-            Section {
-              if showingPhoto {
+            Section("Photo") {
                 ArtworkSourceRow(
                     subject: ArtworkSubject(
                         kind: .speaker,
@@ -170,9 +159,6 @@ struct SpeakerDetailView: View {
                     onUse: { data in Task { await savePhoto(data) } },
                     onRemove: { removePhoto() }
                 )
-              }
-            } header: {
-                FoldHeader("Photo", isOpen: $showingPhoto)
             }
             .listRowSeparator(.hidden)
 
@@ -216,6 +202,9 @@ struct SpeakerDetailView: View {
             }
         }
         .listStyle(.plain)
+        // Room to scroll "Show all" clear of the docked now-playing bar, which otherwise
+        // sits on it — same margin as the other list pages under that bar.
+        .contentMargins(.bottom, 72, for: .scrollContent)
         // Leaving a field is the save, as everywhere else in the app.
         .onChange(of: focusedField) { previous, _ in
             guard previous != nil else { return }
