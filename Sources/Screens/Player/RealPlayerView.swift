@@ -1024,11 +1024,12 @@ private struct UpNextView: View {
                         .foregroundStyle(isPast ? .tertiary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
+                Spacer(minLength: 0)
                 }
+            .contentShape(Rectangle())
             }
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
         .id(track.id)
     }
 }
