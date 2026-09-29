@@ -29,9 +29,9 @@ All four are `List(.plain)` pushes off Home. Same spine: a header block, then
  │ for…                                    │   fills it in
  └─────────────────────────────────────────┘
  ┌ STATS ──────────────────────────────────┐
- │ Episodes             12                 │ ← read-only, and always open:
- │ Total length         7h 41m             │   a fold on eight short rows
- │ Episode years        2024–2026          │   hides them to save nothing
+ │ Episodes             12                 │ ← read-only, always open:
+ │ Total length         7h 41m             │   no section on this page
+ │ Episode years        2024–2026          │   folds
  │ Folder               bible-audio/2026   │ ← only when all share one folder
  │ Downloaded           3 of 12            │
  │ Fully transcribed    5 of 12            │ ← what AI analysis can read
