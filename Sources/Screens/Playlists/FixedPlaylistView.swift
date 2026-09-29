@@ -66,6 +66,7 @@ struct FixedPlaylistView: View {
         case .downloaded: return { offsets in removeDownloads(at: offsets) }
         case .listenLater: return { offsets in removeFromListenLater(at: offsets) }
         case .favorites: return nil
+        case .listened: return { offsets in unmarkListened(at: offsets) }
         }
     }
 
@@ -92,6 +93,8 @@ struct FixedPlaylistView: View {
             entries = ((try? trackStore.listenLater()) ?? []).map { Entry(track: $0) }
         case .favorites:
             entries = ((try? trackStore.favorites()) ?? []).map { Entry(track: $0) }
+        case .listened:
+            entries = ((try? trackStore.listened()) ?? []).map { Entry(track: $0) }
         case .downloaded:
             // One directory listing rather than a lookup per track — see `AudioCache.cachedKeys`.
             let keys = await AudioCache.shared.cachedKeys()
@@ -116,6 +119,14 @@ struct FixedPlaylistView: View {
         for entry in removed {
             try? trackStore.setListenLater(id: entry.track.id, listenLater: false)
         }
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
+    /// Back to not listened. The episode stays where it is in the library.
+    private func unmarkListened(at offsets: IndexSet) {
+        let removed = offsets.map { entries[$0].track.id }
+        entries.remove(atOffsets: offsets)
+        try? trackStore.setListened(ids: removed, listened: false)
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 

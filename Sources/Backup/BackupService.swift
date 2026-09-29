@@ -91,7 +91,7 @@ struct BackupService {
         let episodes = try trackStore.all(includingLost: true).compactMap { track -> LibrarySnapshot.EpisodeEntry? in
             let bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
             let terms = (try? termStore.terms(forTrack: track.id)) ?? []
-            guard track.metadataEditedAt != nil || track.isFavorite || !bookmarks.isEmpty
+            guard track.metadataEditedAt != nil || track.isFavorite || track.listenedAt != nil || !bookmarks.isEmpty
                     || track.summary != nil || !terms.isEmpty else { return nil }
             return LibrarySnapshot.EpisodeEntry(
                 providerID: track.providerID,
@@ -106,6 +106,7 @@ struct BackupService {
                 terms: Dictionary(uniqueKeysWithValues: terms.map { ($0.name, $0.mentions) }),
                 artworkFileName: track.artworkFileName,
                 isFavorite: track.isFavorite,
+                listenedAt: track.listenedAt,
                 bookmarks: bookmarks.map {
                     LibrarySnapshot.EpisodeEntry.BookmarkEntry(
                         positionMs: $0.positionMs, note: $0.note, tags: $0.tags,
@@ -264,6 +265,7 @@ struct BackupService {
             track.summary = entry.summary ?? track.summary
             track.artworkFileName = entry.artworkFileName
             track.isFavorite = track.isFavorite || entry.isFavorite
+            track.listenedAt = track.listenedAt ?? entry.listenedAt
             track.metadataEditedAt = entry.editedAt
             try trackStore.upsert(track, artistName: artist?.name, albumName: album?.name)
             try restore(entry.bookmarks, on: track.id)

@@ -19,6 +19,11 @@ struct TrackRow: View {
 
     private var isListenLater: Bool { queuedOverride ?? track.listenLater }
 
+    private func setListened(_ listened: Bool) {
+        try? TrackStore(dbQueue: DatabaseManager.shared.dbQueue).setListened(ids: [track.id], listened: listened)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
     private func setListenLater(_ queued: Bool) {
         queuedOverride = queued
         try? TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -51,6 +56,11 @@ struct TrackRow: View {
                     if let durationMs = track.durationMs, durationMs > 0 {
                         Text(Self.formattedDuration(durationMs))
                     }
+                    if track.listenedAt != nil {
+                        Label("Listened", systemImage: "checkmark.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(.green)
+                    }
                     if track.isLost {
                         Label("Missing", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                     }
@@ -75,6 +85,11 @@ struct TrackRow: View {
                 }
             } else {
                 Button("Listen Later", systemImage: "clock") { setListenLater(true) }
+            }
+            if track.listenedAt == nil {
+                Button("Mark as Listened", systemImage: "checkmark.circle") { setListened(true) }
+            } else {
+                Button("Mark as Not Listened", systemImage: "circle") { setListened(false) }
             }
             Button("Edit Details", systemImage: "pencil") { showingEdit = true }
         }

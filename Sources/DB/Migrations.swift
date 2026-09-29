@@ -595,6 +595,13 @@ enum Migrations {
             }
         }
 
+        // Finished episodes, for the Listened list: set at the end of playback or by hand.
+        migrator.registerMigration("v34_listened") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "listenedAt", .datetime)
+            }
+        }
+
         return migrator
     }
 }
