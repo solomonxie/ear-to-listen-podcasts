@@ -321,9 +321,7 @@ struct AlbumDetailView: View {
         guard let speaker else { return nil }
         return AnyView(
             Button { openSpeaker = speaker } label: {
-                Image(systemName: "person.crop.circle")
-                    .font(.body)
-                    .foregroundStyle(Color.accentColor)
+                SpeakerAvatar(artist: speaker, size: 24)
                     .padding(.leading, 2)
             }
             .buttonStyle(.plain)
