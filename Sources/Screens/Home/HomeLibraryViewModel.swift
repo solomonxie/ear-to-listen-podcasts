@@ -34,42 +34,92 @@ final class HomeLibraryViewModel: ObservableObject {
     private let termStore = TermStore()
     private var refreshTask: Task<Void, Never>?
     /// Enough history to be useful when expanded; past this it's a list nobody scrolls.
-    static let historyLimit = 100
+    nonisolated static let historyLimit = 100
 
+    /// **Read and folded off the main actor, published in one go.** This used to be a
+    /// dozen queries, the whole-library search fold and the bookmark grouping on the main
+    /// thread — at launch, before Home could draw, and again every time the player closed.
+    /// Each `@Published` set was its own redraw too.
     func refresh() async {
-        tracks = (try? trackStore.all()) ?? []
-        recentTracks = (try? trackStore.recentlyPlayed()) ?? []
-        albums = (try? libraryStore.albums()) ?? []
-        // Not the order the table hands them back in — see `SpeakerOrder`.
-        artists = SpeakerOrder.byLastActivity((try? libraryStore.artists()) ?? [], tracks: tracks)
-        topics = (try? libraryStore.topics()) ?? []
-        terms = (try? termStore.topTerms()) ?? []
-        playlists = (try? playlistStore.all()) ?? []
-        years = (try? trackStore.years()) ?? []
-        bookmarks = (try? bookmarkStore.recent()) ?? []
-        favoriteTracks = (try? trackStore.favorites()) ?? []
-        listenLaterTracks = (try? trackStore.listenLater()) ?? []
-        listenedCount = tracks.lazy.filter { $0.listenedAt != nil && !$0.isLost }.count
-        history = tracks.filter { $0.lastPlayedAt != nil && !$0.isLost }
-            .sorted { ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast) }
-            .prefix(Self.historyLimit).map { $0 }
-
-        // One directory listing, then a pure hash check per track. Asking the cache per
-        // track cost four filesystem calls each — including an attribute *write* that
-        // bumped the LRU date — so this loop alone could stall Home for seconds on a large
-        // library, every time a sync posted `.libraryDidChange`.
         let cachedKeys = await AudioCache.shared.cachedKeys()
-        downloadedTracks = tracks.filter {
-            AudioCache.shared.isCached(cachedKeys, providerID: $0.providerID, filePath: $0.filePath)
-        }
-
-        regroupBookmarks()
-        // Every mark, not just the recent ones Home shows: search looks through the whole
-        // library, and a note from last year is exactly the kind of thing being looked for.
-        searchIndex = LibrarySearch.index(
-            speakers: artists, albums: albums, playlists: playlists, topics: topics,
-            tracks: tracks, notes: (try? bookmarkStore.all()) ?? []
+        let load = Snapshot.loader(
+            libraryStore: libraryStore, trackStore: trackStore, playlistStore: playlistStore,
+            bookmarkStore: bookmarkStore, termStore: termStore
         )
+        let snapshot = await Task.detached(priority: .userInitiated) { load(cachedKeys) }.value
+        tracks = snapshot.tracks
+        recentTracks = snapshot.recentTracks
+        albums = snapshot.albums
+        artists = snapshot.artists
+        topics = snapshot.topics
+        terms = snapshot.terms
+        playlists = snapshot.playlists
+        years = snapshot.years
+        bookmarks = snapshot.bookmarks
+        favoriteTracks = snapshot.favoriteTracks
+        listenLaterTracks = snapshot.listenLaterTracks
+        listenedCount = snapshot.listenedCount
+        history = snapshot.history
+        downloadedTracks = snapshot.downloadedTracks
+        bookmarkGroups = snapshot.bookmarkGroups
+        searchIndex = snapshot.searchIndex
+    }
+
+    private struct Snapshot: Sendable {
+        var tracks: [Track] = []
+        var recentTracks: [Track] = []
+        var downloadedTracks: [Track] = []
+        var albums: [Album] = []
+        var artists: [Artist] = []
+        var topics: [Topic] = []
+        var terms: [TermCount] = []
+        var playlists: [Playlist] = []
+        var years: [Int] = []
+        var bookmarks: [Bookmark] = []
+        var favoriteTracks: [Track] = []
+        var listenLaterTracks: [Track] = []
+        var listenedCount = 0
+        var history: [Track] = []
+        var searchIndex = LibrarySearch.Index()
+        var bookmarkGroups: [BookmarkGroup] = []
+
+        static func loader(
+            libraryStore: LibraryStore, trackStore: TrackStore, playlistStore: PlaylistStore,
+            bookmarkStore: BookmarkStore, termStore: TermStore
+        ) -> @Sendable (Set<String>) -> Snapshot {
+            { cachedKeys in
+                var s = Snapshot()
+                s.tracks = (try? trackStore.all()) ?? []
+                s.recentTracks = (try? trackStore.recentlyPlayed()) ?? []
+                s.albums = (try? libraryStore.albums()) ?? []
+                // Not the order the table hands them back in — see `SpeakerOrder`.
+                s.artists = SpeakerOrder.byLastActivity((try? libraryStore.artists()) ?? [], tracks: s.tracks)
+                s.topics = (try? libraryStore.topics()) ?? []
+                s.terms = (try? termStore.topTerms()) ?? []
+                s.playlists = (try? playlistStore.all()) ?? []
+                s.years = (try? trackStore.years()) ?? []
+                s.bookmarks = (try? bookmarkStore.recent()) ?? []
+                s.favoriteTracks = (try? trackStore.favorites()) ?? []
+                s.listenLaterTracks = (try? trackStore.listenLater()) ?? []
+                s.listenedCount = s.tracks.lazy.filter { $0.listenedAt != nil && !$0.isLost }.count
+                s.history = s.tracks.filter { $0.lastPlayedAt != nil && !$0.isLost }
+                    .sorted { ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast) }
+                    .prefix(HomeLibraryViewModel.historyLimit).map { $0 }
+                // One directory listing, then a pure hash check per track — never a cache
+                // lookup per track.
+                s.downloadedTracks = s.tracks.filter {
+                    AudioCache.shared.isCached(cachedKeys, providerID: $0.providerID, filePath: $0.filePath)
+                }
+                s.bookmarkGroups = HomeLibraryViewModel.group(s.bookmarks, tracks: s.tracks)
+                // Every mark, not just the recent ones Home shows: search looks through the
+                // whole library, and a note from last year is exactly what gets looked for.
+                s.searchIndex = LibrarySearch.index(
+                    speakers: s.artists, albums: s.albums, playlists: s.playlists, topics: s.topics,
+                    tracks: s.tracks, notes: (try? bookmarkStore.all()) ?? []
+                )
+                return s
+            }
+        }
     }
 
     /// What was *said* matching the query. A database scan rather than a folded index —
@@ -119,8 +169,12 @@ final class HomeLibraryViewModel: ObservableObject {
     }
 
     private func regroupBookmarks() {
+        bookmarkGroups = Self.group(bookmarks, tracks: tracks)
+    }
+
+    nonisolated private static func group(_ bookmarks: [Bookmark], tracks: [Track]) -> [BookmarkGroup] {
         let byID = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        bookmarkGroups = BookmarkGroup.group(bookmarks) { byID[$0] }
+        return BookmarkGroup.group(bookmarks) { byID[$0] }
     }
 
     /// A topic tags albums now, so its episodes are the episodes of those albums.
