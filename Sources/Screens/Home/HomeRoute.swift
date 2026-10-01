@@ -22,4 +22,5 @@ enum HomeRoute: Hashable {
     case term(String)
     case allTerms
     case topic(String)
+    case settings
 }
