@@ -1,11 +1,13 @@
 import Foundation
 
-/// Reads the bundled sample clips under `Resources/DemoAudio` — backs the seeded demo
-/// library (`DemoDataSeeder`) so it plays through the exact same `PlaybackEngine` path
-/// as a real synced track, rather than a separate mock player.
+/// Plays the bundled sample episodes (`DemoData/Audio`) through the same `PlaybackEngine`
+/// path as a real source. Files sit at the bundle root as `demo-<episode>.m4a`.
 struct DemoProvider: CloudProvider {
     static let providerType = "demo"
     let type = DemoProvider.providerType
+    let isOnDevice = true
+
+    static func fileName(for episodeKey: String) -> String { "demo-\(episodeKey).m4a" }
 
     func listFiles(inFolder folderID: String?) async throws -> [CloudFile] {
         Self.files
@@ -19,9 +21,7 @@ struct DemoProvider: CloudProvider {
     }
 
     func streamURL(forFileID fileID: String) async throws -> URL {
-        // `Resources/DemoAudio` is a flattened group, not a folder reference, so its
-        // contents land at the bundle root, not under a "DemoAudio/" path.
-        guard let url = Bundle.main.url(forResource: fileID, withExtension: "m4a") else {
+        guard let url = Bundle.main.url(forResource: fileID, withExtension: nil) else {
             throw CocoaError(.fileNoSuchFile)
         }
         return url
@@ -31,11 +31,14 @@ struct DemoProvider: CloudProvider {
         ConnectionTestResult(isSuccess: true, message: nil)
     }
 
-    /// File names double as their `CloudFile.path`/`Track.filePath` — matches how
-    /// `DemoDataSeeder` references them when creating tracks.
-    static let files: [CloudFile] = [
-        CloudFile(id: "ep-tech-1", name: "ep-tech-1.m4a", path: "ep-tech-1", sizeBytes: nil, mimeType: "audio/m4a", modifiedAt: nil),
-        CloudFile(id: "ep-history-1", name: "ep-history-1.m4a", path: "ep-history-1", sizeBytes: nil, mimeType: "audio/m4a", modifiedAt: nil),
-        CloudFile(id: "ep-news-1", name: "ep-news-1.m4a", path: "ep-news-1", sizeBytes: nil, mimeType: "audio/m4a", modifiedAt: nil),
-    ]
+    static var files: [CloudFile] {
+        let urls = Bundle.main.urls(forResourcesWithExtension: "m4a", subdirectory: nil) ?? []
+        return urls.filter { $0.lastPathComponent.hasPrefix("demo-") }.map { url in
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+            return CloudFile(
+                id: url.lastPathComponent, name: url.lastPathComponent, path: url.lastPathComponent,
+                sizeBytes: size, mimeType: "audio/mp4", modifiedAt: nil
+            )
+        }
+    }
 }

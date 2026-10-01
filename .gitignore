@@ -23,4 +23,5 @@ Sources/App/Info.plist
 
 # local env files
 .env*.local
+.env.demo
 __pycache__/

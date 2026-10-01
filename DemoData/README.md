@@ -1,21 +1,18 @@
-# Sample library, not shipped
+# Sample library
 
-Three short clips, a seeder that writes them into the real DB as speakers, topics,
-albums, playlists and transcripts, and the provider that plays them back.
+What Settings → Demo mode shows: five shows (one in Chinese), seven speakers, twelve spoken
+episodes with timed transcripts, summaries, bookmarks, terms, progress, listened /
+favourite / listen-later state and three playlists. For trying every feature and for App
+Store screenshots and review.
 
-Not in any target: `project.yml` builds `Sources/` and `Resources/` only, so nothing
-here reaches the app. Kept for manual testing of shelves, playback and transcripts
-without connecting a bucket.
-
-To use it, add this folder to the `EarToListen` target's sources in `project.yml`,
-regenerate (`xcodegen`), and register the provider in `EarToListenApp.init`:
-
-```swift
-CloudProviderRegistry.shared.register(type: DemoProvider.providerType) { _ in DemoProvider() }
-```
-
-`DemoProvider.streamURL` resolves clips by bare name at the bundle root, so add
-`DemoData/Audio` as a flattened group. Everything the seeder writes is tagged
-`isDemo = true` (provider type `demo`), so `DemoDataSeeder.removeAll()` wipes it without
-touching synced content. Migration `v27_drop_demo_library` deletes those rows on launch,
-so seed after the migrator has run — which it has by the time anything calls the seeder.
+- **Ships in every build**, Release included — the toggle is for reviewers too.
+- **Your library is never touched.** Switching on copies the live database aside
+  (`Application Support/demo/`) and swaps in a fresh sample one; switching off swaps it
+  back. Backups, the change log and first-run restore pause while it's on.
+- **Credentials, non-Release only:** `cp .env.demo.example .env.demo`, fill in a bucket
+  and/or AI key, then `make ios`. `scripts/demo-secrets.sh` bundles them into Debug builds;
+  demo mode adds them as a source and a key and removes them from the Keychain on the way
+  out. Release never carries or reads them — demo mode there is the bundled data alone.
+- **Changing the content:** edit `demo-library.json` (a summary's `{3}` becomes the start
+  time of line 3), then `venv/bin/python DemoData/make-audio.py` to re-speak the audio with
+  macOS `say` and re-time the transcripts.
