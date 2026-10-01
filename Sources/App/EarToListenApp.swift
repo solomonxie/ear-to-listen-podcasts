@@ -22,6 +22,7 @@ struct EarToListenApp: App {
         }
         CloudProviderRegistry.shared.register(type: LocalFilesProvider.providerType) { try LocalFilesProvider(config: $0) }
         PlaylistImportSourceRegistry.shared.register(SpotifyImportSource())
+        CloudProviderRegistry.shared.register(type: DemoProvider.providerType) { _ in DemoProvider() }
     }
 
     var body: some Scene {
