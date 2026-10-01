@@ -245,7 +245,14 @@ struct HomeView: View {
         } else {
             resultSection("Speakers", results.speakers) { speaker in
                 NavigationLink(value: HomeRoute.speaker(speaker.id)) {
-                    resultRow(symbol: "person.fill", color: .gray, title: speaker.name, subtitle: nil)
+                    HStack(spacing: 12) {
+                        SpeakerAvatar(artist: speaker, size: 44)
+                        Text(speaker.name).font(.subheadline.weight(.semibold))
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(.primary)
                 }
             }
             resultSection("Albums", results.albums) { album in
@@ -402,7 +409,7 @@ private struct SpeakerCard: View {
     let artist: Artist
     var body: some View {
         VStack(spacing: 6) {
-            SpeakerAvatar(photoFileName: artist.photoFileName)
+            SpeakerAvatar(artist: artist)
             Text(artist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 90)

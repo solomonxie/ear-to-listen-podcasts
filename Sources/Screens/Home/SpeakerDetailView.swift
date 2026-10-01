@@ -53,7 +53,7 @@ struct SpeakerDetailView: View {
                     HStack {
                         Spacer()
                         PhotosPicker(selection: $photoItem, matching: .images) {
-                            SpeakerAvatar(photoFileName: currentSpeaker.photoFileName, size: 96)
+                            SpeakerAvatar(artist: currentSpeaker, size: 96)
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
