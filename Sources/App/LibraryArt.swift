@@ -33,9 +33,15 @@ enum LibraryArt {
     /// for every episode whose artwork nobody set.
     @MainActor
     static func image(for seed: String, title: String, subtitle: String?, size: CGFloat = 512) -> UIImage {
+        let key = [seed, title, subtitle ?? "", "\(size)"].joined(separator: "\u{1F}")
+        if let last = lastRendered, last.key == key { return last.image }
         let renderer = ImageRenderer(content: GeneratedCover(seed: seed, title: title, subtitle: subtitle)
             .frame(width: size, height: size))
         renderer.scale = 1
-        return renderer.uiImage ?? UIImage()
+        let image = renderer.uiImage ?? UIImage()
+        lastRendered = (key, image)
+        return image
     }
+
+    @MainActor private static var lastRendered: (key: String, image: UIImage)?
 }
