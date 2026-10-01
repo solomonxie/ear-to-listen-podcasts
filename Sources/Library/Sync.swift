@@ -119,6 +119,8 @@ struct SyncEngine {
         // episodes have a transcript sitting beside them.
         let listing = try await provider.listFiles(inFolder: nil)
         let sidecars = TranscriptFile.sidecarSetsByAudioPath(in: listing)
+        let artwork = ArtworkSidecar.find(in: listing)
+        ArtworkSidecar.remember(artwork, providerID: record.id)
         let files = listing.filter { FileKind(path: $0.path).isPlayable }
 
         // Taken from the listing rather than accumulated as the loop goes: what exists
@@ -158,6 +160,8 @@ struct SyncEngine {
         // A transcript added to the bucket later doesn't change the audio, so it never
         // queues anything — this is what notices it.
         try trackStore.updateTranscriptPaths(providerID: record.id, sidecars: sidecars)
+        // Likewise a picture; the episodes still in the queue take theirs in `perform`.
+        await ArtworkSidecar.adopt(artwork, providerID: record.id, provider: provider, dbQueue: dbQueue)
 
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
         try providerStore.updateLastSynced(id: record.id, at: Date())
@@ -189,10 +193,13 @@ struct SyncEngine {
                 id: job.filePath, name: job.displayName, path: job.filePath, sizeBytes: job.sizeBytes,
                 mimeType: nil, modifiedAt: job.remoteModifiedAt, contentHash: job.contentHash
             )
-            try await importFileIfNeeded(
+            let added = try await importFileIfNeeded(
                 file, providerRecord: record, provider: provider, jobID: job.id,
                 transcriptPath: job.transcriptPath, transcriptPaths: job.transcriptPaths
             )
+            if added, let artwork = ArtworkSidecar.remembered(providerID: record.id) {
+                await ArtworkSidecar.adopt(artwork, providerID: record.id, provider: provider, onlyPath: file.path, dbQueue: dbQueue)
+            }
             try? jobStore.markDone(id: job.id)
         } catch {
             try? jobStore.markFailed(id: job.id, error: error.localizedDescription)

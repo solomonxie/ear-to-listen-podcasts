@@ -461,6 +461,7 @@ struct AlbumDetailView: View {
         )
         ImageFileStore.artwork.remove(previous)
         self.artworkItem = nil
+        uploadArtwork(fileName)
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
     }
 
@@ -473,6 +474,13 @@ struct AlbumDetailView: View {
         ImageFileStore.artwork.remove(previous)
         current = (try? libraryStore.album(id: shown.id)) ?? current
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+        uploadArtwork(fileName)
+    }
+
+    /// Into the album's own folder too, as `cover.jpg` — see `ArtworkSidecar`.
+    private func uploadArtwork(_ fileName: String) {
+        let albumID = shown.id
+        Task.detached { await ArtworkSidecar.uploadAlbum(fileName, albumID: albumID) }
     }
 
     private func removeArtwork() {
