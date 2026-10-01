@@ -17,7 +17,6 @@ enum AiPricing {
         "gemini-2.0-flash": (0.10, 0.40),
         "llama-3.1-8b-instant": (0.05, 0.08),
         "mistral-small-latest": (0.20, 0.60),
-        "deepseek-chat": (0.27, 1.10),
         "grok-2-latest": (2.00, 10.00),
     ]
 

@@ -609,6 +609,14 @@ enum Migrations {
             }
         }
 
+        // DeepSeek retired these; a request naming them hangs instead of failing.
+        migrator.registerMigration("v36_deepseek_v4") { db in
+            try db.execute(sql: """
+                UPDATE aiKeys SET model = 'deepseek-v4-pro'
+                WHERE vendor = 'deepseek' AND model IN ('deepseek-chat', 'deepseek-reasoner', 'deepseek-flash')
+                """)
+        }
+
         return migrator
     }
 }
