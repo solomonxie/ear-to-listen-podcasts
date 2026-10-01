@@ -167,7 +167,14 @@ struct RealPlayerView: View {
                             isFollowingTranscript = false
                             withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
                         } label: {
-                            Text("Now Playing").font(.headline)
+                            VStack(spacing: 0) {
+                                Text(engine.currentTrack?.title ?? "").font(.subheadline.weight(.semibold))
+                                if let name = artist?.name, !name.isEmpty {
+                                    Text(name).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .lineLimit(1)
+                            .frame(maxWidth: 220)
                         }
                         .buttonStyle(.plain)
                     }
@@ -279,17 +286,10 @@ struct RealPlayerView: View {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
-    /// Jumps to the line being spoken and keeps up from there. Asked for, never assumed —
-    /// The marks, without making one. Reached two ways — the pill under the transport, and
-    /// a hold on the floating bookmark once the transport has gone.
+    /// The marks, without making one — the pill under the transport.
     ///
     /// Following goes off for the same reason Back to top turns it off: this is a move made
     /// to read something, and a page that scrolls itself is a page you can't read.
-    ///
-    /// No haptic here. It belongs to the hold alone, where it's doing real work — a tap and
-    /// a hold on one control have to feel different as the thumb lifts, or a hold that was
-    /// meant to jump and instead left a mark is indistinguishable from one that worked. On
-    /// a plain button it would just be noise.
     private func showBookmarks(_ proxy: ScrollViewProxy) {
         isFollowingTranscript = false
         withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.notesAnchor, anchor: .top) }
@@ -480,10 +480,6 @@ struct RealPlayerView: View {
             }
             // Goes to the marks without making one — the transport's bookmark, a hand's
             // width above this row, is what makes them.
-            //
-            // Not a duplicate of the hold on the floating bookmark: this row is only
-            // reachable while the transport is on screen, and that row only exists once it
-            // has scrolled off. Whichever is in front of you has a way to the marks.
             Button {
                 showBookmarks(proxy)
             } label: {
@@ -569,73 +565,22 @@ struct RealPlayerView: View {
         }
     }
 
-    /// What you want from deep inside a 40-minute transcript: a mark on the second you just
-    /// heard, and the line being spoken. Both are a reach from the bottom of the page, where
-    /// the thumb already is. The way back up is the docked bar — tapping it — so there's no
-    /// Top pill here doing the same job a hand's width above it.
-    ///
-    /// **Mark takes the trailing end**, under the right thumb. It is the only one with a
-    /// deadline: it's pressed because of something just heard, and the sentence worth
-    /// keeping is a few seconds wide.
-    ///
-    /// **Neither takes you anywhere you didn't ask for.** The mark deliberately does *not*
-    /// jump to Notes — the reason to mark from here is that the line worth marking is on
-    /// screen, and going to the mark would leave it. It saves, the count ticks up, and the
-    /// page stays exactly where it was.
+    /// Back to top, and follow the line being spoken. Marking lives on the docked bar below.
     @ViewBuilder
     private func floatingControls(_ proxy: ScrollViewProxy) -> some View {
         // Gone while a line is open for correction: this row is an overlay, so it sits *on*
         // the text, and the field is the one piece of text that must not be sat on.
         if isTransportOffscreen, !isEditingLine {
             HStack(spacing: 10) {
+                floatingButton("Top", systemImage: "arrow.up", isOn: false) {
+                    isFollowingTranscript = false
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
+                }
                 if !transcript.lines.isEmpty {
-                    // A toggle here, where the one above the transcript only turns it on:
-                    // this one is in reach of the thumb that just scrolled away from the
-                    // spoken line, and stopping is as likely to be the ask as starting.
-                    // One label, one icon — colour alone says whether it's on, so the
-                    // button doesn't change shape under the thumb that just pressed it.
+                    // One label, one icon — colour alone says whether it's on.
                     floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
                         if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
                     }
-                }
-                if let track = engine.currentTrack {
-                    // Captioned like Follow beside it. A lone glyph beside a labelled pill
-                    // reads as a different kind of control, and this is the one that
-                    // changes something — the last place to be coy about
-                    // what it does.
-                    //
-                    // "Mark" rather than "Bookmark": it's the verb, and it keeps this
-                    // button distinct from the [ 🔖 Bookmarks ] pill under the transport,
-                    // which is the noun and goes to them. It's also the word the rest of
-                    // the app uses — `markMoment`, "saved moment", "marks and stays put".
-                    //
-                    // The count rides on the pill's corner, not the glyph's — the
-                    // transport's sits on a bare symbol, and the offset that puts it on
-                    // that shoulder drops it inside the capsule here.
-                    //
-                    // Tap marks, hold goes to the marks — one control for both halves of
-                    // the same subject, which is what let the [ Bookmarks ] pill come off
-                    // the row under the transport. Gestures rather than a `Button` with a
-                    // `contextMenu`: a menu makes "go to the marks" a press and then a
-                    // second tap on a one-item list, and the repo's rule about those two
-                    // fighting is about `onTapGesture` + `contextMenu`, which this isn't.
-                    Label("Mark", systemImage: "bookmark.fill")
-                        .floatingPill(isOn: false)
-                        .overlay(alignment: .topTrailing) { markCount(offset: CGSize(width: 5, height: -3)) }
-                        .contentShape(Capsule())
-                        .onTapGesture { markMoment(track) }
-                        // Short hold: 0.4s felt like waiting. Much under 0.25 starts eating taps.
-                        .onLongPressGesture(minimumDuration: 0.25) {
-                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                            showBookmarks(proxy)
-                        }
-                        .accessibilityElement()
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityLabel("Bookmark this moment")
-                        .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
-                        // A hold is invisible to VoiceOver, and this is the only way to the
-                        // marks now that the pill has gone.
-                        .accessibilityAction(named: "Go to bookmarks") { showBookmarks(proxy) }
                 }
             }
             .padding(.bottom, 12)
@@ -689,13 +634,12 @@ struct RealPlayerView: View {
         if !path.isEmpty {
             NowPlayingBarContent(
                 track: engine.currentTrack,
-                artistName: artist?.name,
-                albumName: album?.name,
                 currentTime: engine.currentTime,
                 duration: engine.duration,
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
+                onBookmark: { if let track = engine.currentTrack { markMoment(track) } },
                 onTapBar: { path.removeAll() }
             )
         }
@@ -710,13 +654,12 @@ struct RealPlayerView: View {
 
             NowPlayingBarContent(
                 track: engine.currentTrack,
-                artistName: artist?.name,
-                albumName: album?.name,
                 currentTime: engine.currentTime,
                 duration: engine.duration,
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
+                onBookmark: { if let track = engine.currentTrack { markMoment(track) } },
                 // Already on this page, so the bar's job is the way back up rather than
                 // a screen transition to where you already are — and following goes off
                 // with it. Leaving it on made the tap look
@@ -734,113 +677,67 @@ struct RealPlayerView: View {
 /// The bar at the bottom of the screen, wherever it appears: over Home as the way into
 /// whatever is playing, and docked on the player itself as the way back to the top.
 ///
-/// Three lines because that's what the question "what am I listening to?" actually takes —
-/// the episode, who is speaking, and which collection it came from. One line of title over
-/// a filename answered none of them.
-///
-/// **One bar, assembled once.** Every page showing it gets the same progress strip, the
-/// same timecode and the same background from here, and supplies only what genuinely
-/// differs: what tapping it does, and whether there is anywhere else on that page to mark a
-/// moment. It was three call sites each adding their own — Home overlaid a 1.5pt strip, a
-/// pushed page stacked a squashed one above, the player's docked copy had none at all, and
-/// only two of the three showed the timecode at all.
-///
-/// **On the right: back ten seconds, then play/pause.** Pause keeps the far-right seat —
-/// it's the one anyone reaches for in a hurry, often without looking — and the rewind sits
-/// inside it, drawn a size smaller so the two don't read as a pair of equals. Skipping to
-/// another episode was the control that used to be out here; it went because it's the one
-/// mistap on this bar you can't undo by tapping again.
-///
-/// **No bookmark on it, anywhere.** It used to carry one on every page but the player's,
-/// which made the bar a different control depending where you met it — and on the player it
-/// sat a hand's width under the floating Mark pill doing the same job unlabelled, right
-/// beside play, where it was the easier of the two to hit by mistake. Marking belongs to the
-/// places that are about one moment: the transport, the floating row, and holding a
-/// transcript line.
+/// Controls only — rewind, play/pause, mark — centred, with play in the middle where the
+/// thumb finds it without looking. What's playing is named in the player's top bar, not
+/// repeated here. Tapping anywhere else on the bar does the page's `onTapBar`.
 struct NowPlayingBarContent: View {
     let track: Track?
-    let artistName: String?
-    let albumName: String?
-    /// Position and length, which this turns into both the timecode line and the progress
-    /// strip above it. Numbers rather than a pre-formatted string and a separate ratio:
-    /// three call sites formatting the same two values were three chances to disagree, and
-    /// they took all three.
     let currentTime: TimeInterval
     let duration: TimeInterval
     let isPlaying: Bool
     let onSkipBack: () -> Void
     let onTogglePlay: () -> Void
+    let onBookmark: () -> Void
     let onTapBar: () -> Void
 
-    /// Sized for a thumb in a hurry, not to match the text beside it — as big as fits in
-    /// the height the three text lines already give the bar, so the bar doesn't grow.
-    /// `@ScaledMetric` keeps it growing with Dynamic Type the way a text style would.
     @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 34
 
     var body: some View {
-        if let track {
+        if track != nil {
             VStack(spacing: 0) {
                 ProgressView(value: duration > 0 ? min(currentTime / duration, 1) : 0)
                     .progressViewStyle(.linear)
                     .tint(.accentColor)
                     .frame(height: 1.5)
 
-                HStack(spacing: 12) {
-                    Button(action: onTapBar) {
-                        HStack(spacing: 12) {
-                            ArtworkTile(track: track, cornerRadius: 7, symbolSize: 16)
-                                .frame(width: 44, height: 44)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(track.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(1)
-                                if let context = [artistName, albumName].compactMap({ $0?.nilIfEmpty }).nilIfEmpty {
-                                    Text(context.joined(separator: " · "))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Text("\(Scrubber.formatted(currentTime)) / \(Scrubber.formatted(duration))")
-                                    .font(.caption2.monospacedDigit())
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
+                ZStack {
+                    HStack {
+                        Text(Scrubber.formatted(currentTime))
+                        Spacer()
+                        Text(Scrubber.formatted(duration))
                     }
-                    .buttonStyle(.plain)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
 
-                    Button(action: onSkipBack) {
-                        Image(systemName: "gobackward.10")
-                            .font(.system(size: glyphSize - 6))
-                            .frame(width: 50, height: 52)
-                            .contentShape(Rectangle())
+                    HStack(spacing: 28) {
+                        barButton("gobackward.10", size: glyphSize - 8, label: "Back ten seconds", action: onSkipBack)
+                        barButton(isPlaying ? "pause.fill" : "play.fill", size: glyphSize,
+                                  label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
+                        barButton("bookmark", size: glyphSize - 10, label: "Bookmark this moment", action: onBookmark)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Back ten seconds")
-
-                    Button(action: onTogglePlay) {
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: glyphSize))
-                            .frame(width: 56, height: 52)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 12)
-                // Less under than over: the home indicator already holds a band of clear
-                // space below the bar, and 8pt of padding on top of it read as the bar
-                // floating off the bottom of the screen.
-                .padding(.top, 8)
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
                 .padding(.bottom, 2)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTapBar)
             }
             .background(.ultraThinMaterial)
         }
     }
-}
 
-private extension Array {
-    var nilIfEmpty: [Element]? { isEmpty ? nil : self }
+    private func barButton(
+        _ systemImage: String, size: CGFloat, label: LocalizedStringKey, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: size))
+                .frame(width: 56, height: 52)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
 }
 
 /// Where you are in the episode, and the way to move it.
