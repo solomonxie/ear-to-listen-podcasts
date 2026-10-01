@@ -461,12 +461,24 @@ private struct TranscriptMatchRow: View {
 private struct TrackCard: View {
     let track: Track
     let action: () -> Void
+    private var isListened: Bool { track.listenedAt != nil }
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 ArtworkTile(track: track, album: LibraryNames.shared.album(track.albumID), symbolSize: 34)
                     .frame(width: 160, height: 90)
+                    .opacity(isListened ? 0.5 : 1)
+                    .overlay(alignment: .topTrailing) {
+                        if isListened {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.white, .green)
+                                .padding(6)
+                                .accessibilityLabel("Listened")
+                        }
+                    }
                 Text(track.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    .foregroundStyle(isListened ? .secondary : .primary)
                 // Same reason as `TrackRow`'s: the title alone can be shared by a whole
                 // folder of files. Which collection and whose voice says it better than a
                 // filename, and is the thing a shelf card is short of room to say twice.
