@@ -31,6 +31,16 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         }
     }
 
+    /// `name` as a plain string, for drawing on a cover.
+    var title: String {
+        switch self {
+        case .listenLater: return String(localized: "Listen Later")
+        case .favorites: return String(localized: "Favorites")
+        case .downloaded: return String(localized: "Downloaded")
+        case .listened: return String(localized: "Listened")
+        }
+    }
+
     var symbol: String {
         switch self {
         case .listenLater: return "clock.fill"
