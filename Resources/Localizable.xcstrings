@@ -4756,6 +4756,70 @@
           }
         }
       }
+    },
+    "Custom (OpenAI-compatible)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom (OpenAI-compatible)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义（兼容 OpenAI 接口）"
+          }
+        }
+      }
+    },
+    "A custom endpoint needs a valid URL and a model name.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A custom endpoint needs a valid URL and a model name."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义服务需要有效的网址和模型名称。"
+          }
+        }
+      }
+    },
+    "Any server that speaks the OpenAI chat completions API. Enter its base URL and the model to call.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any server that speaks the OpenAI chat completions API. Enter its base URL and the model to call."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任何支持 OpenAI 对话补全接口的服务。填写它的基础网址和要调用的模型。"
+          }
+        }
+      }
+    },
+    "Endpoint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endpoint"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务地址"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

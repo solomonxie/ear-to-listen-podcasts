@@ -43,7 +43,14 @@ struct AiKeyDetailView: View {
     var body: some View {
         List {
             Section {
-                AiModelPicker(vendor: key.vendor, model: modelBinding, id: "model", open: $openPicker)
+                if key.vendor == .custom {
+                    LabeledContent("Endpoint", value: key.baseURL ?? "—")
+                    TextField("model-name", text: Binding(get: { model ?? "" }, set: { modelBinding.wrappedValue = $0.nilIfEmpty }))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                } else {
+                    AiModelPicker(vendor: key.vendor, model: modelBinding, id: "model", open: $openPicker)
+                }
             } header: {
                 Text("Model")
             } footer: {
@@ -69,7 +76,7 @@ struct AiKeyDetailView: View {
                 }
             }
         }
-        .navigationTitle(key.vendor.displayName)
+        .navigationTitle(key.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !queries.isEmpty {
