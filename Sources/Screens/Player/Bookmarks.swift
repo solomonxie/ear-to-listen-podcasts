@@ -110,6 +110,7 @@ struct NotesPane: View {
     /// you reach for it. A sheet leaves the list exactly where it was.
     @State private var editing: Bookmark?
     @State private var openEpisodes: Set<String> = []
+    @State private var showingInsights = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -146,6 +147,19 @@ struct NotesPane: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.regular)
             }
+            if !bookmarks.isEmpty {
+                Button { showingInsights = true } label: {
+                    Label("AI insights from these notes", systemImage: "sparkles")
+                        .font(.footnote.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+            }
+        }
+        .sheet(isPresented: $showingInsights) {
+            BookmarkInsightsView(insights: BookmarkInsights(trackIDs: Set(bookmarks.map(\.trackID))))
         }
         .fullScreenCover(item: $editing, onDismiss: onChange) { bookmark in
             BookmarkEditorView(bookmark: bookmark, episodeTitle: episodeTitle(bookmark))

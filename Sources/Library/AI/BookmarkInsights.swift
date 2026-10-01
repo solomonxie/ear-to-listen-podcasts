@@ -36,24 +36,39 @@ struct BookmarkInsights {
     private static let savedDefaultsKey = "bookmarkInsights.saved"
 
     var dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue
+    /// The episodes to read marks from — one on an episode page, an album's or a speaker's
+    /// on theirs. Nil reads every mark.
+    var trackIDs: Set<String>? = nil
 
-    static var saved: Saved? {
+    /// Kept per scope, so an episode's insights don't overwrite an album's.
+    private var savedKey: String {
+        guard let trackIDs else { return Self.savedDefaultsKey }
+        return Self.savedDefaultsKey + "." + String(LibraryArt.stableHash(trackIDs.sorted().joined(separator: ",")))
+    }
+
+    var saved: Saved? {
         get {
-            UserDefaults.standard.data(forKey: savedDefaultsKey)
+            UserDefaults.standard.data(forKey: savedKey)
                 .flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }
         }
-        set {
-            UserDefaults.standard.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: savedDefaultsKey)
+        nonmutating set {
+            UserDefaults.standard.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: savedKey)
         }
     }
 
     func markCount() -> Int {
-        (try? dbQueue.read { db in try Bookmark.fetchCount(db) }) ?? 0
+        (try? scopedMarks().count) ?? 0
+    }
+
+    private func scopedMarks() throws -> [Bookmark] {
+        let marks = try BookmarkStore(dbQueue: dbQueue).all()
+        guard let trackIDs else { return marks }
+        return marks.filter { trackIDs.contains($0.trackID) }
     }
 
     @discardableResult
     func run() async throws -> Saved {
-        let marks = try BookmarkStore(dbQueue: dbQueue).all()
+        let marks = try scopedMarks()
         guard !marks.isEmpty else { throw NoBookmarksError() }
         let groups = context(for: marks)
 
@@ -67,7 +82,7 @@ struct BookmarkInsights {
         Write insights for them, in the language most of their notes and quotes are in:
         - **Themes**: the ideas they keep stopping for, across episodes. Name the episodes.
         - **Connections**: where marks in different episodes speak to each other — agree, \
-        disagree, or build on one another.
+        disagree, or build on one another. Skip this if there is only one episode.
         - **What their notes say**: what the notes and tags suggest they care about or are \
         working through. Skip this if there are hardly any notes.
         - **Next**: two or three concrete things to listen back to, look into, or reflect on.
@@ -84,7 +99,7 @@ struct BookmarkInsights {
         let text = content.trimmed
         guard !text.isEmpty else { throw EmptyReplyError() }
         let result = Saved(text: text, generatedAt: Date(), markCount: marks.count)
-        Self.saved = result
+        saved = result
         return result
     }
 
