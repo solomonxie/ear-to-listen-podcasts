@@ -9,6 +9,11 @@ enum TranscriptionEngineKind: String, Codable, CaseIterable, Sendable {
     case onDevice
     case openAIWhisper
 
+    /// Whisper is OpenAI's, so the China storefront doesn't offer it.
+    static var offered: [TranscriptionEngineKind] {
+        AiVendor.openAI.isOffered ? allCases : [.onDevice]
+    }
+
     var displayName: String {
         switch self {
         case .onDevice: return "On-device"
@@ -125,7 +130,9 @@ enum TranscriptionError: LocalizedError {
         case .onDeviceUnavailable(let locale):
             return "On-device speech recognition (\(locale)) isn't available right now. It can take a moment after launch — try again."
         case .onDeviceModelMissing(let locale):
-            return "This iPhone couldn't recognise \(locale) offline. Add that language under Settings ▸ General ▸ Keyboard ▸ Dictation Languages — iOS downloads the model over Wi-Fi, which can take a few minutes — then try again, or switch the transcript to OpenAI Whisper."
+            let advice = "This iPhone couldn't recognise \(locale) offline. Add that language under Settings ▸ General ▸ Keyboard ▸ Dictation Languages — iOS downloads the model over Wi-Fi, which can take a few minutes — then try again"
+            return TranscriptionEngineKind.offered.contains(.openAIWhisper)
+                ? advice + ", or switch the transcript to OpenAI Whisper." : advice + "."
         case .notAuthorized:
             return "Allow Speech Recognition in iOS Settings to transcribe on-device."
         case .sliceFailed:

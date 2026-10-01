@@ -8,12 +8,19 @@ struct AddAiKeyView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var vendor: AiVendor = .openAI
+    @State private var vendor: AiVendor = AiVendor.offered.first ?? .custom
     @State private var model: String?
+    @State private var baseURL = ""
     @State private var openPicker: String?
     @State private var secret = ""
     @State private var isTesting = false
     @State private var validationError: String?
+
+    private var canSave: Bool {
+        guard !isTesting, !secret.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        guard vendor == .custom else { return true }
+        return OpenAICompatibleChatClient.Config.customEndpoint(baseURL) != nil && model?.nilIfEmpty != nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -21,20 +28,35 @@ struct AddAiKeyView: View {
                 Section {
                     UnfoldingPicker(
                         title: "Vendor", id: "vendor", open: $openPicker, selection: $vendor,
-                        options: AiVendor.allCases.map { UnfoldingPicker.Option($0, $0.displayName) }
+                        options: AiVendor.offered.map { UnfoldingPicker.Option($0, $0.displayName) }
                     )
-                    AiModelPicker(vendor: vendor, model: $model, id: "model", open: $openPicker)
+                    if vendor == .custom {
+                        TextField("https://api.example.com/v1", text: $baseURL)
+                            .keyboardType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        TextField("model-name", text: Binding(get: { model ?? "" }, set: { model = $0.nilIfEmpty }))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                    } else {
+                        AiModelPicker(vendor: vendor, model: $model, id: "model", open: $openPicker)
+                    }
                     SecureField(vendor.keyHint, text: $secret)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 } footer: {
                     // Linked rather than just named, so adding a key doesn't require
                     // already knowing where that vendor's console lives.
-                    HStack(spacing: 4) {
-                        Text("Don't have a \(vendor.displayName) key yet?")
-                        Link("Get one →", destination: vendor.docsURL)
+                    if let docsURL = vendor.docsURL {
+                        HStack(spacing: 4) {
+                            Text("Don't have a \(vendor.displayName) key yet?")
+                            Link("Get one →", destination: docsURL)
+                        }
+                        .font(.footnote)
+                    } else {
+                        Text("Any server that speaks the OpenAI chat completions API. Enter its base URL and the model to call.")
+                            .font(.footnote)
                     }
-                    .font(.footnote)
                 }
 
                 if isTesting {
@@ -53,6 +75,7 @@ struct AddAiKeyView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .onChange(of: vendor) { _, _ in model = nil }
             .navigationTitle("Add AI Key")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -61,7 +84,7 @@ struct AddAiKeyView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { Task { await save() } }
-                        .disabled(isTesting || secret.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(!canSave)
                 }
             }
         }
@@ -74,7 +97,8 @@ struct AddAiKeyView: View {
         defer { isTesting = false }
         do {
             try await viewModel.addAiKey(
-                vendor: vendor, model: model, secret: secret.trimmingCharacters(in: .whitespaces)
+                vendor: vendor, model: model, baseURL: vendor == .custom ? baseURL : nil,
+                secret: secret.trimmingCharacters(in: .whitespaces)
             )
             dismiss()
         } catch {

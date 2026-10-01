@@ -30,6 +30,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .chinese: return "zh-Hans"
         }
     }
+
+    /// Before anyone picks, the China storefront reads in Chinese and everywhere else
+    /// follows the device. A pick — even "Same as device" — always wins.
+    static func initial(stored: String?, isChina: Bool) -> AppLanguage {
+        if let picked = stored.flatMap(AppLanguage.init(rawValue:)) { return picked }
+        return isChina ? .chinese : .system
+    }
 }
 
 /// Holds the choice and hands the root view a `Locale`. SwiftUI resolves every
@@ -42,6 +49,9 @@ final class AppLanguageStore: ObservableObject {
 
     private static let storageKey = "app.language"
     private static let appleLanguagesKey = "AppleLanguages"
+    /// Set while `AppleLanguages` holds the storefront's default rather than a pick, so
+    /// it can be taken back if the storefront changes.
+    private static let storefrontDefaultKey = "app.language.storefrontDefault"
 
     @Published var language: AppLanguage {
         didSet { persist() }
@@ -53,10 +63,27 @@ final class AppLanguageStore: ObservableObject {
     }
 
     private init() {
-        language = AppLanguage(rawValue: UserDefaults.standard.string(forKey: Self.storageKey) ?? "") ?? .system
+        let defaults = UserDefaults.standard
+        let stored = defaults.string(forKey: Self.storageKey)
+        // A language picked in iOS Settings ▸ Ear to Listen lands in this app's own
+        // `AppleLanguages`; that's a choice too, and the storefront never overrides it.
+        let pickedInIOS = !defaults.bool(forKey: Self.storefrontDefaultKey)
+            && Bundle.main.bundleIdentifier.flatMap { defaults.persistentDomain(forName: $0)?[Self.appleLanguagesKey] } != nil
+        language = AppLanguage.initial(stored: stored, isChina: AppStorefront.isChina && !pickedInIOS)
+        guard stored == nil, !pickedInIOS else { return }
+        // Unpicked: not saved as a choice. `Text` follows `locale` at once; strings read
+        // straight off the bundle follow `AppleLanguages` from the next launch.
+        if language == .chinese {
+            defaults.set(["zh-Hans"], forKey: Self.appleLanguagesKey)
+            defaults.set(true, forKey: Self.storefrontDefaultKey)
+        } else if defaults.bool(forKey: Self.storefrontDefaultKey) {
+            defaults.removeObject(forKey: Self.appleLanguagesKey)
+            defaults.removeObject(forKey: Self.storefrontDefaultKey)
+        }
     }
 
     private func persist() {
+        UserDefaults.standard.removeObject(forKey: Self.storefrontDefaultKey)
         UserDefaults.standard.set(language.rawValue, forKey: Self.storageKey)
         if let identifier = language.localeIdentifier {
             UserDefaults.standard.set([identifier], forKey: Self.appleLanguagesKey)

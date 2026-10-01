@@ -268,7 +268,7 @@ BACKUP YOU CAN SEE
 • Export or import by hand at any time — you can walk away with your data
 
 OPTIONAL AI, YOUR OWN KEY
-Add a key from OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek or xAI and it will draft better titles and show names during a sync, summarise an episode, or sort out a whole album in one pass — every suggestion shown to you before it lands. Keys live in the Keychain on this device, are never included in backups, and are never sent to us. Add more than one and they fall back to each other on a rate limit. Skip all of it and the app works the same.
+Add a key from OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, Qwen, Kimi, GLM or Doubao — or point it at any OpenAI-compatible server — and it will draft better titles and show names during a sync, summarise an episode, or sort out a whole album in one pass — every suggestion shown to you before it lands. Keys live in the Keychain on this device, are never included in backups, and are never sent to us. Add more than one and they fall back to each other on a rate limit. Skip all of it and the app works the same.
 
 Free. No ads, no analytics, no tracking, no in-app purchases.
 
@@ -432,7 +432,7 @@ Ear to Listen 播放你本来就有的播客。把它指向你自己的存储—
 • 然后才是转写稿本身——命中的那一行连同上下文一起显示，并从那一秒开始播放
 
 可以改的转写稿
-• 用设备本机的语音识别转写，或者用你自己的 OpenAI 密钥调用 Whisper
+• 用设备本机的语音识别转写，音频不离开手机
 • 像歌词一样跟随播放；点任意一行就从那里开始播
 • 就地修改一行，改的时候旁边就是用来对照的上下文
 • 你的更正会作为提示回灌，让后面的部分转得更准
@@ -452,7 +452,7 @@ Ear to Listen 播放你本来就有的播客。把它指向你自己的存储—
 • 随时手动导出或导入——你的数据随时可以带走
 
 可选的 AI，用你自己的密钥
-添加一个 OpenAI、Anthropic、Google、Groq、Mistral、DeepSeek 或 xAI 的密钥，它就能在同步时帮你拟更好的标题和节目名、总结一集，或者一次性理清整张专辑——每一条建议都会先给你看过再生效。密钥保存在本机钥匙串里，不会进备份，也永远不会发给我们。可以添加多个，遇到限流会自动切换。完全不用它，应用照样好用。
+添加一个 DeepSeek、通义千问、Kimi、智谱 GLM、豆包，或任意兼容 OpenAI 接口的自定义服务的密钥，它就能在同步时帮你拟更好的标题和节目名、总结一集，或者一次性理清整张专辑——每一条建议都会先给你看过再生效。密钥保存在本机钥匙串里，不会进备份，也永远不会发给我们。可以添加多个，遇到限流会自动切换。完全不用它，应用照样好用。
 
 免费。无广告，无统计分析，无追踪，无内购。
 
