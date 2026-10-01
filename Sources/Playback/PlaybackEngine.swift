@@ -321,6 +321,22 @@ final class PlaybackEngine: ObservableObject {
         updateNowPlayingPlaybackState()
     }
 
+    /// Lets go of the episode and the queue — the library they came from is being swapped
+    /// out (`DemoMode`).
+    func unload() {
+        pause()
+        player.removeAllItems()
+        itemStatusObservation = nil
+        if let endOfItemObserver { NotificationCenter.default.removeObserver(endOfItemObserver) }
+        endOfItemObserver = nil
+        currentTrack = nil
+        queue = []
+        currentTime = 0
+        duration = 0
+        nowPlayingInfo = [:]
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+    }
+
     /// Starts playback *because someone tapped this episode*, and opens the player with
     /// it. Deliberately separate from `play`: finishing an episode auto-advances through
     /// the same `play`, and that must never throw the full player over whatever you were
