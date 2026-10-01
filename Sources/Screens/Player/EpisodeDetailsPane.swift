@@ -445,6 +445,10 @@ struct EpisodeDetailsPane: View {
         try? trackStore.saveEdit(updated, artistName: artist?.name, albumName: album?.name)
         ImageFileStore.artwork.remove(previous)
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+        if let fileName {
+            let trackID = track.id
+            Task.detached { await ArtworkSidecar.uploadEpisode(fileName, trackID: trackID) }
+        }
     }
 
     private func suggest() async {
