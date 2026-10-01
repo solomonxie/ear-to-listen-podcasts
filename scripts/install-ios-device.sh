@@ -13,12 +13,15 @@ UDID=${1:-$(xcrun devicectl list devices 2>/dev/null | grep physical \
 : "${DEVELOPMENT_TEAM:?set DEVELOPMENT_TEAM (Apple Developer Team ID) in the environment or .env.local}"
 
 CONFIG=${CONFIG:-Debug}
+# Storefront the build pretends to be in (Debug only; Release asks StoreKit). CHN hides
+# the AI vendors the China App Store doesn't allow.
+STORE=${STORE:-USA}
 
 xcodegen generate
 xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
   -configuration "$CONFIG" -destination "id=$UDID" \
   -skipPackagePluginValidation -skipMacroValidation -allowProvisioningUpdates \
-  DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" -derivedDataPath build/dd-install build
+  DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" EAR_STOREFRONT="$STORE" -derivedDataPath build/dd-install build
 
 xcrun devicectl device install app --device "$UDID" \
   "build/dd-install/Build/Products/$CONFIG-iphoneos/EarToListen.app"

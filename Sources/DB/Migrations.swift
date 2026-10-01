@@ -602,6 +602,13 @@ enum Migrations {
             }
         }
 
+        // A custom OpenAI-compatible server's address, for keys of vendor "custom".
+        migrator.registerMigration("v35_ai_key_base_url") { db in
+            try db.alter(table: "aiKeys") { t in
+                t.add(column: "baseURL", .text)
+            }
+        }
+
         return migrator
     }
 }
