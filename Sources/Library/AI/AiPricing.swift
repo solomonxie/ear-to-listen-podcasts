@@ -18,6 +18,8 @@ enum AiPricing {
         "llama-3.1-8b-instant": (0.05, 0.08),
         "mistral-small-latest": (0.20, 0.60),
         "grok-2-latest": (2.00, 10.00),
+        // Peak rate; off-peak (outside 01–04 and 06–10 UTC weekdays) is half.
+        "deepseek-v4-pro": (1.32, 3.96),
     ]
 
     /// USD per picture, for the models billed by the image rather than by the token.

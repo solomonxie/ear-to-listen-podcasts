@@ -74,7 +74,7 @@ enum AiVendor: String, Codable, CaseIterable {
         case .qwen: return "qwen-plus"
         case .moonshot: return "moonshot-v1-8k"
         case .zhipu: return "glm-4-flash"
-        case .doubao: return "doubao-1-5-lite-32k-250115"
+        case .doubao: return "doubao-seed-2-0-pro-260215"
         case .custom: return ""
         }
     }
@@ -92,10 +92,10 @@ enum AiVendor: String, Codable, CaseIterable {
         case .mistral: return ["mistral-small-latest", "mistral-large-latest"]
         case .deepSeek: return ["deepseek-v4-pro"]
         case .xai: return ["grok-2-latest", "grok-3"]
-        case .qwen: return ["qwen-turbo", "qwen-plus", "qwen-max"]
+        case .qwen: return ["qwen-flash", "qwen-plus", "qwen-max"]
         case .moonshot: return ["moonshot-v1-8k", "moonshot-v1-32k", "kimi-latest"]
         case .zhipu: return ["glm-4-flash", "glm-4-air", "glm-4-plus"]
-        case .doubao: return ["doubao-1-5-lite-32k-250115", "doubao-1-5-pro-32k-250115"]
+        case .doubao: return ["doubao-seed-2-0-pro-260215", "doubao-seed-2-1-lite-260915", "doubao-1-5-pro-32k-250115"]
         case .custom: return []
         }
     }
