@@ -92,9 +92,18 @@ final class PlaybackEngine: ObservableObject {
          track.listenedAt.map { "\($0.timeIntervalSince1970)" } ?? ""].joined(separator: "\u{1}")
     }
 
+    /// Category only. Activating here, at launch, silenced whatever other app was playing
+    /// before the listener had pressed anything — `activateAudioSession` waits for play.
     private func configureAudioSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        } catch {
+            lastError = "Audio session error: \(error.localizedDescription)"
+        }
+    }
+
+    private func activateAudioSession() {
+        do {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             lastError = "Audio session error: \(error.localizedDescription)"
@@ -162,6 +171,7 @@ final class PlaybackEngine: ObservableObject {
             player.removeAllItems()
             player.insert(item, after: nil)
             seekToStart(of: track)
+            activateAudioSession()
             player.play()
             isPlaying = true
             lastError = nil
@@ -316,6 +326,7 @@ final class PlaybackEngine: ObservableObject {
     }
 
     func resume() {
+        activateAudioSession()
         player.play()
         isPlaying = true
         updateNowPlayingPlaybackState()
