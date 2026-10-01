@@ -389,10 +389,9 @@ private struct PlaylistCard: View {
     let playlist: Playlist
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(LibraryArt.color(for: playlist.id).gradient)
+            GeneratedCover(seed: playlist.id, title: playlist.name, kind: .playlist)
                 .frame(width: 120, height: 120)
-                .overlay { Image(systemName: "square.stack.fill").font(.largeTitle).foregroundStyle(.white) }
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             Text(playlist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 120)
