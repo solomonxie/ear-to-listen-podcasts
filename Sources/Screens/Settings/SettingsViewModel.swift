@@ -24,6 +24,7 @@ final class SettingsViewModel: ObservableObject {
     private let aiKeyStore = AiKeyStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let credentials = CredentialStore()
     private let backupService = BackupService()
+    private var flaggedLoad: Task<Void, Never>?
 
     var hasActiveRemoteProvider: Bool {
         providers.contains { $0.cloudKind != nil && $0.isActive }
@@ -35,9 +36,21 @@ final class SettingsViewModel: ObservableObject {
             spotifyClientID = try credentials.get(SpotifyImportSource.clientIDKey) ?? ""
             aiKeys = try aiKeyStore.all()
             aiKeyStrategy = AiRouter.strategy
-            flagged = try TrackStore(dbQueue: DatabaseManager.shared.dbQueue).flagged()
         } catch {
             errorMessage = error.localizedDescription
+        }
+        loadFlagged()
+    }
+
+    /// Off the main actor: it reads every episode and every transcript row, and `load`
+    /// runs each time Home appears — at launch included.
+    private func loadFlagged() {
+        flaggedLoad?.cancel()
+        let store = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
+        flaggedLoad = Task { [weak self] in
+            guard let summary = await Task.detached(priority: .utility, operation: { try? store.flagged() }).value,
+                  !Task.isCancelled else { return }
+            self?.flagged = summary
         }
     }
 
