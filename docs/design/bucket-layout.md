@@ -13,6 +13,7 @@ renwuzhi/2026/ep-01.lrc          for lyrics-aware players
 renwuzhi/2026/ep-01.zh-CN.vtt    per-language, when there's more than one
 renwuzhi/2026/ep-01.jpg          episode artwork
 renwuzhi/2026/ep-02.mp3
+renwuzhi/2026/cover.jpg          album artwork (folder.jpg, album.jpg, front.jpg read too)
 …
 ```
 
@@ -80,11 +81,20 @@ in it is hidden.
 
 ## What the app writes into the audio's own folder
 
-Only two things, and neither touches a file already there: a sidecar (a
-different extension beside the episode) and an episode the listener uploaded
-from Files, under a name nothing in the folder has. `CloudWrite` enforces the
-split — `upload` refuses a playable extension, `uploadEpisode` requires one and
-a free key.
+Only two kinds of thing, and neither touches audio already there: a sidecar (a
+transcript or artwork — a different extension beside the episode, or the folder's
+`cover.jpg`) and an episode the listener uploaded from Files, under a name nothing
+in the folder has. `CloudWrite` enforces the split — `upload` refuses a playable
+extension, `uploadEpisode` requires one and a free key.
+
+## Artwork (`ArtworkSidecar`)
+
+- **Up** when a picture is set in the app: `ep-01.jpg` beside every copy of the
+  episode; `cover.jpg` in each folder that holds only that album's episodes — a
+  folder shared with another album gets none. Read-only sources are skipped.
+- **Down** from the sync listing (no extra requests): an episode or album with no
+  picture and no hand edit takes the matching file. Removing a picture counts as
+  an edit, so it isn't pulled back.
 
 ## Not sidecars: the app's own data
 
@@ -94,7 +104,7 @@ bucket"). A per-episode `.json` would be a second source of truth for the same
 rows, and a merge problem as soon as the two disagree.
 
 The split: **the snapshot owns app data; sidecars own only what's worth another
-tool being able to read.** Today that's the transcript.
+tool being able to read.** Today that's the transcript and the artwork.
 
 ## When transcripts move, in each direction
 
