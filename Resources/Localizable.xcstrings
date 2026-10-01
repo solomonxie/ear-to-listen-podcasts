@@ -4820,6 +4820,76 @@
           }
         }
       }
+    },
+    "DEMO": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "演示"
+          }
+        }
+      }
+    },
+    "Demo mode": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "演示模式"
+          }
+        }
+      }
+    },
+    "Swaps in a sample library for trying every feature and taking screenshots. Your own library is set aside untouched and comes back when this is switched off. Backups pause while it's on.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "换上一个示例资料库，用来体验各项功能和截图。你自己的资料库会原样保存，关闭后即恢复。开启期间暂停备份。"
+          }
+        }
+      }
+    },
+    "Storefront (testing)": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "商店地区（测试）"
+          }
+        }
+      }
+    },
+    "As installed": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按安装时"
+          }
+        }
+      }
+    },
+    "Force China": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "强制中国"
+          }
+        }
+      }
+    },
+    "Force non-China": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "强制非中国"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
