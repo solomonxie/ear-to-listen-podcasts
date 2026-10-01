@@ -9,12 +9,17 @@ import SwiftUI
 struct BookmarkInsightsView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var saved = BookmarkInsights.saved
+    @State private var saved: BookmarkInsights.Saved?
     @State private var currentCount = 0
     @State private var isRunning = false
     @State private var errorMessage: String?
 
-    private let insights = BookmarkInsights()
+    private let insights: BookmarkInsights
+
+    init(insights: BookmarkInsights = BookmarkInsights()) {
+        self.insights = insights
+        _saved = State(initialValue: insights.saved)
+    }
 
     var body: some View {
         NavigationStack {
