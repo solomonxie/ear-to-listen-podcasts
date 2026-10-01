@@ -489,7 +489,11 @@ final class PlaybackEngine: ObservableObject {
             }
         }
         let hasOwnArtwork = track.artworkFileName?.nilIfEmpty != nil
-        return LibraryArt.image(for: hasOwnArtwork ? track.id : (album?.id ?? track.id))
+        return LibraryArt.image(
+            for: hasOwnArtwork ? track.id : (album?.id ?? track.id),
+            title: album?.name.nilIfEmpty ?? track.title,
+            subtitle: LibraryNames.shared.speaker(track.artistID ?? album?.artistID)?.name
+        )
     }
 
     /// `MPMediaItemArtwork` asks for the picture on a queue of its own, and a closure

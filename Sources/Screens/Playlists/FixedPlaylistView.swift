@@ -145,7 +145,7 @@ struct FixedPlaylistView: View {
 }
 
 /// A fixed playlist on the Home shelf. Deliberately the same silhouette as `PlaylistCard`
-/// so they read as one row of playlists, with the symbol and tint as the only difference —
+/// so they read as one row of playlists, with the symbol and tint telling them apart —
 /// these two are the app's, the rest are yours.
 struct FixedPlaylistCard: View {
     let kind: FixedPlaylist
@@ -153,12 +153,9 @@ struct FixedPlaylistCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(kind.tint.gradient)
+            GeneratedCover(seed: kind.rawValue, title: kind.title, kind: .playlist, symbol: kind.symbol, tint: kind.tint)
                 .frame(width: 120, height: 120)
-                .overlay {
-                    Image(systemName: kind.symbol).font(.largeTitle).foregroundStyle(.white)
-                }
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             Text(kind.name).font(.subheadline.weight(.semibold)).lineLimit(1)
             // Zero is worth printing: it's the difference between "empty" and "broken".
             Text("\(count)").font(.caption).foregroundStyle(.secondary)

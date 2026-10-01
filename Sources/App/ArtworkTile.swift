@@ -8,15 +8,22 @@ struct ArtworkTile: View {
     let fileName: String?
     let seed: String
     var symbol: String?
+    var title: String?
+    var subtitle: String?
     var cornerRadius: CGFloat = 10
     var symbolSize: CGFloat = 24
 
     @State private var image: UIImage?
 
-    init(fileName: String?, seed: String, symbol: String? = nil, cornerRadius: CGFloat = 10, symbolSize: CGFloat = 24) {
+    init(
+        fileName: String?, seed: String, symbol: String? = nil, title: String? = nil, subtitle: String? = nil,
+        cornerRadius: CGFloat = 10, symbolSize: CGFloat = 24
+    ) {
         self.fileName = fileName
         self.seed = seed
         self.symbol = symbol
+        self.title = title
+        self.subtitle = subtitle
         self.cornerRadius = cornerRadius
         self.symbolSize = symbolSize
     }
@@ -32,16 +39,20 @@ struct ArtworkTile: View {
     init(track: Track, album: Album? = nil, cornerRadius: CGFloat = 10, symbolSize: CGFloat = 24) {
         let collection = album ?? LibraryNames.shared.album(track.albumID)
         let ownArtwork = track.artworkFileName?.nilIfEmpty
+        let speaker = LibraryNames.shared.speaker(track.artistID ?? collection?.artistID)?.name
         self.init(
             fileName: ownArtwork ?? collection?.artworkFileName?.nilIfEmpty,
             seed: ownArtwork == nil ? (collection?.id ?? track.id) : track.id,
+            title: collection?.name.nilIfEmpty ?? track.title, subtitle: speaker,
             cornerRadius: cornerRadius, symbolSize: symbolSize
         )
     }
 
+    @MainActor
     init(album: Album, cornerRadius: CGFloat = 14, symbolSize: CGFloat = 48) {
         self.init(
             fileName: album.artworkFileName, seed: album.id, symbol: "square.stack.fill",
+            title: album.name, subtitle: LibraryNames.shared.speaker(album.artistID)?.name,
             cornerRadius: cornerRadius, symbolSize: symbolSize
         )
     }
@@ -57,19 +68,29 @@ struct ArtworkTile: View {
     /// bytes unreadable, nothing decoded yet — what's underneath is a coloured tile rather
     /// than a hole the background shows through.
     var body: some View {
-        Rectangle()
-            .fill(LibraryArt.color(for: seed).gradient)
+        placeholder
             .overlay {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
-                } else {
-                    Image(systemName: symbol ?? LibraryArt.symbol(for: seed))
-                        .font(.system(size: symbolSize))
-                        .foregroundStyle(.white)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .task(id: fileName) { await load() }
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if let title = title?.nilIfEmpty {
+            GeneratedCover(seed: seed, title: title, subtitle: subtitle)
+        } else {
+            Rectangle()
+                .fill(LibraryArt.color(for: seed).gradient)
+                .overlay {
+                    Image(systemName: symbol ?? LibraryArt.symbol(for: seed))
+                        .font(.system(size: symbolSize))
+                        .foregroundStyle(.white)
+                }
+        }
     }
 
     /// Read and decoded off the main thread. It is an 800pt JPEG on the player page and

@@ -368,10 +368,8 @@ struct AlbumRow: View {
     let album: Album
     var body: some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(LibraryArt.color(for: album.id).gradient)
+            ArtworkTile(album: album, cornerRadius: 8, symbolSize: 16)
                 .frame(width: 40, height: 40)
-                .overlay { Image(systemName: "square.stack.fill").foregroundStyle(.white) }
             Text(album.name).font(.subheadline.weight(.semibold))
         }
         .padding(.vertical, 2)
