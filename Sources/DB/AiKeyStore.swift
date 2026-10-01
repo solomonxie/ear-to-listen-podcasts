@@ -7,19 +7,23 @@ struct AiKeyStore {
 
     static func secretKey(id: String) -> String { "aiKey.\(id).secret" }
 
-    func all() throws -> [AiKey] {
+    /// Only keys whose vendor this storefront offers — a hidden vendor's key stays saved
+    /// but is neither listed nor called.
+    func all(inChina china: Bool = AppStorefront.isChina) throws -> [AiKey] {
         try migrateLegacyKeyIfNeeded()
         return try dbQueue.read { db in try AiKey.order(Column("position")).fetchAll(db) }
+            .filter { $0.vendor.isOffered(inChina: china) }
     }
 
     @discardableResult
-    func add(vendor: AiVendor, model: String? = nil, secret: String) throws -> AiKey {
+    func add(vendor: AiVendor, model: String? = nil, baseURL: String? = nil, secret: String) throws -> AiKey {
         let nextPosition = try dbQueue.read { db in
             try Int.fetchOne(db, sql: "SELECT COALESCE(MAX(position), -1) + 1 FROM aiKeys") ?? 0
         }
         let key = AiKey(
             id: UUID().uuidString, vendor: vendor, model: model?.nilIfEmpty,
-            position: nextPosition, createdAt: Date()
+            position: nextPosition, createdAt: Date(),
+            baseURL: vendor == .custom ? baseURL?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty : nil
         )
         try credentials.set(secret, forKey: Self.secretKey(id: key.id))
         try dbQueue.write { db in try key.insert(db) }
@@ -43,8 +47,11 @@ struct AiKeyStore {
     /// Swaps a key with its neighbor — order defines both sequential's first-try key
     /// and round-robin's cycle order.
     func move(id: String, direction: Int) throws {
+        let china = AppStorefront.isChina
         try dbQueue.write { db in
             var keys = try AiKey.order(Column("position")).fetchAll(db)
+            // Neighbours as listed — a hidden vendor's key keeps its place at the end.
+            keys = keys.filter { $0.vendor.isOffered(inChina: china) } + keys.filter { !$0.vendor.isOffered(inChina: china) }
             guard let idx = keys.firstIndex(where: { $0.id == id }) else { return }
             let swapWith = idx + direction
             guard keys.indices.contains(swapWith) else { return }

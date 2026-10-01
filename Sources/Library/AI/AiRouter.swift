@@ -60,7 +60,7 @@ enum AiRouter {
             try? store.bumpRequestCount(id: key.id)
             do {
                 let result = try await runChatCompletion(
-                    vendor: key.vendor, apiKey: secret, model: key.resolvedModel,
+                    vendor: key.vendor, apiKey: secret, model: key.resolvedModel, baseURL: key.baseURL,
                     messages: messages, maxTokens: maxTokens
                 )
                 try? queryStore.record(keyID: key.id, vendor: key.vendor, prompt: prompt, result: result)
@@ -86,9 +86,11 @@ enum AiRouter {
 
     /// Used both by the router above and by "test then save" when adding a key.
     static func runChatCompletion(
-        vendor: AiVendor, apiKey: String, model: String? = nil, messages: [ChatMessage],
-        maxTokens: Int = defaultMaxTokens
+        vendor: AiVendor, apiKey: String, model: String? = nil, baseURL: String? = nil,
+        messages: [ChatMessage], maxTokens: Int = defaultMaxTokens
     ) async throws -> ChatCompletionResult {
+        // A key saved before the storefront changed is kept but never called.
+        guard vendor.isOffered else { throw NoAiKeyError() }
         let model = model?.nilIfEmpty ?? vendor.defaultModel
         switch vendor {
         case .openAI:
@@ -97,14 +99,14 @@ enum AiRouter {
             return try await AnthropicChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
         case .google:
             return try await GoogleChatClient.runChatCompletion(apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
-        case .groq:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .groq, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
-        case .mistral:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .mistral, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
-        case .deepSeek:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .deepSeek, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
-        case .xai:
-            return try await OpenAICompatibleChatClient.runChatCompletion(config: .xai, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
+        case .custom:
+            guard !model.isEmpty, let config = OpenAICompatibleChatClient.Config.custom(baseURL: baseURL ?? "", model: model) else {
+                throw AiClientError(code: .unknown, message: String(localized: "A custom endpoint needs a valid URL and a model name."))
+            }
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: config, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
+        case .groq, .mistral, .deepSeek, .xai, .qwen, .moonshot, .zhipu, .doubao:
+            let config = OpenAICompatibleChatClient.Config.forVendor(vendor)!
+            return try await OpenAICompatibleChatClient.runChatCompletion(config: config, apiKey: apiKey, model: model, messages: messages, maxTokens: maxTokens)
         }
     }
 }

@@ -47,10 +47,12 @@ struct ArtworkSourceRow<LibraryPicker: View>: View {
             HStack(spacing: 8) {
                 libraryPicker
                     .capsuleSourceButton()
-                Button { open() } label: {
-                    Label("Draw", systemImage: "sparkles").font(.caption)
+                if ArtworkSuggester.isOffered {
+                    Button { open() } label: {
+                        Label("Draw", systemImage: "sparkles").font(.caption)
+                    }
+                    .capsuleSourceButton()
                 }
-                .capsuleSourceButton()
                 if let searchURL = subject.imageSearchURL {
                     Link(destination: searchURL) {
                         Label("Search", systemImage: "globe").font(.caption)
