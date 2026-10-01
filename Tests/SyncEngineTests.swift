@@ -51,7 +51,7 @@ final class SyncEngineTests: XCTestCase {
     private func makeEngine(providerID: String, dbQueue: DatabaseQueue) throws -> SyncEngine {
         try ProviderManager.shared.saveSettings([:], forProviderID: providerID)
         addTeardownBlock { try? ProviderManager.shared.deleteSettings(forProviderID: providerID) }
-        return SyncEngine(dbQueue: dbQueue)
+        return SyncEngine(dbQueue: dbQueue, contentAnalyzer: nil)
     }
 
     private func makeDatabase() throws -> DatabaseQueue {
