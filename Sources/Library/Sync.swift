@@ -93,11 +93,13 @@ struct SyncEngine {
     private var libraryStore: LibraryStore { LibraryStore(dbQueue: dbQueue) }
     private var providerStore: ProviderStore { ProviderStore(dbQueue: dbQueue) }
     private var jobStore: SyncJobStore { SyncJobStore(dbQueue: dbQueue) }
-    private let contentAnalyzer = ContentAnalyzer()
+    private let contentAnalyzer: ContentAnalyzer?
 
-    /// `dbQueue` defaults to the shared app database; tests inject an in-memory one instead.
-    init(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) {
+    /// `dbQueue` defaults to the shared app database; tests inject an in-memory one instead,
+    /// and no analyzer — on a phone it would reach the listener's real AI keys.
+    init(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue, contentAnalyzer: ContentAnalyzer? = ContentAnalyzer()) {
         self.dbQueue = dbQueue
+        self.contentAnalyzer = contentAnalyzer
     }
 
     /// Recursively lists the provider's files and queues every one that needs fetching —
@@ -243,7 +245,7 @@ struct SyncEngine {
         stage(.readingTags)
         let metadata = await extractMetadata(provider: provider, fileID: file.path)
         stage(.askingAI)
-        let guess = await contentAnalyzer.analyze(
+        let guess = await contentAnalyzer?.analyze(
             filePath: file.path, title: metadata.title, artist: metadata.artist, album: metadata.album
         )
         let title = guess?.title ?? metadata.title ?? (file.name as NSString).deletingPathExtension
