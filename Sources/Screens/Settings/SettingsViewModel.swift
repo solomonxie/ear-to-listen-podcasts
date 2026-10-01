@@ -60,10 +60,21 @@ final class SettingsViewModel: ObservableObject {
     /// The test call goes through the *chosen* model, so a mistyped custom name fails
     /// here rather than silently on every sync afterwards.
     func addAiKey(vendor: AiVendor, model: String?, baseURL: String? = nil, secret: String) async throws {
-        _ = try await AiRouter.runChatCompletion(
-            vendor: vendor, apiKey: secret, model: model, baseURL: baseURL,
-            messages: [ChatMessage(role: .user, content: "Reply with \"ok\".")]
-        )
+        // A retired model name doesn't fail, it just never answers — so the test gives up.
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                _ = try await AiRouter.runChatCompletion(
+                    vendor: vendor, apiKey: secret, model: model, baseURL: baseURL,
+                    messages: [ChatMessage(role: .user, content: "Reply with \"ok\".")]
+                )
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(10))
+                throw AiClientError(code: .network, message: String(localized: "\(vendor.displayName) didn't answer within 10 seconds. Check the model name."))
+            }
+            try await group.next()
+            group.cancelAll()
+        }
         try aiKeyStore.add(vendor: vendor, model: model, baseURL: baseURL, secret: secret)
         aiKeys = try aiKeyStore.all()
     }
