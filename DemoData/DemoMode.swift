@@ -13,6 +13,8 @@ enum DemoMode {
     private static let directory = URL.applicationSupportDirectory.appending(path: "demo", directoryHint: .isDirectory)
     private static let stashURL = directory.appending(path: "real-library.sqlite")
     private static let stagingURL = directory.appending(path: "staging.sqlite")
+    /// The real library as it was last put back — kept until the next switch, in case.
+    private static let previousURL = directory.appending(path: "real-library.previous.sqlite")
 
     static var isOn: Bool { AppMode.isDemo }
 
@@ -20,10 +22,12 @@ enum DemoMode {
         guard !isOn else { return }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         quiesce()
+        defer { resume() }
 
         DatabaseManager.shared.checkpoint()
         removeDatabase(at: stashURL)
         try DatabaseManager.shared.dbQueue.backup(to: DatabaseQueue(path: stashURL.path))
+        try verify(stashURL, matches: DatabaseManager.shared.dbQueue)
         UserDefaults.standard.set(true, forKey: AppMode.demoKey)
 
         removeDatabase(at: stagingURL)
@@ -32,16 +36,18 @@ enum DemoMode {
         try DemoDataSeeder.seed(into: staged)
         DemoSecrets.apply(to: staged)
         try DatabaseManager.shared.replaceContents(with: staged)
-        resume()
     }
 
     static func leave() throws {
         guard isOn else { return }
         quiesce()
+        defer { resume() }
         DemoSecrets.forget(in: DatabaseManager.shared.dbQueue)
 
-        if FileManager.default.fileExists(atPath: stashURL.path) {
-            try DatabaseManager.shared.replaceContents(with: DatabaseQueue(path: stashURL.path))
+        if let saved = [stashURL, previousURL].first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            let copy = try DatabaseQueue(path: saved.path)
+            try verify(saved, matches: nil)
+            try DatabaseManager.shared.replaceContents(with: copy)
         } else {
             removeDatabase(at: stagingURL)
             defer { removeDatabase(at: stagingURL) }
@@ -49,8 +55,15 @@ enum DemoMode {
         }
         DatabaseManager.shared.purgeWriteAheadLog()
         UserDefaults.standard.set(false, forKey: AppMode.demoKey)
-        removeDatabase(at: stashURL)
-        resume()
+        if FileManager.default.fileExists(atPath: stashURL.path) {
+            removeDatabase(at: previousURL)
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.moveItem(
+                    at: URL(fileURLWithPath: stashURL.path + suffix),
+                    to: URL(fileURLWithPath: previousURL.path + suffix)
+                )
+            }
+        }
     }
 
     private static func quiesce() {
@@ -62,6 +75,19 @@ enum DemoMode {
         ProviderManager.shared.invalidateAll()
         SyncScheduler.shared.start()
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+    }
+
+    /// Refuses a copy SQLite calls damaged, or one missing episodes the live library has —
+    /// a swap with either would lose the real library.
+    private static func verify(_ url: URL, matches live: DatabaseQueue?) throws {
+        let copy = try DatabaseQueue(path: url.path)
+        let (check, copied) = try copy.read { db in
+            (try String.fetchOne(db, sql: "PRAGMA quick_check") ?? "", try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM tracks") ?? 0)
+        }
+        let expected = try live?.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM tracks") ?? 0 }
+        guard check == "ok", expected.map({ $0 == copied }) ?? true else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: url.path])
+        }
     }
 
     private static func removeDatabase(at url: URL) {
