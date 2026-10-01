@@ -49,7 +49,7 @@ enum FirstRunRestore {
     }
 
     private static func shouldRun(ignoringProviders allowance: Int) -> Bool {
-        guard !UserDefaults.standard.bool(forKey: didRestoreKey) else { return false }
+        guard !UserDefaults.standard.bool(forKey: didRestoreKey), !AppMode.isDemo else { return false }
         let dbQueue = DatabaseManager.shared.dbQueue
         let providers = (try? ProviderStore(dbQueue: dbQueue).all().count) ?? .max
         let playlists = (try? PlaylistStore(dbQueue: dbQueue).all().count) ?? .max

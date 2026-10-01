@@ -17,6 +17,7 @@ struct SettingsSectionView: View {
     @State private var pendingPreview: SettingsViewModel.BackupPreview?
     @State private var showingAddAiKey = false
     @State private var showingRemoveAllConfirmation = false
+    @State private var isDemo = AppMode.isDemo
 
     /// Says which of the four reasons an iCloud folder can be unusable applies, because
     /// they need four different things said — and the explanation *replaces* the location
@@ -305,6 +306,25 @@ struct SettingsSectionView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
+                    title: "DEMO",
+                    info: "Swaps in a sample library for trying every feature and taking screenshots. Your own library is set aside untouched and comes back when this is switched off. Backups pause while it's on."
+                )
+                Toggle("Demo mode", isOn: $isDemo)
+                    .onChange(of: isDemo) { _, on in
+                        guard on != AppMode.isDemo else { return }
+                        do {
+                            try on ? DemoMode.enter() : DemoMode.leave()
+                        } catch {
+                            viewModel.errorMessage = error.localizedDescription
+                            isDemo = AppMode.isDemo
+                        }
+                        viewModel.load()
+                    }
+            }
+            .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeading(
                     title: "ABOUT",
                     info: "No accounts, no sign-in, no analytics, no ads, no tracking, and no server of ours to send anything to — there isn't one. Episodes play from the storage you picked, and backups go to storage you picked; both stay yours. The app reaches the network for two things only: the buckets and folders you added, and — if you add a key — the AI vendor that key belongs to, straight from this device. Transcription runs on the phone."
                 )
@@ -320,20 +340,22 @@ struct SettingsSectionView: View {
             // every device instead of living in one phone's Files app. These rows stay for
             // the sources picked before that, to switch one off or throw it away.
 
-            Button("Remove All App Data", role: .destructive) {
-                showingRemoveAllConfirmation = true
-            }
-            .font(.footnote)
-            .foregroundStyle(.red)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 8)
-            .confirmationDialog("Remove all app data?", isPresented: $showingRemoveAllConfirmation) {
-                Button("Remove Everything", role: .destructive) {
-                    Task { await viewModel.removeAllAppData() }
+            if !isDemo {
+                Button("Remove All App Data", role: .destructive) {
+                    showingRemoveAllConfirmation = true
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This deletes everything stored by the app on this device. A copy is saved first, by itself: into Files, and into iCloud Drive and your bucket wherever they're connected.")
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .confirmationDialog("Remove all app data?", isPresented: $showingRemoveAllConfirmation) {
+                    Button("Remove Everything", role: .destructive) {
+                        Task { await viewModel.removeAllAppData() }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This deletes everything stored by the app on this device. A copy is saved first, by itself: into Files, and into iCloud Drive and your bucket wherever they're connected.")
+                }
             }
         }
         .sectionRow()
