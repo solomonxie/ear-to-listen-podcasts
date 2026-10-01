@@ -69,7 +69,7 @@ enum AiVendor: String, Codable, CaseIterable {
         case .google: return "gemini-1.5-flash"
         case .groq: return "llama-3.1-8b-instant"
         case .mistral: return "mistral-small-latest"
-        case .deepSeek: return "deepseek-chat"
+        case .deepSeek: return "deepseek-v4-pro"
         case .xai: return "grok-2-latest"
         case .qwen: return "qwen-plus"
         case .moonshot: return "moonshot-v1-8k"
@@ -90,7 +90,7 @@ enum AiVendor: String, Codable, CaseIterable {
         case .google: return ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"]
         case .groq: return ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
         case .mistral: return ["mistral-small-latest", "mistral-large-latest"]
-        case .deepSeek: return ["deepseek-chat", "deepseek-reasoner"]
+        case .deepSeek: return ["deepseek-v4-pro"]
         case .xai: return ["grok-2-latest", "grok-3"]
         case .qwen: return ["qwen-turbo", "qwen-plus", "qwen-max"]
         case .moonshot: return ["moonshot-v1-8k", "moonshot-v1-32k", "kimi-latest"]
