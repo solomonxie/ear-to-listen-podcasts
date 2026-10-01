@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Single-page root: search up top, then Home/Library shelves, then Remote and
-/// Settings sections — no tab bar, everything reachable by scrolling.
+/// Single-page root: search up top, then Home/Library shelves, and a Settings button at
+/// the very bottom that opens sources and settings on a page of their own.
 struct HomeView: View {
     @StateObject private var homeData = HomeLibraryViewModel()
     @StateObject private var settings = SettingsViewModel()
@@ -27,10 +27,15 @@ struct HomeView: View {
                     searchResults
                 } else {
                     homeShelves
-                    Divider().padding(.horizontal)
-                    SourcesSectionView(viewModel: settings)
-                    Divider().padding(.horizontal)
-                    SettingsSectionView(viewModel: settings)
+                    NavigationLink(value: HomeRoute.settings) {
+                        Label("Settings", systemImage: "gearshape")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
                 }
             }
             .padding(.vertical)
@@ -41,7 +46,6 @@ struct HomeView: View {
         .navigationDestination(for: HomeRoute.self) { destination($0) }
         .navigationTitle("Good listening")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
-        .onAppear { settings.load() }
         // Debounced: `.task(id:)` cancels the previous run on the next keystroke, so
         // holding a key down searches once at the end rather than once per character.
         .task(id: query) {
@@ -96,6 +100,19 @@ struct HomeView: View {
             if let term = homeData.terms.first(where: { $0.id == id })?.term {
                 TermDetailView(term: term)
             }
+        case .settings:
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 28) {
+                    SourcesSectionView(viewModel: settings)
+                    Divider().padding(.horizontal)
+                    SettingsSectionView(viewModel: settings)
+                }
+                .padding(.vertical)
+            }
+            .background(Color.appBackground.ignoresSafeArea())
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { settings.load() }
         case .allTerms:
             TermsPageView(terms: homeData.terms)
         case .topic(let id):
