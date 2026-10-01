@@ -1,131 +1,196 @@
 import Foundation
 import GRDB
 
-/// Populates the real DB (not a parallel mock store) with a small sample library — a
-/// few speakers, topics, albums, playlists, and the three bundled demo clips as
-/// actual synced-look `Track`s — for someone who wants to look around before connecting
-/// anything. Everything it writes is tagged `isDemo = true` (the provider row is
-/// `DemoProvider.providerType`), so it can be wiped and reseeded without touching
-/// anything the user actually synced.
-///
-/// Never seeded automatically. A fresh install is an empty library, because content the
-/// user didn't put there is indistinguishable from content they did once it's sitting in
-/// the same shelves — they'd have to work out which of it is real.
+/// Writes the sample library in `demo-library.json` into a database — speakers, shows,
+/// episodes with progress and listened state, transcripts timed to the bundled audio
+/// (`demo-timings.json`, from `make-audio.py`), summaries, bookmarks, terms and playlists.
+/// Only ever into the dataset `DemoMode` swaps in, never over the listener's own.
 enum DemoDataSeeder {
-    static var isLoaded: Bool {
-        let count = try? DatabaseManager.shared.dbQueue.read { db in
-            try ProviderRecord.filter(Column("type") == DemoProvider.providerType).fetchCount(db)
-        }
-        return (count ?? 0) > 0
-    }
-
-    /// Loads the sample library, replacing any copy of it already there — the same call
-    /// backs both "load it" and "put it back the way it was".
-    static func load() throws {
-        try clear()
-        try seed()
-        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
-    }
-
-    /// Wipes the sample library without putting it back — once real sources are connected
-    /// the demo rows are just clutter in every shelf.
-    static func removeAll() throws {
-        try clear()
-        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
-    }
-
-    static func clear() throws {
-        try DatabaseManager.shared.dbQueue.write { db in
-            // Cascades to the demo tracks, their transcripts, and any queued sync jobs.
-            try ProviderRecord.filter(Column("type") == DemoProvider.providerType).deleteAll(db)
-
-            try db.execute(sql: "DELETE FROM playlistTracks WHERE playlistID IN (SELECT id FROM playlists WHERE isDemo = 1)")
-            try Playlist.filter(Column("isDemo") == true).deleteAll(db)
-            try db.execute(sql: "DELETE FROM albumTopics WHERE albumID IN (SELECT id FROM albums WHERE isDemo = 1)")
-            try Topic.filter(Column("isDemo") == true).deleteAll(db)
-            try Album.filter(Column("isDemo") == true).deleteAll(db)
-            try Artist.filter(Column("isDemo") == true).deleteAll(db)
-        }
-    }
-
-    private static func seed() throws {
-        let dbQueue = DatabaseManager.shared.dbQueue
+    static func seed(into dbQueue: DatabaseQueue, now: Date = Date()) throws {
+        let library = try decode(Library.self, from: "demo-library")
+        let timings = try decode([String: Timing].self, from: "demo-timings")
+        let days: (Int?) -> Date? = { $0.map { now.addingTimeInterval(-Double($0) * 86_400 - 3_600) } }
 
         let provider = ProviderRecord(
-            id: UUID().uuidString, type: DemoProvider.providerType, label: "Demo Content",
-            configJSON: "{}", isActive: false, createdAt: Date()
+            id: UUID().uuidString, type: DemoProvider.providerType, label: "Sample Library",
+            configJSON: "", isActive: false, createdAt: now, lastSyncedAt: now
         )
+        let artists = Dictionary(uniqueKeysWithValues: library.speakers.map { speaker in
+            (speaker.key, Artist(
+                id: UUID().uuidString, name: speaker.name, bio: speaker.bio, knownFor: speaker.knownFor,
+                background: speaker.background, link: speaker.link, isDemo: true
+            ))
+        })
+        let topics = Dictionary(uniqueKeysWithValues: library.topics.map {
+            ($0, Topic(id: UUID().uuidString, name: $0, isDemo: true))
+        })
 
-        let alex = Artist(id: UUID().uuidString, name: "Alex Chen", bio: "Co-host of Deep Dive, covering on-device AI and developer tools.", isDemo: true)
-        let priya = Artist(id: UUID().uuidString, name: "Priya Rao", bio: "Co-host of Deep Dive; explores how AI changes everyday tools.", isDemo: true)
-        let jordan = Artist(id: UUID().uuidString, name: "Jordan Lee", bio: "Host of Retrospective, a weekly history show.", isDemo: true)
-        let casey = Artist(id: UUID().uuidString, name: "Casey Kim", bio: "Host of Daily Brief, a short daily news rundown.", isDemo: true)
-
-        let technology = Topic(id: UUID().uuidString, name: "Technology", isDemo: true)
-        let ai = Topic(id: UUID().uuidString, name: "AI", isDemo: true)
-        let history = Topic(id: UUID().uuidString, name: "History", isDemo: true)
-        let news = Topic(id: UUID().uuidString, name: "News", isDemo: true)
-
-        let bestOf = Album(id: UUID().uuidString, artistID: nil, name: "Best of Demo", isDemo: true)
-        let origins = Album(id: UUID().uuidString, artistID: jordan.id, name: "Origins", isDemo: true)
-
-        let techTrack = Track(
-            id: UUID().uuidString, providerID: provider.id, artistID: alex.id, albumID: bestOf.id,
-            filePath: "ep-tech-1", title: "On-Device AI, For Real This Time",
-            trackNumber: nil, durationMs: nil, year: 2024, updatedAt: Date()
-        )
-        let historyTrack = Track(
-            id: UUID().uuidString, providerID: provider.id, artistID: jordan.id, albumID: origins.id,
-            filePath: "ep-history-1", title: "A Short History of the Podcast",
-            trackNumber: nil, durationMs: nil, year: 2023, updatedAt: Date()
-        )
-        let newsTrack = Track(
-            id: UUID().uuidString, providerID: provider.id, artistID: casey.id, albumID: bestOf.id,
-            filePath: "ep-news-1", title: "Local-First Is Having a Moment",
-            trackNumber: nil, durationMs: nil, year: 2024, updatedAt: Date()
-        )
-
-        let commuteMix = Playlist(id: UUID().uuidString, name: "Commute Mix", source: "local", createdAt: Date(), isDemo: true)
-        let weekendLongform = Playlist(id: UUID().uuidString, name: "Weekend Longform", source: "local", createdAt: Date(), isDemo: true)
-
+        var tracks: [String: Track] = [:]
         try dbQueue.write { db in
             try provider.insert(db)
-            for artist in [alex, priya, jordan, casey] { try artist.insert(db) }
-            for topic in [technology, ai, history, news] { try topic.insert(db) }
-            for album in [bestOf, origins] { try album.insert(db) }
-            // Topics tag collections now, so the demo library shows them doing that.
-            try AlbumTopic(albumID: bestOf.id, topicID: technology.id).insert(db)
-            try AlbumTopic(albumID: bestOf.id, topicID: ai.id).insert(db)
-            try AlbumTopic(albumID: bestOf.id, topicID: news.id).insert(db)
-            try AlbumTopic(albumID: origins.id, topicID: history.id).insert(db)
-            for track in [techTrack, historyTrack, newsTrack] { try track.insert(db) }
-            for playlist in [commuteMix, weekendLongform] { try playlist.insert(db) }
-            try PlaylistTrack(playlistID: commuteMix.id, trackID: techTrack.id, position: 0).insert(db)
-            try PlaylistTrack(playlistID: commuteMix.id, trackID: newsTrack.id, position: 1).insert(db)
-            try PlaylistTrack(playlistID: weekendLongform.id, trackID: historyTrack.id, position: 0).insert(db)
+            for artist in artists.values { try artist.insert(db) }
+            for topic in topics.values { try topic.insert(db) }
         }
 
+        let trackStore = TrackStore(dbQueue: dbQueue)
         let transcriptStore = TranscriptStore(dbQueue: dbQueue)
-        try transcriptStore.save(trackID: techTrack.id, segments: [
-            TranscriptSegment(start: 0.00, text: "Alex Chen: Welcome back to Deep Dive. I'm Alex Chen."),
-            TranscriptSegment(start: 3.43, text: "Priya Rao: And I'm Priya Rao. Today we're talking about on-device AI."),
-            TranscriptSegment(start: 7.22, text: "Alex Chen: The big shift is models small enough to run locally, so nothing leaves your phone."),
-            TranscriptSegment(start: 12.52, text: "Priya Rao: Which matters a lot once you're piping in personal data, like a podcast library."),
-            TranscriptSegment(start: 17.07, text: "Alex Chen: Exactly. That's the whole idea behind Ear to Listen Podcasts. Your files, your metadata, your device."),
-            TranscriptSegment(start: 25.69, text: "Priya Rao: Alright, that's our show for today. Thanks for listening."),
-        ])
-        try transcriptStore.save(trackID: historyTrack.id, segments: [
-            TranscriptSegment(start: 0.00, text: "Jordan Lee: This is Retrospective. I'm Jordan Lee."),
-            TranscriptSegment(start: 3.11, text: "Jordan Lee: This week: the history of the podcast format."),
-            TranscriptSegment(start: 7.33, text: "Jordan Lee: It really started with RSS feeds in the early 2000s, before anyone called it a podcast."),
-            TranscriptSegment(start: 14.19, text: "Jordan Lee: The name itself is a mashup of iPod and broadcast, which feels almost quaint now."),
-            TranscriptSegment(start: 22.60, text: "Jordan Lee: That's it for today. See you next week."),
-        ])
-        try transcriptStore.save(trackID: newsTrack.id, segments: [
-            TranscriptSegment(start: 0.00, text: "Casey Kim: You're listening to Daily Brief. I'm Casey Kim."),
-            TranscriptSegment(start: 2.74, text: "Casey Kim: Today's top story: local-first apps are having a moment."),
-            TranscriptSegment(start: 6.08, text: "Casey Kim: More people want their data to live on their own storage, not a vendor's server."),
-            TranscriptSegment(start: 10.19, text: "Casey Kim: That's a wrap for today's brief."),
-        ])
+        let termStore = TermStore(dbQueue: dbQueue)
+
+        for seed in library.albums {
+            let speaker = artists[seed.speaker]
+            let album = Album(
+                id: UUID().uuidString, artistID: speaker?.id, name: seed.name, notes: seed.notes,
+                profile: seed.profile, year: seed.year, language: seed.language, isDemo: true
+            )
+            try dbQueue.write { db in
+                try album.insert(db)
+                for name in seed.topics {
+                    guard let topic = topics[name] else { continue }
+                    try AlbumTopic(albumID: album.id, topicID: topic.id).insert(db)
+                }
+            }
+
+            for episode in seed.episodes {
+                guard let timing = timings[episode.key] else { continue }
+                let starts = timing.lines.map(\.start)
+                let artist = episode.speaker.flatMap { artists[$0] } ?? speaker
+                let track = Track(
+                    id: UUID().uuidString, providerID: provider.id, artistID: artist?.id, albumID: album.id,
+                    filePath: DemoProvider.fileName(for: episode.key), title: episode.title,
+                    trackNumber: episode.number, durationMs: timing.durationMs, year: seed.year,
+                    sizeBytes: timing.sizeBytes, contentHash: nil, language: seed.language,
+                    updatedAt: now, notes: episode.notes,
+                    summary: episode.summary.map { fillMarkers($0, starts: starts) },
+                    metadataEditedAt: now,
+                    positionMs: episode.progress.map { Int(Double(timing.durationMs) * min($0, 0.99)) },
+                    lastPlayedAt: days(episode.playedDaysAgo),
+                    isFavorite: episode.favorite ?? false,
+                    listenLater: episode.listenLater ?? false,
+                    listenedAt: episode.listened == true ? days(episode.playedDaysAgo) : nil
+                )
+                try trackStore.upsert(track, artistName: artist?.name, albumName: album.name)
+                tracks[episode.key] = track
+
+                let texts = episode.lines.map { $0.count > 1 ? $0[1] : "" }
+                try transcriptStore.save(trackID: track.id, segments: zip(timing.lines, texts).map {
+                    TranscriptSegment(start: $0.start, end: $0.end, text: $1)
+                })
+
+                let spoken = texts.joined(separator: " ").lowercased()
+                let mentions = (episode.terms ?? []).reduce(into: [String: Int]()) { counts, term in
+                    counts[term] = max(1, spoken.components(separatedBy: term.lowercased()).count - 1)
+                }
+                if !mentions.isEmpty { try termStore.setTerms(mentions, forTrack: track.id) }
+
+                try dbQueue.write { db in
+                    for mark in episode.bookmarks ?? [] where timing.lines.indices.contains(mark.line) {
+                        try Bookmark(
+                            id: UUID().uuidString, trackID: track.id,
+                            positionMs: Int(timing.lines[mark.line].start * 1000),
+                            note: mark.note, tags: mark.tags, transcriptText: texts[mark.line],
+                            createdAt: days(mark.daysAgo) ?? now
+                        ).insert(db)
+                    }
+                }
+            }
+        }
+
+        try dbQueue.write { db in
+            for (index, seed) in library.playlists.enumerated() {
+                let playlist = Playlist(
+                    id: UUID().uuidString, name: seed.name, source: "local",
+                    createdAt: now.addingTimeInterval(-Double(index) * 86_400), isDemo: true
+                )
+                try playlist.insert(db)
+                for (position, key) in seed.episodes.compactMap({ tracks[$0]?.id }).enumerated() {
+                    try PlaylistTrack(playlistID: playlist.id, trackID: key, position: position).insert(db)
+                }
+            }
+        }
+    }
+
+    /// `{3}` → `[0:21]`, the start of transcript line 3 — so the summary's times follow the
+    /// audio whenever `make-audio.py` regenerates it.
+    static func fillMarkers(_ text: String, starts: [Double]) -> String {
+        var result = text
+        for (index, start) in starts.enumerated().reversed() {
+            result = result.replacingOccurrences(of: "{\(index)}", with: EpisodeSummary.marker(for: start))
+        }
+        return result
+    }
+
+    private static func decode<T: Decodable>(_ type: T.Type, from name: String) throws -> T {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "json") else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return try JSONDecoder().decode(type, from: Data(contentsOf: url))
+    }
+
+    struct Library: Decodable {
+        var speakers: [Speaker]
+        var topics: [String]
+        var albums: [AlbumSeed]
+        var playlists: [PlaylistSeed]
+    }
+
+    struct Speaker: Decodable {
+        var key: String
+        var name: String
+        var bio: String?
+        var knownFor: String?
+        var background: String?
+        var link: String?
+    }
+
+    struct AlbumSeed: Decodable {
+        var key: String
+        var name: String
+        var speaker: String
+        var year: Int?
+        var language: String?
+        var topics: [String]
+        var notes: String?
+        var profile: String?
+        var episodes: [EpisodeSeed]
+    }
+
+    struct EpisodeSeed: Decodable {
+        var key: String
+        var number: Int?
+        var title: String
+        var speaker: String?
+        var progress: Double?
+        var listened: Bool?
+        var playedDaysAgo: Int?
+        var favorite: Bool?
+        var listenLater: Bool?
+        var notes: String?
+        /// `[speakerKey, text]` per line.
+        var lines: [[String]]
+        var summary: String?
+        var terms: [String]?
+        var bookmarks: [BookmarkSeed]?
+    }
+
+    struct BookmarkSeed: Decodable {
+        var line: Int
+        var note: String?
+        var tags: String?
+        var daysAgo: Int?
+    }
+
+    struct PlaylistSeed: Decodable {
+        var name: String
+        var episodes: [String]
+    }
+
+    struct Timing: Decodable {
+        struct Line: Decodable {
+            var start: Double
+            var end: Double
+        }
+        var durationMs: Int
+        var sizeBytes: Int64
+        var lines: [Line]
     }
 }

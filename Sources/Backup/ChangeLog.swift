@@ -47,7 +47,7 @@ enum ChangeLog {
         _ table: String, key: String, old: (any Encodable)? = nil, new: (any Encodable)? = nil,
         in dbQueue: DatabaseQueue
     ) {
-        guard dbQueue.path == DatabaseManager.databaseURL.path else { return }
+        guard dbQueue.path == DatabaseManager.databaseURL.path, !AppMode.isDemo else { return }
         let entry = Entry(at: Date(), table: table, key: key, old: json(old), new: json(new))
         UserDefaults.standard.set(mark + 1, forKey: markKey)
         writes.async { append(entry) }

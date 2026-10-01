@@ -1,0 +1,313 @@
+{
+  "speakers": [
+    {
+      "key": "maya", "name": "Maya Okafor", "voice": "Samantha", "rate": 182,
+      "bio": "Software engineer turned host. Co-founded Signal & Noise to talk about the tools people actually use.",
+      "knownFor": "Signal & Noise", "background": "Ten years building mobile apps in Lagos and London.",
+      "link": "https://example.com/signal-and-noise"
+    },
+    {
+      "key": "tom", "name": "Tom Becker", "voice": "Daniel", "rate": 178,
+      "bio": "Product designer and the skeptic of the pair. Has opinions about settings screens.",
+      "knownFor": "Signal & Noise", "background": "Designed audio apps for a decade before podcasting about them."
+    },
+    {
+      "key": "eleanor", "name": "Eleanor Hughes", "voice": "Moira", "rate": 170,
+      "bio": "Historian who tells the small stories the textbooks skip.",
+      "knownFor": "Footnotes of History", "background": "Lectures on early modern trade at a university in Dublin.",
+      "link": "https://example.com/footnotes"
+    },
+    {
+      "key": "priya", "name": "Dr. Priya Raman", "voice": "Tessa", "rate": 172,
+      "bio": "Sleep researcher. Explains what the studies actually say, and what they don't.",
+      "knownFor": "The Sleep Lab", "background": "Runs a clinical sleep study program; former night-shift nurse."
+    },
+    {
+      "key": "sam", "name": "Sam Doyle", "voice": "Karen", "rate": 176,
+      "bio": "Science journalist and the Sleep Lab's resident bad sleeper.",
+      "knownFor": "The Sleep Lab"
+    },
+    {
+      "key": "arjun", "name": "Arjun Mehta", "voice": "Rishi", "rate": 176,
+      "bio": "Former bank analyst who now teaches personal finance without the jargon.",
+      "knownFor": "Slow Money", "background": "Fifteen years in retail banking before going independent.",
+      "link": "https://example.com/slow-money"
+    },
+    {
+      "key": "linxiao", "name": "林晓", "voice": "Tingting", "rate": 190,
+      "bio": "图书编辑，每周和听众聊一本书。",
+      "knownFor": "晚安读书", "background": "在出版社做了八年编辑。"
+    }
+  ],
+
+  "topics": ["Technology", "Design", "History", "Science", "Health", "Money", "Books"],
+
+  "albums": [
+    {
+      "key": "signal", "name": "Signal & Noise", "speaker": "maya", "year": 2025, "language": "en-US",
+      "topics": ["Technology", "Design"],
+      "notes": "A weekly conversation about the software we live with — what works, what doesn't, and why.",
+      "profile": "Maya and Tom take one everyday piece of technology each week and pull it apart: who built it, what they were trying to fix, and what it quietly costs the people who use it.\n\nExpect strong opinions, real examples, and very little hype.",
+      "episodes": [
+        {
+          "key": "signal-1", "number": 1, "title": "Your Files, Your Rules",
+          "progress": 1.0, "listened": true, "playedDaysAgo": 9, "favorite": true,
+          "notes": "Great intro to local-first. Send to Dan.",
+          "lines": [
+            ["maya", "Welcome to Signal and Noise. I'm Maya Okafor."],
+            ["tom", "And I'm Tom Becker. Today we're talking about who actually owns the files on your phone."],
+            ["maya", "Here's the thing. Most apps keep your data on their server, and you just get to look at it."],
+            ["tom", "Which is fine, until the company shuts down, or changes the price, or loses interest."],
+            ["maya", "Local-first software flips that around. The copy on your device is the real one, and the cloud is just a backup."],
+            ["tom", "And the nice side effect is speed. Nothing waits on a network request before it shows up."],
+            ["maya", "The hard part is sync. Two devices, two edits, one truth. Somebody has to decide who wins."],
+            ["tom", "My rule of thumb: if the app can't explain where your data lives in one sentence, be careful."],
+            ["maya", "That's a good rule. Next week, we look at why every app now wants to be a subscription."],
+            ["tom", "Thanks for listening."]
+          ],
+          "summary": "Why local-first apps keep the real copy of your data on your own device, and what that costs.\n\n• {2} Most apps keep your data on their server; you only get to view it.\n• {4} Local-first flips it: the device copy is real, the cloud is a backup.\n• {6} Sync is the hard part — two edits, one truth.\n\nIf an app can't say where your data lives in one sentence, be careful.",
+          "terms": ["local-first", "sync", "server"],
+          "bookmarks": [
+            { "line": 4, "note": "Good definition of local-first", "tags": "quote, local-first", "daysAgo": 9 },
+            { "line": 7, "note": "Use this rule in the team review", "tags": "rule of thumb", "daysAgo": 9 }
+          ]
+        },
+        {
+          "key": "signal-2", "number": 2, "title": "Everything Is a Subscription Now",
+          "progress": 0.55, "playedDaysAgo": 0,
+          "lines": [
+            ["tom", "Welcome back to Signal and Noise. Maya, how many subscriptions do you pay for right now?"],
+            ["maya", "I counted last night. Fourteen. Three of them I'd forgotten about entirely."],
+            ["tom", "That's the business model working exactly as designed."],
+            ["maya", "To be fair, subscriptions pay for real work. Servers cost money every month, forever."],
+            ["tom", "Sure, but a calculator app doesn't run a server. A one-time price would be honest there."],
+            ["maya", "I think the test is simple. Does the app cost the developer money every time I use it?"],
+            ["tom", "If yes, a subscription makes sense. If no, it's rent on something you already bought."],
+            ["maya", "And listeners, check your settings tonight. Look for the ones you forgot."],
+            ["tom", "That's the show. See you next week."]
+          ],
+          "summary": "When a subscription is fair, and when it's rent.\n\n• {1} Maya counts fourteen subscriptions; three were forgotten.\n• {3} Servers cost money every month, which is a fair reason to charge monthly.\n• {5} The test: does each use cost the developer money?",
+          "terms": ["subscription", "server"],
+          "bookmarks": [
+            { "line": 5, "note": "The subscription test", "tags": "pricing", "daysAgo": 0 }
+          ]
+        },
+        {
+          "key": "signal-3", "number": 3, "title": "In Defense of the Settings Screen",
+          "listenLater": true,
+          "lines": [
+            ["maya", "This is Signal and Noise. Tom, you wanted a whole episode about settings screens."],
+            ["tom", "I did, and I'm not sorry. The settings screen is where an app tells you what it really thinks of you."],
+            ["maya", "Go on."],
+            ["tom", "Hide every option, and you're saying the user can't be trusted. Show every option, and you're saying you couldn't decide."],
+            ["maya", "So what's the middle ground?"],
+            ["tom", "Good defaults, and then a few honest switches that each explain themselves in one line."],
+            ["maya", "I'd add one thing. A switch should take effect right away. No restart, no mystery."],
+            ["tom", "Agreed. If I flip it and nothing happens, I assume it's broken."],
+            ["maya", "That's our show. Go look at your settings screen and judge it kindly."]
+          ],
+          "summary": "What a settings screen says about how an app sees its users.\n\n• {3} Hiding everything distrusts users; showing everything is indecision.\n• {5} Good defaults plus a few self-explaining switches.\n• {6} A switch should take effect immediately.",
+          "terms": ["settings", "defaults"]
+        }
+      ]
+    },
+
+    {
+      "key": "footnotes", "name": "Footnotes of History", "speaker": "eleanor", "year": 2024, "language": "en-IE",
+      "topics": ["History"],
+      "notes": "Short stories from the margins of big history.",
+      "profile": "Each episode follows one small object, rule or accident that ended up shaping something much bigger.\n\nNo dates to memorise — just the story, and why it still matters.",
+      "episodes": [
+        {
+          "key": "footnotes-1", "number": 1, "title": "The Clock That Unified Britain",
+          "progress": 1.0, "listened": true, "playedDaysAgo": 14,
+          "lines": [
+            ["eleanor", "Hello, and welcome to Footnotes of History. I'm Eleanor Hughes."],
+            ["eleanor", "Until the eighteen forties, every town in Britain kept its own time, set by the sun over the local church."],
+            ["eleanor", "Bristol ran about ten minutes behind London. Nobody minded, because nobody travelled fast enough to notice."],
+            ["eleanor", "Then came the railways. A train leaving London at noon arrived in Bristol at a time that made no sense on either clock."],
+            ["eleanor", "Passengers missed connections. Worse, two trains on one line could disagree about what time it was."],
+            ["eleanor", "So the railway companies did something radical. They adopted London time everywhere, and called it railway time."],
+            ["eleanor", "Towns resisted for years. Some clocks were built with two minute hands, one for local time and one for the railway."],
+            ["eleanor", "By eighteen eighty, it became law. The whole country set its watches to Greenwich."],
+            ["eleanor", "So the next time you check your phone, remember: the time on it was invented by a train timetable."],
+            ["eleanor", "Thanks for listening. Until next time."]
+          ],
+          "summary": "How railways forced Britain onto a single clock.\n\n• {1} Every town kept local solar time.\n• {3} Trains made the differences impossible to ignore.\n• {6} Some clocks had two minute hands.\n• {7} Greenwich time became law in 1880.",
+          "terms": ["railway time", "Greenwich", "Bristol"],
+          "bookmarks": [
+            { "line": 6, "note": "Two minute hands! Find a photo of one.", "tags": "trivia", "daysAgo": 14 }
+          ]
+        },
+        {
+          "key": "footnotes-2", "number": 2, "title": "Why Ships Ate Sauerkraut",
+          "progress": 0.3, "playedDaysAgo": 2,
+          "lines": [
+            ["eleanor", "This is Footnotes of History. Today, a story about cabbage, and the sea."],
+            ["eleanor", "On long voyages in the seventeen hundreds, scurvy killed more sailors than storms or battles."],
+            ["eleanor", "Captain James Cook was determined that his crew would not suffer the same fate."],
+            ["eleanor", "He loaded his ship with barrels of sauerkraut. The problem was, the sailors refused to eat it."],
+            ["eleanor", "So Cook served it only at the officers' table. Within a week, the crew were demanding their share."],
+            ["eleanor", "Sauerkraut didn't actually hold much vitamin C after months at sea. Cook's real advantage was fresh food at every port."],
+            ["eleanor", "But the story of the officers' table is still taught as a lesson in persuasion."],
+            ["eleanor", "Sometimes the fastest way to make people want something is to tell them they can't have it."],
+            ["eleanor", "That's all for this week."]
+          ],
+          "summary": "Captain Cook, scurvy, and a lesson in persuasion.\n\n• {1} Scurvy killed more sailors than battles.\n• {4} Serving sauerkraut only to officers made the crew want it.\n• {5} The real cure was fresh food at port.",
+          "terms": ["scurvy", "sauerkraut", "Captain James Cook"]
+        },
+        {
+          "key": "footnotes-3", "number": 3, "title": "The Library That Lent Out People",
+          "lines": [
+            ["eleanor", "Welcome to Footnotes of History. This week, a library with an unusual catalogue."],
+            ["eleanor", "In Copenhagen, in the year two thousand, a group of young people set up what they called a human library."],
+            ["eleanor", "Instead of books, you could borrow a person for thirty minutes and ask them anything."],
+            ["eleanor", "A police officer. A refugee. Someone living with schizophrenia. Each one a book with a title on its cover."],
+            ["eleanor", "The idea was simple. It's harder to hold a prejudice against someone once you've sat across a table from them."],
+            ["eleanor", "Today, human libraries run in more than eighty countries."],
+            ["eleanor", "It's a small footnote, but a hopeful one. Thanks for listening."]
+          ],
+          "summary": "A library in Copenhagen that lends out people instead of books.\n\n• {2} Borrow a person for thirty minutes.\n• {4} Prejudice is harder face to face.\n• {5} Now in more than eighty countries.",
+          "terms": ["human library", "Copenhagen"]
+        }
+      ]
+    },
+
+    {
+      "key": "sleeplab", "name": "The Sleep Lab", "speaker": "priya", "year": 2025, "language": "en-ZA",
+      "topics": ["Science", "Health"],
+      "notes": "Evidence-based answers to the questions you ask at three in the morning.",
+      "profile": "A sleep researcher and a chronic insomniac go through one sleep question per episode, separating what the evidence says from what the internet says.",
+      "episodes": [
+        {
+          "key": "sleep-1", "number": 1, "title": "Does Melatonin Actually Work?",
+          "progress": 0.8, "playedDaysAgo": 1, "favorite": true,
+          "lines": [
+            ["sam", "Welcome to The Sleep Lab. I'm Sam Doyle, and I have not slept well since about two thousand nineteen."],
+            ["priya", "And I'm Doctor Priya Raman. Today's question comes from Sam, unsurprisingly. Does melatonin work?"],
+            ["sam", "I take it most nights. Am I wasting my money?"],
+            ["priya", "It depends what you're using it for. Melatonin is a timing signal, not a sedative. It tells your body when night is."],
+            ["priya", "For jet lag, or for shifting a late body clock earlier, the evidence is quite good."],
+            ["sam", "And for just falling asleep faster on a normal night?"],
+            ["priya", "Modest. Studies find people fall asleep a few minutes sooner on average. Not nothing, but not magic."],
+            ["priya", "Timing matters more than dose. A small amount, a few hours before bed, often beats a big one at bedtime."],
+            ["sam", "So I've been doing it exactly backwards."],
+            ["priya", "Most people are. Next week: is it really bad to look at your phone in bed?"]
+          ],
+          "summary": "Melatonin is a timing signal, not a sleeping pill.\n\n• {3} It tells the body when night is.\n• {4} Good evidence for jet lag and late body clocks.\n• {6} Only a few minutes faster to fall asleep on a normal night.\n• {7} Timing beats dose: small, a few hours before bed.",
+          "terms": ["melatonin", "jet lag", "body clock"],
+          "bookmarks": [
+            { "line": 7, "note": "Try 0.5 mg at 8pm instead of 5 mg at 11", "tags": "try this, sleep", "daysAgo": 1 },
+            { "line": 3, "note": "Timing signal, not sedative", "tags": "quote", "daysAgo": 1 }
+          ]
+        },
+        {
+          "key": "sleep-2", "number": 2, "title": "Phones in Bed: How Bad Is It?",
+          "listenLater": true,
+          "lines": [
+            ["sam", "This is The Sleep Lab. Priya, I'm recording this from bed, on my phone. Judge me."],
+            ["priya", "I'll judge the evidence instead. The blue light story is weaker than most people think."],
+            ["priya", "Screens at normal brightness shift melatonin a little, but the effect on actual sleep is small."],
+            ["sam", "So why do I feel awful after scrolling until midnight?"],
+            ["priya", "Because the problem isn't the light. It's the content. Scrolling is designed to keep you awake and engaged."],
+            ["priya", "Something calm, like an audiobook or a familiar podcast, is very different from an endless feed."],
+            ["sam", "So listening to this podcast in bed is fine."],
+            ["priya", "Listening to this podcast in bed is excellent. Set a sleep timer, and goodnight."]
+          ],
+          "summary": "It's what you look at, not the light.\n\n• {1} The blue light effect is weaker than claimed.\n• {4} Engaging content is the real problem.\n• {5} Calm audio is fine — use a sleep timer.",
+          "terms": ["blue light", "melatonin", "sleep timer"]
+        }
+      ]
+    },
+
+    {
+      "key": "slowmoney", "name": "Slow Money", "speaker": "arjun", "year": 2023, "language": "en-IN",
+      "topics": ["Money"],
+      "notes": "Personal finance for people who'd rather not think about personal finance.",
+      "profile": "Arjun explains one money habit per episode in plain language — no stock tips, no get-rich-quick, just the boring things that work.",
+      "episodes": [
+        {
+          "key": "money-1", "number": 1, "title": "The Three-Account System",
+          "progress": 1.0, "listened": true, "playedDaysAgo": 21,
+          "lines": [
+            ["arjun", "Hello and welcome to Slow Money. I'm Arjun Mehta."],
+            ["arjun", "Today, the simplest system I know for not worrying about money. Three bank accounts."],
+            ["arjun", "Account one is for bills. Rent, utilities, insurance. Everything fixed goes here automatically on payday."],
+            ["arjun", "Account two is for spending. Whatever is left for the month, you spend freely, and without guilt."],
+            ["arjun", "Account three is for saving. A fixed amount moves there first, before you ever see it."],
+            ["arjun", "The trick is that you never have to do arithmetic. If the spending account has money, you can spend it."],
+            ["arjun", "It sounds too simple. That's the point. Systems you have to think about are systems you stop using."],
+            ["arjun", "That's it for today. Go open two more accounts."]
+          ],
+          "summary": "Bills, spending and saving — three accounts, no arithmetic.\n\n• {2} Fixed costs leave automatically on payday.\n• {3} Spend what's left without guilt.\n• {4} Savings move first, before you see them.",
+          "terms": ["savings", "bills", "payday"],
+          "bookmarks": [
+            { "line": 6, "note": "Systems you have to think about are systems you stop using", "tags": "quote", "daysAgo": 21 }
+          ]
+        },
+        {
+          "key": "money-2", "number": 2, "title": "Why You Should Pay Yourself First",
+          "progress": 0.15, "playedDaysAgo": 4,
+          "lines": [
+            ["arjun", "Welcome back to Slow Money. Last time, three accounts. Today, the most important habit behind them."],
+            ["arjun", "Pay yourself first. It means your savings come out of your income before anything else does."],
+            ["arjun", "Most people save whatever is left at the end of the month. And at the end of the month, there is nothing left."],
+            ["arjun", "Spending expands to fill whatever is available. That's not a character flaw. It's just how people work."],
+            ["arjun", "So make the available amount smaller. Automate the transfer for the morning after payday."],
+            ["arjun", "Start with five percent if that's all you can do. The habit matters more than the number."],
+            ["arjun", "In a year, you'll have a cushion you barely noticed building. That's slow money."]
+          ],
+          "summary": "Savings come out first, automatically.\n\n• {2} Saving what's left means saving nothing.\n• {3} Spending expands to fill what's available.\n• {5} Start at five percent; the habit matters most.",
+          "terms": ["pay yourself first", "savings", "payday"]
+        }
+      ]
+    },
+
+    {
+      "key": "goodnight", "name": "晚安读书", "speaker": "linxiao", "year": 2024, "language": "zh-CN",
+      "topics": ["Books"],
+      "notes": "每周一本书，睡前十分钟。",
+      "profile": "图书编辑林晓每期挑一本书，用十分钟讲清楚它为什么值得读。适合睡前听。",
+      "episodes": [
+        {
+          "key": "goodnight-1", "number": 1, "title": "《活着》：苦难里的温柔",
+          "progress": 0.6, "playedDaysAgo": 3,
+          "lines": [
+            ["linxiao", "大家好，欢迎收听晚安读书，我是林晓。"],
+            ["linxiao", "今天我们聊余华的小说《活着》。"],
+            ["linxiao", "很多人说这是一本让人流泪的书。主人公福贵失去了几乎所有的亲人。"],
+            ["linxiao", "但我每次重读，记住的却不是苦难，而是他身上那种安静的韧性。"],
+            ["linxiao", "余华说过，人是为活着本身而活着，而不是为了活着之外的任何事物。"],
+            ["linxiao", "这句话听起来很简单，却需要一辈子去理解。"],
+            ["linxiao", "如果你最近觉得很累，不妨读一读这本书。"],
+            ["linxiao", "好了，今天就到这里。晚安。"]
+          ],
+          "summary": "余华《活着》：苦难之下的韧性。\n\n• {2} 福贵几乎失去了所有亲人。\n• {3} 重读时记住的是安静的韧性。\n• {4} 人是为活着本身而活着。",
+          "terms": ["余华", "活着", "福贵"],
+          "bookmarks": [
+            { "line": 4, "note": "人是为活着本身而活着", "tags": "摘抄", "daysAgo": 3 }
+          ]
+        },
+        {
+          "key": "goodnight-2", "number": 2, "title": "《小王子》：重要的东西眼睛看不见",
+          "lines": [
+            ["linxiao", "欢迎收听晚安读书。今天这本书，很多人小时候就读过，那就是《小王子》。"],
+            ["linxiao", "小时候读，它是一个童话。长大以后再读，才发现它是写给大人的。"],
+            ["linxiao", "书里的狐狸对小王子说，只有用心才能看清，重要的东西用眼睛是看不见的。"],
+            ["linxiao", "小王子的玫瑰之所以特别，是因为他为她花费了时间。"],
+            ["linxiao", "我们身边的人也是这样。陪伴本身，就是意义。"],
+            ["linxiao", "今晚睡前，想一想你的那朵玫瑰是谁。晚安。"]
+          ],
+          "summary": "《小王子》是写给大人的童话。\n\n• {2} 重要的东西用眼睛是看不见的。\n• {3} 玫瑰特别，是因为花费了时间。\n• {4} 陪伴本身就是意义。",
+          "terms": ["小王子", "狐狸", "玫瑰"]
+        }
+      ]
+    }
+  ],
+
+  "playlists": [
+    { "name": "Morning Commute", "episodes": ["signal-2", "money-2", "footnotes-2"] },
+    { "name": "Wind Down", "episodes": ["sleep-2", "goodnight-1", "goodnight-2", "footnotes-3"] },
+    { "name": "Share With Friends", "episodes": ["signal-1", "sleep-1", "money-1"] }
+  ]
+}

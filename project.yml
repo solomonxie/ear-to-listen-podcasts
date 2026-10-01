@@ -19,6 +19,11 @@ targets:
         excludes:
           - "**/README.md"
       - path: Resources
+      # The sample library behind Settings > Demo mode. Ships in every build.
+      - path: DemoData
+        excludes:
+          - "README.md"
+          - "make-audio.py"
     dependencies:
       - package: GRDB
         product: GRDB
@@ -79,6 +84,11 @@ targets:
         # project that builds for the simulator and fails to sign for a device, which is a
         # confusing way to find out. Fork this repo and it's the one line to change.
         DEVELOPMENT_TEAM: REPLACE_WITH_YOUR_TEAM_ID
+    postBuildScripts:
+      # .env.demo into non-Release builds only — see DemoData/README.md.
+      - name: Demo credentials
+        script: sh "$SRCROOT/scripts/demo-secrets.sh"
+        basedOnDependencyAnalysis: false
 
   EarToListenTests:
     type: bundle.unit-test
