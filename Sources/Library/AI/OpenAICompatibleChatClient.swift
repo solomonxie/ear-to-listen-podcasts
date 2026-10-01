@@ -1,6 +1,6 @@
 import Foundation
 
-/// Several vendors (OpenAI itself, Groq, Mistral, DeepSeek, xAI) expose the same
+/// Most vendors (OpenAI itself, Groq, DeepSeek, Qwen, Kimi, ...) expose the same
 /// `/chat/completions` request/response shape — this is that shared implementation,
 /// parameterized by endpoint/model/display name, so each of those vendors is a one-line
 /// config rather than its own copy of this. Vendors with their own shape
@@ -72,28 +72,39 @@ enum OpenAICompatibleChatClient {
     }
 }
 
-/// One `Config` per vendor that speaks this shape, rather than a file each — they're the
-/// same client, only the endpoint/model differ. Model ids are best-effort defaults
-/// (small/cheap tiers); update one if it ever starts 404ing.
+/// Every vendor that speaks this shape, in one table — they're the same client, only the
+/// endpoint differs. Model defaults (small/cheap tiers) live on `AiVendor`. Nil for
+/// vendors with their own shape, and for `.custom`, whose endpoint is on the key.
 extension OpenAICompatibleChatClient.Config {
-    static let groq = Self(
-        vendorName: "Groq",
-        endpoint: URL(string: "https://api.groq.com/openai/v1/chat/completions")!,
-        model: "llama-3.1-8b-instant"
-    )
-    static let mistral = Self(
-        vendorName: "Mistral",
-        endpoint: URL(string: "https://api.mistral.ai/v1/chat/completions")!,
-        model: "mistral-small-latest"
-    )
-    static let deepSeek = Self(
-        vendorName: "DeepSeek",
-        endpoint: URL(string: "https://api.deepseek.com/chat/completions")!,
-        model: "deepseek-chat"
-    )
-    static let xai = Self(
-        vendorName: "xAI",
-        endpoint: URL(string: "https://api.x.ai/v1/chat/completions")!,
-        model: "grok-2-latest"
-    )
+    static func forVendor(_ vendor: AiVendor) -> Self? {
+        let endpoint: String
+        switch vendor {
+        case .groq: endpoint = "https://api.groq.com/openai/v1/chat/completions"
+        case .mistral: endpoint = "https://api.mistral.ai/v1/chat/completions"
+        case .deepSeek: endpoint = "https://api.deepseek.com/chat/completions"
+        case .xai: endpoint = "https://api.x.ai/v1/chat/completions"
+        case .qwen: endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+        case .moonshot: endpoint = "https://api.moonshot.cn/v1/chat/completions"
+        case .zhipu: endpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+        case .doubao: endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+        case .openAI, .anthropic, .google, .custom: return nil
+        }
+        return Self(vendorName: vendor.displayName, endpoint: URL(string: endpoint)!, model: vendor.defaultModel)
+    }
+
+    /// A listener's own server. Takes a base (`https://host/v1`) or the full endpoint.
+    static func custom(baseURL: String, model: String) -> Self? {
+        guard let endpoint = customEndpoint(baseURL), let host = endpoint.host else { return nil }
+        return Self(vendorName: host, endpoint: endpoint, model: model)
+    }
+
+    static func customEndpoint(_ baseURL: String) -> URL? {
+        var text = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        while text.hasSuffix("/") { text.removeLast() }
+        guard
+            let url = URL(string: text), let scheme = url.scheme?.lowercased(),
+            scheme == "https" || scheme == "http", url.host?.isEmpty == false
+        else { return nil }
+        return text.hasSuffix("/chat/completions") ? url : url.appendingPathComponent("chat/completions")
+    }
 }

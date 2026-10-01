@@ -27,7 +27,8 @@ on the phone unless you turn on a backup or export it yourself.
   transcribed are sent to OpenAI under your own API key.
 - **AI suggestions.** Off until you add a key. Titles, show names, notes, transcript text
   and artwork prompts for the episode you are working on are sent to the provider you
-  picked — OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, or xAI — under your own
+  picked — OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, Qwen, Kimi, GLM,
+  Doubao, or a custom server you entered — under your own
   account with them. Their privacy policy governs what they do with it.
 - **Image search.** Tapping the artwork search link opens your default browser at a search
   page. Nothing from your library is sent anywhere by the app itself.

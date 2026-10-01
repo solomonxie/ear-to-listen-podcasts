@@ -95,6 +95,9 @@ struct ArtworkSuggester {
         }
     }
 
+    /// Only OpenAI and xAI draw, and the China storefront offers neither.
+    static var isOffered: Bool { AiVendor.openAI.isOffered || AiVendor.xai.isOffered }
+
     /// Big enough to be worth keeping, small enough that a mistake costs a second.
     private static let maximumBytes = 12_000_000
 

@@ -59,12 +59,12 @@ final class SettingsViewModel: ObservableObject {
     /// through `errorMessage`) so the add-key sheet can show the failure inline.
     /// The test call goes through the *chosen* model, so a mistyped custom name fails
     /// here rather than silently on every sync afterwards.
-    func addAiKey(vendor: AiVendor, model: String?, secret: String) async throws {
+    func addAiKey(vendor: AiVendor, model: String?, baseURL: String? = nil, secret: String) async throws {
         _ = try await AiRouter.runChatCompletion(
-            vendor: vendor, apiKey: secret, model: model,
+            vendor: vendor, apiKey: secret, model: model, baseURL: baseURL,
             messages: [ChatMessage(role: .user, content: "Reply with \"ok\".")]
         )
-        try aiKeyStore.add(vendor: vendor, model: model, secret: secret)
+        try aiKeyStore.add(vendor: vendor, model: model, baseURL: baseURL, secret: secret)
         aiKeys = try aiKeyStore.all()
     }
 

@@ -209,7 +209,7 @@ struct SettingsSectionView: View {
                             AiKeyDetailView(key: key)
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(key.vendor.displayName).font(.subheadline)
+                                Text(key.displayName).font(.subheadline)
                                 Text("\(key.requestCount) request\(key.requestCount == 1 ? "" : "s") sent")
                                     .sectionRowSecondary()
                             }
@@ -241,6 +241,9 @@ struct SettingsSectionView: View {
                 } label: {
                     Label("Add AI Key", systemImage: "plus.circle")
                 }
+                #if DEBUG
+                StorefrontOverrideRow { viewModel.load() }
+                #endif
             }
             .padding(.horizontal)
             .sheet(isPresented: $showingAddAiKey) {

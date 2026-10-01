@@ -31,6 +31,7 @@ struct EarToListenApp: App {
                 // A reinstall gets its data back before anything is shown, without being
                 // asked — on a first launch there's no context for that question.
                 .task { await FirstRunRestore.runIfNeeded() }
+                .task(priority: .utility) { await AppStorefront.refresh() }
                 .environmentObject(playback)
                 .environmentObject(language)
                 // Drives which localization every `Text("…")` resolves to, so the picker
