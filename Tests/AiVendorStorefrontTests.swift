@@ -43,6 +43,13 @@ final class AiVendorStorefrontTests: XCTestCase {
         XCTAssertNil(endpoint(""))
     }
 
+    func testChinaStorefrontDefaultsToChineseOnlyUntilALanguageIsPicked() {
+        XCTAssertEqual(AppLanguage.initial(stored: nil, isChina: true), .chinese)
+        XCTAssertEqual(AppLanguage.initial(stored: nil, isChina: false), .system)
+        XCTAssertEqual(AppLanguage.initial(stored: "english", isChina: true), .english)
+        XCTAssertEqual(AppLanguage.initial(stored: "system", isChina: true), .system)
+    }
+
     func testCustomKeyIsNamedByItsHost() {
         let key = AiKey(id: "c", vendor: .custom, position: 0, createdAt: Date(), baseURL: "https://llm.example.cn/v1")
         XCTAssertEqual(key.displayName, "llm.example.cn")
