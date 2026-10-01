@@ -161,7 +161,7 @@ struct TranscriptPane: View {
             }
 
             HStack(spacing: 10) {
-                ForEach(TranscriptionEngineKind.allCases, id: \.self) { engine in
+                ForEach(TranscriptionEngineKind.offered, id: \.self) { engine in
                     engineButton(engine)
                 }
                 // The selection bar used to replace this whole row, which kept these out of

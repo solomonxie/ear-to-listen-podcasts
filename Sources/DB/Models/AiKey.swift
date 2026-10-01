@@ -9,6 +9,26 @@ enum AiVendor: String, Codable, CaseIterable {
     case mistral = "mistral"
     case deepSeek = "deepseek"
     case xai = "xai"
+    case qwen = "qwen"
+    case moonshot = "moonshot"
+    case zhipu = "zhipu"
+    case doubao = "doubao"
+    /// Any OpenAI-compatible `/chat/completions` server; the key row carries its URL.
+    case custom = "custom"
+
+    /// Licensed in mainland China, so offered on the China storefront.
+    var isChinaApproved: Bool {
+        switch self {
+        case .deepSeek, .qwen, .moonshot, .zhipu, .doubao, .custom: return true
+        case .openAI, .anthropic, .google, .groq, .mistral, .xai: return false
+        }
+    }
+
+    func isOffered(inChina china: Bool) -> Bool { !china || isChinaApproved }
+
+    var isOffered: Bool { isOffered(inChina: AppStorefront.isChina) }
+
+    static var offered: [AiVendor] { allCases.filter(\.isOffered) }
 
     var displayName: String {
         switch self {
@@ -19,24 +39,29 @@ enum AiVendor: String, Codable, CaseIterable {
         case .mistral: return "Mistral"
         case .deepSeek: return "DeepSeek"
         case .xai: return "xAI (Grok)"
+        case .qwen: return "Qwen (Alibaba)"
+        case .moonshot: return "Kimi (Moonshot)"
+        case .zhipu: return "GLM (Zhipu)"
+        case .doubao: return "Doubao (Volcengine)"
+        case .custom: return String(localized: "Custom (OpenAI-compatible)")
         }
     }
 
     /// What this vendor's key looks like — doubles as the add-key field's placeholder.
     var keyHint: String {
         switch self {
-        case .openAI, .deepSeek: return "sk-…"
+        case .openAI, .deepSeek, .qwen, .moonshot: return "sk-…"
         case .anthropic: return "sk-ant-…"
         case .google: return "AIza…"
         case .groq: return "gsk_…"
-        case .mistral: return "…"
         case .xai: return "xai-…"
+        case .mistral, .zhipu, .doubao, .custom: return "…"
         }
     }
 
     /// What this vendor is called when no model has been picked. The cheap, fast tier in
     /// each family: this runs per-episode during a sync, so the default has to be one
-    /// nobody minds spending.
+    /// nobody minds spending. Empty for `.custom`, which has no default to fall back on.
     var defaultModel: String {
         switch self {
         case .openAI: return "gpt-4o-mini"
@@ -46,6 +71,11 @@ enum AiVendor: String, Codable, CaseIterable {
         case .mistral: return "mistral-small-latest"
         case .deepSeek: return "deepseek-chat"
         case .xai: return "grok-2-latest"
+        case .qwen: return "qwen-plus"
+        case .moonshot: return "moonshot-v1-8k"
+        case .zhipu: return "glm-4-flash"
+        case .doubao: return "doubao-1-5-lite-32k-250115"
+        case .custom: return ""
         }
     }
 
@@ -62,20 +92,30 @@ enum AiVendor: String, Codable, CaseIterable {
         case .mistral: return ["mistral-small-latest", "mistral-large-latest"]
         case .deepSeek: return ["deepseek-chat", "deepseek-reasoner"]
         case .xai: return ["grok-2-latest", "grok-3"]
+        case .qwen: return ["qwen-turbo", "qwen-plus", "qwen-max"]
+        case .moonshot: return ["moonshot-v1-8k", "moonshot-v1-32k", "kimi-latest"]
+        case .zhipu: return ["glm-4-flash", "glm-4-air", "glm-4-plus"]
+        case .doubao: return ["doubao-1-5-lite-32k-250115", "doubao-1-5-pro-32k-250115"]
+        case .custom: return []
         }
     }
 
     /// Where to go make one, linked from the add-key screen so adding a key doesn't
-    /// require already knowing each vendor's console.
-    var docsURL: URL {
+    /// require already knowing each vendor's console. Nil for `.custom`.
+    var docsURL: URL? {
         switch self {
-        case .openAI: return URL(string: "https://platform.openai.com/api-keys")!
-        case .anthropic: return URL(string: "https://console.anthropic.com/settings/keys")!
-        case .google: return URL(string: "https://aistudio.google.com/apikey")!
-        case .groq: return URL(string: "https://console.groq.com/keys")!
-        case .mistral: return URL(string: "https://console.mistral.ai/api-keys")!
-        case .deepSeek: return URL(string: "https://platform.deepseek.com/api_keys")!
-        case .xai: return URL(string: "https://console.x.ai")!
+        case .openAI: return URL(string: "https://platform.openai.com/api-keys")
+        case .anthropic: return URL(string: "https://console.anthropic.com/settings/keys")
+        case .google: return URL(string: "https://aistudio.google.com/apikey")
+        case .groq: return URL(string: "https://console.groq.com/keys")
+        case .mistral: return URL(string: "https://console.mistral.ai/api-keys")
+        case .deepSeek: return URL(string: "https://platform.deepseek.com/api_keys")
+        case .xai: return URL(string: "https://console.x.ai")
+        case .qwen: return URL(string: "https://bailian.console.aliyun.com/?apiKey=1")
+        case .moonshot: return URL(string: "https://platform.moonshot.cn/console/api-keys")
+        case .zhipu: return URL(string: "https://open.bigmodel.cn/usercenter/apikeys")
+        case .doubao: return URL(string: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey")
+        case .custom: return nil
         }
     }
 }
@@ -105,7 +145,17 @@ struct AiKey: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var requestCount: Int = 0
     var position: Int
     var createdAt: Date
+    /// Only for `.custom`: the server's base URL, as typed.
+    var baseURL: String?
 
     /// What this key will actually call.
     var resolvedModel: String { model?.nilIfEmpty ?? vendor.defaultModel }
+
+    /// A custom key reads as its host, so two of them can be told apart.
+    var displayName: String {
+        guard vendor == .custom, let host = baseURL.flatMap({ URL(string: $0)?.host }) else {
+            return vendor.displayName
+        }
+        return host
+    }
 }

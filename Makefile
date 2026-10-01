@@ -4,11 +4,15 @@
 # is the usual reason a green checkout stops building: make test SIMULATOR='iPhone 17'
 SIMULATOR ?= iPhone 18 Pro
 
+# App Store storefront a Debug install acts as: USA, or CHN to see the China build.
+STORE ?= USA
+
 XCB = xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
       -skipPackagePluginValidation -skipMacroValidation
 
 help:
-	@echo "make ios          build + install onto the paired iPhone"
+	@echo "make ios          build + install onto the paired iPhone (US storefront)"
+	@echo "make ios STORE=CHN  same, acting as the China App Store (hides non-China AI vendors)"
 	@echo "make release      test, then archive + upload to App Store Connect"
 	@echo "make archive      same, but stop at the .ipa (no upload)"
 	@echo "make test         unit tests on the $(SIMULATOR) simulator"
@@ -32,7 +36,7 @@ test: gen
 	$(XCB) -destination 'platform=iOS Simulator,name=$(SIMULATOR)' test
 
 ios:
-	scripts/install-ios-device.sh
+	STORE=$(STORE) scripts/install-ios-device.sh
 
 # Replaces Product > Archive > Distribute App. Build number is a timestamp, so
 # every run sorts above the last without editing anything.
