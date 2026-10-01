@@ -15,6 +15,11 @@ final class KeyboardDismissalTests: XCTestCase {
             rootView: Text("page").dismissesKeyboardOnBackgroundTap()
         )
         window.makeKeyAndVisible()
+        // Run on a phone, the host is the real app: a window left up sits over Home.
+        addTeardownBlock {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
 
         let field = UITextField(frame: CGRect(x: 0, y: 0, width: 200, height: 30))
