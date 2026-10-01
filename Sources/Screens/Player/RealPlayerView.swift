@@ -709,11 +709,12 @@ struct NowPlayingBarContent: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
 
-                    HStack(spacing: 28) {
-                        barButton("gobackward.10", size: glyphSize - 8, label: "Back ten seconds", action: onSkipBack)
-                        barButton(isPlaying ? "pause.fill" : "play.fill", size: glyphSize,
+                    // Sized to fill the bar's fixed 52pt, so they grow without the bar growing.
+                    HStack(spacing: 36) {
+                        barButton("gobackward.10", size: min(glyphSize - 4, 34), label: "Back ten seconds", action: onSkipBack)
+                        barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 12, 48),
                                   label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
-                        barButton("bookmark", size: glyphSize - 10, label: "Bookmark this moment", action: onBookmark)
+                        barButton("bookmark", size: min(glyphSize - 6, 30), label: "Bookmark this moment", action: onBookmark)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -732,7 +733,7 @@ struct NowPlayingBarContent: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: size))
-                .frame(width: 56, height: 52)
+                .frame(width: 64, height: 52)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
