@@ -106,7 +106,7 @@ final class AutoBackup: ObservableObject {
     /// has to agree with what they just did.
     func start() {
         Task { cloudDriveStatus = await CloudDrive.status() }
-        guard isEnabled || isCloudDriveEnabled, loopTask == nil else { return }
+        guard isEnabled || isCloudDriveEnabled, loopTask == nil, !AppMode.isDemo else { return }
         loopTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.backUpIfDue()
@@ -200,7 +200,7 @@ final class AutoBackup: ObservableObject {
     }
 
     private func backUp(toBucket: Bool, toCloudDrive: Bool) async {
-        guard !isBackingUp, toBucket || toCloudDrive else { return }
+        guard !isBackingUp, toBucket || toCloudDrive, !AppMode.isDemo else { return }
         isBackingUp = true
         defer { isBackingUp = false }
 

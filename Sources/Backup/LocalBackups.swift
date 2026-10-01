@@ -40,6 +40,7 @@ enum LocalBackups {
     /// was written since the last one: copying megabytes per keystroke to guard against a
     /// once-a-year event is the wrong trade, and the log already covers what falls between.
     static func runIfDue(archive: () throws -> Data) {
+        guard !AppMode.isDemo else { return }
         let defaults = UserDefaults.standard
         let lastAt = defaults.object(forKey: lastRunKey) as? Date
         guard ChangeLog.mark != defaults.integer(forKey: lastMarkKey) else { return }
