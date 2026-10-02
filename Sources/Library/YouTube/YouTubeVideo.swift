@@ -83,12 +83,30 @@ enum YouTubeVideo {
 }
 
 extension YouTubeVideo {
-    /// The ID in a file name like `Title [dQw4w9WgXcQ].mp3` — how a file in a bucket says
-    /// which video it belongs to.
+    /// The video a file in a bucket belongs to: its name starts with the ID, then a
+    /// hyphen or the extension — `dQw4w9WgXcQ-never-gonna-give-you-up.mp3`,
+    /// `dQw4w9WgXcQ.zh-Hans.vtt`. Whatever follows the ID can be renamed freely.
     static func id(inFileName path: String) -> String? {
         let name = (path as NSString).lastPathComponent
-        guard let match = name.firstMatch(of: /\[([A-Za-z0-9_-]{11})\]/) else { return nil }
-        return String(match.1)
+        guard name.count > 12 else { return nil }
+        let id = String(name.prefix(11))
+        let next = name[name.index(name.startIndex, offsetBy: 11)]
+        guard next == "-" || next == ".", isValidID(id) else { return nil }
+        return id
+    }
+
+    /// A name made safe for a path: lowercase, spaces and punctuation turned to single
+    /// hyphens, letters of any script kept. Empty when nothing's left.
+    static func slug(_ name: String, maxLength: Int = 60) -> String {
+        var out = ""
+        for character in name.lowercased() {
+            if character.isLetter || character.isNumber {
+                out.append(character)
+            } else if !out.isEmpty, out.last != "-" {
+                out.append("-")
+            }
+        }
+        return String(out.prefix(maxLength)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 }
 

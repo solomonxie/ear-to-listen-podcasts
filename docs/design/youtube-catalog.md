@@ -6,14 +6,17 @@ are then used like any other episode's.
 
 ## Matching
 
-Files named with the video ID in brackets, anywhere in a connected bucket:
+Files whose name starts with the video ID, then `-` or the extension, anywhere in a
+connected bucket — `dQw4w9WgXcQ-never-gonna-give-you-up.mp3`:
 
 | File | Effect on the next sync |
 |---|---|
-| `… [<videoID>].vtt` (`.srt`, `.lrc`, `.json`, `.txt`; `.<lang>.vtt` for more languages) | becomes the episode's transcript, if it has none (`YouTubeTranscripts`) |
-| `… [<videoID>].mp3` (any audio type) | becomes the episode's audio: it plays from the file — background, lock screen, CarPlay — and transcripts beside it work as for any episode (`TrackStore.attach`) |
+| `<videoID>-<title>.vtt` (`.srt`, `.lrc`, `.json`, `.txt`; `.<lang>.vtt` for more languages) | becomes the episode's transcript, if it has none (`YouTubeTranscripts`) |
+| `<videoID>-<title>.mp3` (any audio type) | becomes the episode's audio: it plays from the file — background, lock screen, CarPlay — and transcripts beside it work as for any episode (`TrackStore.attach`) |
 
-The ID is the whole match, so renaming the speaker or album later doesn't strand a file.
+The ID is the whole match: the title after it, and the folders above it, can be renamed
+freely. Names are slugs (`YouTubeVideo.slug`) — lowercase, hyphens for spaces and
+punctuation, letters of any script kept.
 If the audio file goes away, the episode plays the video again.
 
 ## Catalog
@@ -21,7 +24,7 @@ If the audio file goes away, the episode plays the video again.
 `<root>/ear-to-listen-podcasts/youtube-catalog.json`, beside the backups, rewritten when
 YouTube episodes change (`YouTubeCatalog`): per episode `episodeID`, `videoID`, `url`,
 `title`, `speaker`, `album`, and where its files go — `transcriptPath` and `audioPath`,
-`<root>/<Speaker>/<Album>/<Title> [<videoID>].<ext>`.
+`<root>/<speaker>/<album>/<videoID>-<title>.<ext>`.
 
 It's the listener's checklist for adding files by hand. The app only writes this file;
 anything else the listener keeps in that folder is theirs, never read or written here.

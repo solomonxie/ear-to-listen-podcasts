@@ -1,32 +1,34 @@
 import Foundation
 import GRDB
 
-/// Transcript files anywhere in a bucket named with a YouTube video's ID —
-/// `… [dQw4w9WgXcQ].vtt`, `… [dQw4w9WgXcQ].zh-Hans.vtt` — taken in by the YouTube
+/// Transcript files anywhere in a bucket named for a YouTube video —
+/// `dQw4w9WgXcQ-title.vtt`, `dQw4w9WgXcQ-title.zh-Hans.vtt` — taken in by the YouTube
 /// episode they name. A video-only episode has no audio for them to sit beside, so the ID
 /// in the name is the whole match (see `YouTubeCatalog` for where they're expected).
 ///
 /// From the listing a sync already made, matched in memory; a file is only downloaded
 /// for an episode that has no transcript yet.
 enum YouTubeTranscripts {
-    nonisolated(unsafe) private static let named = /\[([A-Za-z0-9_-]{11})\](\.[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]+)*)?\.(vtt|srt|lrc|json|txt)$/
+    private static let formats = ["vtt", "srt", "lrc", "json", "txt"]
 
     /// Video ID → transcript paths, preferred first: the untagged file, then `.vtt`.
     static func byVideoID(in listing: [CloudFile]) -> [String: [String]] {
         var found: [String: [String]] = [:]
         for file in listing {
-            guard let match = file.path.firstMatch(of: named) else { continue }
-            found[String(match.1), default: []].append(file.path)
+            guard formats.contains((file.path as NSString).pathExtension.lowercased()),
+                  let id = YouTubeVideo.id(inFileName: file.path) else { continue }
+            found[id, default: []].append(file.path)
         }
         return found.mapValues { paths in
             paths.sorted { rank($0) < rank($1) }
         }
     }
 
+    /// Slugs have no dots, so a dot before the extension starts a language tag.
     private static func rank(_ path: String) -> (Int, Int, String) {
-        let match = path.firstMatch(of: named)
-        let tagged = match?.2 == nil ? 0 : 1
-        let format = ["vtt", "srt", "lrc", "json", "txt"].firstIndex(of: String(match?.3 ?? "")) ?? 9
+        let stem = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        let tagged = stem.contains(".") ? 1 : 0
+        let format = formats.firstIndex(of: (path as NSString).pathExtension.lowercased()) ?? 9
         return (tagged, format, path)
     }
 
