@@ -1,6 +1,8 @@
 import Foundation
 
 extension Notification.Name {
+    /// A row a backup carries was written — what schedules the next one (`AutoBackup`).
+    static let backedUpDataDidChange = Notification.Name("backedUpDataDidChange")
     /// Posted after the library's real DB content changes in a way that isn't already
     /// covered by a targeted refresh — from `SyncEngine.importFileIfNeeded`, each
     /// newly-synced file — so Home's shelves (including newly-appearing speakers) update
