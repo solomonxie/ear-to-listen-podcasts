@@ -21,8 +21,7 @@ final class SameFileTests: XCTestCase {
     ) -> Track {
         Track(
             id: id, providerID: provider, artistID: nil, albumID: nil, filePath: path,
-            title: (path as NSString).deletingPathExtension, trackNumber: nil,
-            durationMs: durationMs, sizeBytes: sizeBytes, contentHash: nil, updatedAt: Date()
+            title: (path as NSString).deletingPathExtension, durationMs: durationMs, sizeBytes: sizeBytes, contentHash: nil, updatedAt: Date()
         )
     }
 

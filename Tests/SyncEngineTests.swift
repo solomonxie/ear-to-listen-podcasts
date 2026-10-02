@@ -194,7 +194,7 @@ final class TrackUpsertRaceTests: XCTestCase {
     private func track(id: String, title: String) -> Track {
         Track(
             id: id, providerID: "p1", artistID: nil, albumID: nil, filePath: "a/ep.mp3",
-            title: title, trackNumber: nil, durationMs: nil, updatedAt: Date()
+            title: title, durationMs: nil, updatedAt: Date()
         )
     }
 

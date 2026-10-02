@@ -14,7 +14,6 @@ struct EpisodeEditView: View {
     @State private var artistName: String
     @State private var albumName: String
     @State private var year: String
-    @State private var trackNumber: String
     @State private var notes: String
     @State private var artworkFileName: String?
     @State private var artworkImage: UIImage?
@@ -37,7 +36,6 @@ struct EpisodeEditView: View {
         _artistName = State(initialValue: (track.artistID.flatMap { try? store.artist(id: $0) } ?? nil)?.name ?? "")
         _albumName = State(initialValue: (track.albumID.flatMap { try? store.album(id: $0) } ?? nil)?.name ?? "")
         _year = State(initialValue: track.year.map(String.init) ?? "")
-        _trackNumber = State(initialValue: track.trackNumber.map(String.init) ?? "")
         _notes = State(initialValue: track.notes ?? "")
         _artworkFileName = State(initialValue: track.artworkFileName)
         _language = State(initialValue: track.language)
@@ -61,9 +59,6 @@ struct EpisodeEditView: View {
         Binding(get: { Int(year) }, set: { year = $0.map(String.init) ?? "" })
     }
 
-    private var trackNumberValue: Binding<Int?> {
-        Binding(get: { Int(trackNumber) }, set: { trackNumber = $0.map(String.init) ?? "" })
-    }
 
     var body: some View {
         NavigationStack {
@@ -100,10 +95,6 @@ struct EpisodeEditView: View {
                     UnfoldingWheel(
                         title: "Year", id: "year", open: $openPicker, value: yearValue,
                         choices: NumberChoices.years
-                    )
-                    UnfoldingWheel(
-                        title: "Track no.", id: "trackNumber", open: $openPicker,
-                        value: trackNumberValue, choices: NumberChoices.trackNumbers
                     )
                     // The last word on which recognizer to use: this is the one level
                     // where someone has actually heard the audio.
@@ -256,7 +247,6 @@ struct EpisodeEditView: View {
         updated.artistID = artist?.id
         updated.albumID = album?.id
         updated.year = trimmed(year).flatMap { Int($0) }
-        updated.trackNumber = trimmed(trackNumber).flatMap { Int($0) }
         updated.notes = trimmed(notes)
         updated.artworkFileName = artworkFileName
         updated.metadataEditedAt = Date()

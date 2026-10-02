@@ -7,7 +7,7 @@ final class ListenHistoryTests: XCTestCase {
     private func track(positionMs: Int?, durationMs: Int? = 2_462_000) -> Track {
         var track = Track(
             id: "t", providerID: "p", artistID: nil, albumID: nil, filePath: "s/ep.mp3",
-            title: "Ep", trackNumber: nil, durationMs: durationMs, updatedAt: Date()
+            title: "Ep", durationMs: durationMs, updatedAt: Date()
         )
         track.positionMs = positionMs
         return track

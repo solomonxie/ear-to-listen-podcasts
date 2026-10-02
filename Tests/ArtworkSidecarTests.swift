@@ -57,7 +57,7 @@ final class ArtworkSidecarTests: XCTestCase {
             try Album(id: "A", artistID: nil, name: "Show").insert(db)
             try Album(id: "E", artistID: nil, name: "Edited", metadataEditedAt: Date()).insert(db)
             for (id, path, album) in [("t1", "show/1.mp3", "A"), ("t2", "show/2.mp3", "A"), ("t3", "edited/1.mp3", "E")] {
-                let track = Track(id: id, providerID: "p", artistID: nil, albumID: album, filePath: path, title: id, trackNumber: nil, durationMs: nil, contentHash: nil, updatedAt: Date())
+                let track = Track(id: id, providerID: "p", artistID: nil, albumID: album, filePath: path, title: id, durationMs: nil, contentHash: nil, updatedAt: Date())
                 try track.insert(db)
                 try TrackFile(primaryOf: track).insert(db)
             }

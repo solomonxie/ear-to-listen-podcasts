@@ -19,7 +19,7 @@ final class CloudBackupTests: XCTestCase {
         }
         let track = Track(
             id: UUID().uuidString, providerID: "p1", artistID: nil, albumID: nil,
-            filePath: filePath, title: filePath, trackNumber: nil, durationMs: nil,
+            filePath: filePath, title: filePath, durationMs: nil,
             sizeBytes: nil, isLost: false, updatedAt: Date()
         )
         try TrackStore(dbQueue: dbQueue).upsert(track, artistName: nil, albumName: nil)

@@ -109,7 +109,6 @@ struct BackupService {
                 artistName: track.artistID.flatMap { artistNames[$0] },
                 albumName: track.albumID.flatMap { albumNames[$0] },
                 year: track.year,
-                trackNumber: track.trackNumber,
                 notes: track.notes,
                 summary: track.summary,
                 terms: terms,
@@ -276,7 +275,6 @@ struct BackupService {
             track.artistID = artist?.id
             track.albumID = album?.id
             track.year = entry.year
-            track.trackNumber = entry.trackNumber
             track.notes = entry.notes
             track.summary = entry.summary ?? track.summary
             track.artworkFileName = entry.artworkFileName

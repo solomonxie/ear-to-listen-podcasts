@@ -11,7 +11,7 @@ final class SpeakerOrderTests: XCTestCase {
     private func track(_ id: String, speaker: String?, playedAt: Date?) -> Track {
         Track(
             id: id, providerID: "p1", artistID: speaker, albumID: "al1",
-            filePath: "show/\(id).mp3", title: id, trackNumber: nil, durationMs: nil,
+            filePath: "show/\(id).mp3", title: id, durationMs: nil,
             updatedAt: Date(), lastPlayedAt: playedAt
         )
     }
