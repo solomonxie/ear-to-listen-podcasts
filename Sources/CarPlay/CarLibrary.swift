@@ -47,11 +47,11 @@ struct CarLibrary: Sendable {
                 .filter { [LocalFilesProvider.providerType, DemoProvider.providerType].contains($0.type) }
                 .map(\.id))
             // A video has nothing to play in the car.
-            let all = ((try? this.tracks.all()) ?? []).filter { $0.youTubeID == nil }
+            let all = ((try? this.tracks.all()) ?? []).filter { !$0.isVideoOnly }
             s.tracksByID = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            s.continueListening = ((try? this.tracks.recentlyPlayed()) ?? []).filter { $0.youTubeID == nil && $0.listenedAt == nil }
-            s.listenLater = ((try? this.tracks.listenLater()) ?? []).filter { $0.youTubeID == nil }
-            s.favorites = ((try? this.tracks.favorites()) ?? []).filter { $0.youTubeID == nil }
+            s.continueListening = ((try? this.tracks.recentlyPlayed()) ?? []).filter { !$0.isVideoOnly && $0.listenedAt == nil }
+            s.listenLater = ((try? this.tracks.listenLater()) ?? []).filter { !$0.isVideoOnly }
+            s.favorites = ((try? this.tracks.favorites()) ?? []).filter { !$0.isVideoOnly }
             s.downloaded = all.filter {
                 AudioCache.shared.isCached(cachedKeys, providerID: $0.providerID, filePath: $0.filePath)
             }
@@ -74,7 +74,7 @@ struct CarLibrary: Sendable {
             case .collection(let id): episodes = (try? this.tracks.tracks(forAlbum: id)) ?? []
             case .speaker(let id): episodes = (try? this.tracks.tracks(forArtist: id)) ?? []
             }
-            return episodes.filter { $0.youTubeID == nil }
+            return episodes.filter { !$0.isVideoOnly }
         }.value
     }
 
