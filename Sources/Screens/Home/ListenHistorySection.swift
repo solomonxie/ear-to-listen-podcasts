@@ -80,12 +80,12 @@ struct ListenHistorySection: View {
     /// "Sep 27, 9:14 PM · stopped at 12:14 / 41:02", or "finished" for one played through.
     static func detail(for track: Track) -> String {
         let when = track.lastPlayedAt?.formatted(date: .abbreviated, time: .shortened) ?? ""
-        let length = track.durationMs.map { Scrubber.formatted(Double($0) / 1000) }
+        let length = track.durationMs.map { SeekBar.formatted(Double($0) / 1000) }
         let whereStopped: String
         if isFinished(track) {
             whereStopped = String(localized: "finished")
         } else if let positionMs = track.positionMs, positionMs > 0 {
-            let at = Scrubber.formatted(Double(positionMs) / 1000)
+            let at = SeekBar.formatted(Double(positionMs) / 1000)
             whereStopped = length.map { String(localized: "stopped at \(at) / \($0)") } ?? String(localized: "stopped at \(at)")
         } else {
             whereStopped = String(localized: "not started")
