@@ -36,6 +36,8 @@ struct ContentView: View {
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
+
+            MarkFlash().zIndex(2)
         }
         .animation(.easeInOut(duration: 0.28), value: engine.isPresentingPlayer)
         .onChange(of: engine.isPresentingPlayer) { _, isShowing in
@@ -45,6 +47,25 @@ struct ContentView: View {
         // full-screen cover in the app gets it.
         .dismissesKeyboardOnBackgroundTap()
         .preferredColorScheme(.dark)
+    }
+}
+
+/// The whole screen flashes when a moment is marked — a camera's shutter, not a tweak to
+/// one button. Same from every bookmark button, wherever it is: a flash on the bar alone
+/// was over before anyone saw it, and the big button above the transport had none.
+private struct MarkFlash: View {
+    @State private var opacity = 0.0
+
+    var body: some View {
+        Color.white
+            .opacity(opacity)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .onReceive(NotificationCenter.default.publisher(for: .momentMarked)) { _ in
+                opacity = 0.45
+                withAnimation(.easeOut(duration: 0.7)) { opacity = 0 }
+            }
+            .accessibilityHidden(true)
     }
 }
 
