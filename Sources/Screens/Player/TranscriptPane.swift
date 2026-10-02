@@ -332,7 +332,7 @@ struct TranscriptPane: View {
     private func hitRow(_ hit: TranscriptPhraseSearch.Hit) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(hit.text).font(.footnote).foregroundStyle(.primary).lineLimit(2)
-            Text(Scrubber.formatted(hit.start)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+            Text(SeekBar.formatted(hit.start)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
@@ -740,7 +740,7 @@ private struct TranscriptLine: View, Equatable {
                         .font(isCurrent ? .body.weight(.semibold) : .body)
                         .foregroundStyle(isCurrent ? .primary : .secondary)
                     HStack(spacing: 6) {
-                        Text(Scrubber.formatted(segment.start))
+                        Text(SeekBar.formatted(segment.start))
                         if segment.isEdited {
                             Label("edited", systemImage: "pencil").labelStyle(.titleAndIcon)
                         }
@@ -894,7 +894,7 @@ private struct SplitPhraseSheet: View {
                     Slider(value: $time, in: span) { editing in
                         if editing { hasSetTime = true }
                     }
-                    LabeledContent("Starts at", value: Scrubber.formatted(time))
+                    LabeledContent("Starts at", value: SeekBar.formatted(time))
                         .monospacedDigit()
                 } header: {
                     Text("Where the second line starts")
@@ -939,7 +939,7 @@ private struct TranscriptEditsView: View {
                     List(edits) { edit in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("At \(Scrubber.formatted(edit.segmentStart))")
+                                Text("At \(SeekBar.formatted(edit.segmentStart))")
                                 Spacer()
                                 Text(edit.createdAt.formatted(date: .abbreviated, time: .shortened))
                             }

@@ -125,7 +125,7 @@ struct ScrollHandle: View {
         return min(Int(fraction * Double(ids.count - 1) + 0.5), ids.count - 1)
     }
 
-    /// No animation on purpose: this is a scrub, and animating every step of a drag makes
+    /// No animation on purpose: this follows the finger, and animating every step of a drag makes
     /// the list lag behind the thumb and then catch up after it stops.
     private func scroll() {
         guard let index = currentIndex else { return }
