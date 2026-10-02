@@ -388,8 +388,13 @@ struct EpisodeDetailsPane: View {
 
     private func save() {
         guard draftTrackID == track.id, snapshot != savedSnapshot else { return }
-        let artist = trimmed(artistName).flatMap { try? libraryStore.upsertArtist(name: $0) }
-        let album = trimmed(albumName).flatMap { name in try? libraryStore.upsertAlbum(name: name, artistID: artist?.id) }
+        var names = (speaker: trimmed(artistName), album: trimmed(albumName))
+        if track.youTubeID != nil {
+            let filed = YouTubeEpisodes.filing(speaker: names.speaker, album: names.album)
+            names = (filed.speaker, filed.album)
+        }
+        let artist = names.speaker.flatMap { try? libraryStore.upsertArtist(name: $0) }
+        let album = names.album.flatMap { name in try? libraryStore.upsertAlbum(name: name, artistID: artist?.id) }
 
         var updated = track
         updated.title = trimmed(title) ?? TrackRow.fileName(for: track)

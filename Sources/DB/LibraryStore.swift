@@ -88,6 +88,15 @@ struct LibraryStore {
         }
     }
 
+    func albums(forArtistNamed name: String) throws -> [Album] {
+        try dbQueue.read { db in
+            try Album.fetchAll(db, sql: """
+                SELECT albums.* FROM albums JOIN artists ON artists.id = albums.artistID
+                WHERE artists.name = ? ORDER BY albums.name
+                """, arguments: [name])
+        }
+    }
+
     func albums() throws -> [Album] {
         try dbQueue.read { db in try Album.order(Column("name")).fetchAll(db) }
     }

@@ -85,3 +85,19 @@ final class TimestampedTextTests: XCTestCase {
         XCTAssertEqual(segments.last?.end, 100)
     }
 }
+
+final class YouTubeFilingTests: XCTestCase {
+    func testBlankAlbumIsTheSpeakersYouTubePodcasts() {
+        let filed = YouTubeEpisodes.filing(speaker: "Tim Keller", album: "  ")
+        XCTAssertEqual(filed.speaker, "Tim Keller")
+        XCTAssertEqual(filed.album, "Tim Keller's YouTube Podcasts")
+    }
+
+    func testNoSpeakerFallsBackToYouTube() {
+        XCTAssertEqual(YouTubeEpisodes.filing(speaker: nil, album: nil).album, "YouTube's YouTube Podcasts")
+    }
+
+    func testAChosenAlbumIsKept() {
+        XCTAssertEqual(YouTubeEpisodes.filing(speaker: "A", album: "Sermons").album, "Sermons")
+    }
+}
