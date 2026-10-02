@@ -82,7 +82,6 @@ struct LibrarySnapshot: Codable {
         var artistName: String?
         var albumName: String?
         var year: Int?
-        var trackNumber: Int?
         var notes: String?
         /// Carried for the same reason a transcript is: it cost an AI call, it can't be
         /// re-derived for free, and it may have been rewritten by hand afterwards.
@@ -116,7 +115,6 @@ struct LibrarySnapshot: Codable {
             artistName = try container.decodeIfPresent(String.self, forKey: .artistName)
             albumName = try container.decodeIfPresent(String.self, forKey: .albumName)
             year = try container.decodeIfPresent(Int.self, forKey: .year)
-            trackNumber = try container.decodeIfPresent(Int.self, forKey: .trackNumber)
             notes = try container.decodeIfPresent(String.self, forKey: .notes)
             summary = try container.decodeIfPresent(String.self, forKey: .summary)
             terms = try container.decodeIfPresent([String: Int].self, forKey: .terms) ?? [:]
@@ -131,7 +129,7 @@ struct LibrarySnapshot: Codable {
 
         init(
             providerID: String, filePath: String, title: String, artistName: String?, albumName: String?,
-            year: Int?, trackNumber: Int?, notes: String?, summary: String? = nil,
+            year: Int?, notes: String?, summary: String? = nil,
             terms: [String: Int] = [:], artworkFileName: String?,
             isFavorite: Bool = false, listenedAt: Date? = nil, bookmarks: [BookmarkEntry] = [], editedAt: Date?,
             durationMs: Int? = nil, youTubeVideoID: String? = nil
@@ -142,7 +140,6 @@ struct LibrarySnapshot: Codable {
             self.artistName = artistName
             self.albumName = albumName
             self.year = year
-            self.trackNumber = trackNumber
             self.notes = notes
             self.summary = summary
             self.terms = terms

@@ -6,11 +6,11 @@ import XCTest
 final class FlaggedEpisodesTests: XCTestCase {
     private func track(
         _ id: String, title: String = "A Real Title", path: String = "show/ep-001.mp3",
-        artist: String? = "ar1", album: String? = "a1", number: Int? = 1
+        artist: String? = "ar1", album: String? = "a1"
     ) -> Track {
         Track(
             id: id, providerID: "p1", artistID: artist, albumID: album, filePath: path,
-            title: title, trackNumber: number, durationMs: nil, updatedAt: Date()
+            title: title, durationMs: nil, updatedAt: Date()
         )
     }
 
@@ -39,13 +39,12 @@ final class FlaggedEpisodesTests: XCTestCase {
     }
 
     func testTheTotalCountsEpisodesRatherThanProblems() {
-        let bare = track("bare", title: "ep-009", path: "show/ep-009.mp3", artist: nil, album: nil, number: nil)
+        let bare = track("bare", title: "ep-009", path: "show/ep-009.mp3", artist: nil, album: nil)
         let summary = FlaggedEpisodes.summary(tracks: [bare, track("fine")], transcribed: ["fine"])
 
         XCTAssertEqual(summary.total, 1)
         XCTAssertEqual(summary.count(.noTranscript), 1)
         XCTAssertEqual(summary.count(.unplaced), 1)
         XCTAssertEqual(summary.count(.filenameTitle), 1)
-        XCTAssertEqual(summary.count(.noNumber), 1)
     }
 }

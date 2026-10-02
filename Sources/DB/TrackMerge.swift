@@ -57,7 +57,6 @@ enum TrackMerge {
         kept.summary = keeper.summary ?? duplicate.summary
         kept.artworkFileName = keeper.artworkFileName ?? duplicate.artworkFileName
         kept.year = keeper.year ?? duplicate.year
-        kept.trackNumber = keeper.trackNumber ?? duplicate.trackNumber
         kept.language = keeper.language ?? duplicate.language
         kept.artistID = keeper.artistID ?? duplicate.artistID
         kept.albumID = keeper.albumID ?? duplicate.albumID

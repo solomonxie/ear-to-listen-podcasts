@@ -176,11 +176,10 @@ final class SyncQueueManager: ObservableObject {
             guard await topUp() else { break }
         }
         if didWork {
-            // Once the batch has settled, not per file: numbering needs to see all the
-            // siblings, and an episode imported halfway through a folder has none yet.
+            // Once the batch has settled, not per file: telling titles apart needs to see
+            // all the siblings, and an episode imported halfway through a folder has none yet.
             let renamed = (try? trackStore.numberDuplicateTitles()) ?? 0
-            let numbered = (try? trackStore.numberEpisodes()) ?? 0
-            if renamed + numbered > 0 {
+            if renamed > 0 {
                 NotificationCenter.default.post(name: .libraryDidChange, object: nil)
             }
             await reapplyPendingRestore()

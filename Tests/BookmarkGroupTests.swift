@@ -7,7 +7,7 @@ final class BookmarkGroupTests: XCTestCase {
     private func track(_ id: String) -> Track {
         Track(
             id: id, providerID: "p1", artistID: nil, albumID: nil, filePath: "\(id).mp3",
-            title: "Episode \(id)", trackNumber: nil, durationMs: nil, updatedAt: Date()
+            title: "Episode \(id)", durationMs: nil, updatedAt: Date()
         )
     }
 

@@ -18,7 +18,7 @@ final class TranscriptMergeSplitTests: XCTestCase {
         try TrackStore(dbQueue: dbQueue).upsert(
             Track(
                 id: "t1", providerID: "p1", artistID: nil, albumID: nil,
-                filePath: "t1.mp3", title: "t1", trackNumber: nil, durationMs: 600_000,
+                filePath: "t1.mp3", title: "t1", durationMs: 600_000,
                 sizeBytes: nil, isLost: false, updatedAt: Date()
             ),
             artistName: nil, albumName: nil

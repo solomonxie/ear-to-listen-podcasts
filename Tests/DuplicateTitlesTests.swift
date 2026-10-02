@@ -10,7 +10,7 @@ final class DuplicateTitlesTests: XCTestCase {
     ) -> Track {
         Track(
             id: id, providerID: "p1", artistID: nil, albumID: "a1", filePath: path,
-            title: title, trackNumber: nil, durationMs: nil, updatedAt: Date(),
+            title: title, durationMs: nil, updatedAt: Date(),
             numberedFrom: numberedFrom, metadataEditedAt: editedAt
         )
     }

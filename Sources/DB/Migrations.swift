@@ -678,6 +678,14 @@ enum Migrations {
             )
         }
 
+        // Episode numbers are gone: order is by filename (`EpisodeOrder`), and a number
+        // nobody needed to see was one more field to get wrong.
+        migrator.registerMigration("v40_drop_track_number") { db in
+            try db.alter(table: "tracks") { t in
+                t.drop(column: "trackNumber")
+            }
+        }
+
         return migrator
     }
 }

@@ -36,7 +36,6 @@ struct EpisodeDetailsPane: View {
     @State private var albumName = ""
     @State private var year = ""
     @State private var reloadTask: Task<Void, Never>?
-    @State private var trackNumber = ""
     @State private var notes = ""
     /// What the fields held the last time they matched the database — the test for
     /// "is there anything to save", without an `onChange` per field.
@@ -195,10 +194,6 @@ struct EpisodeDetailsPane: View {
             choices: NumberChoices.years,
             placeholder: album?.year.map { "\($0) · from album" } ?? "—"
         )
-        UnfoldingWheel(
-            title: "Track no.", id: "trackNumber", open: $openPicker, value: trackNumberValue,
-            choices: NumberChoices.trackNumbers
-        )
 
         DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
         DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
@@ -297,9 +292,6 @@ struct EpisodeDetailsPane: View {
         Binding(get: { Int(year) }, set: { year = $0.map(String.init) ?? "" })
     }
 
-    private var trackNumberValue: Binding<Int?> {
-        Binding(get: { Int(trackNumber) }, set: { trackNumber = $0.map(String.init) ?? "" })
-    }
 
     /// Everything this card shows, read in one pass off the main actor and put on screen
     /// together. Eight queries and a keychain read for the file's bucket is not much, but
@@ -376,14 +368,13 @@ struct EpisodeDetailsPane: View {
         artistName = artist?.name ?? ""
         albumName = album?.name ?? ""
         year = track.year.map(String.init) ?? ""
-        trackNumber = track.trackNumber.map(String.init) ?? ""
         notes = track.notes ?? ""
         draftTrackID = track.id
         savedSnapshot = snapshot
     }
 
     private var snapshot: String {
-        [title, artistName, albumName, year, trackNumber, notes].joined(separator: "\u{1}")
+        [title, artistName, albumName, year, notes].joined(separator: "\u{1}")
     }
 
     private func save() {
@@ -401,7 +392,6 @@ struct EpisodeDetailsPane: View {
         updated.artistID = artist?.id
         updated.albumID = album?.id
         updated.year = trimmed(year).flatMap { Int($0) }
-        updated.trackNumber = trimmed(trackNumber).flatMap { Int($0) }
         updated.notes = trimmed(notes)
         updated.metadataEditedAt = Date()
         try? trackStore.saveEdit(updated, artistName: artist?.name, albumName: album?.name)
@@ -525,7 +515,7 @@ extension DetailCard where Accessory == EmptyView {
 /// Where a field's value is also a page of its own — the chevron stays, so a speaker is
 /// still one tap from their episodes even though the name is now editable in place.
 private enum EpisodeField: Hashable {
-    case title, speaker, album, year, trackNumber, notes
+    case title, speaker, album, year, notes
 }
 
 /// How wide the label column is. Fixed, so every value in a card starts at the same

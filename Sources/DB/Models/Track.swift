@@ -10,7 +10,6 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendabl
     var albumID: String?
     var filePath: String
     var title: String
-    var trackNumber: Int?
     var durationMs: Int?
     /// Release year, read from embedded metadata where available (used for "Browse by Year").
     var year: Int? = nil

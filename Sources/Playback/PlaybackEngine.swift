@@ -111,7 +111,7 @@ final class PlaybackEngine: ObservableObject {
     /// change. Compared so an unrelated change elsewhere in the library doesn't redraw.
     private static func displayKey(_ track: Track) -> String {
         [track.id, track.title, track.artistID ?? "", track.albumID ?? "", track.artworkFileName ?? "",
-         track.trackNumber.map(String.init) ?? "", track.summary ?? "", track.language ?? "",
+         track.summary ?? "", track.language ?? "",
          track.transcriptPaths?.joined(separator: "|") ?? "", track.isFavorite ? "1" : "0",
          track.listenedAt.map { "\($0.timeIntervalSince1970)" } ?? ""].joined(separator: "\u{1}")
     }

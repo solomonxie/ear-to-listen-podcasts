@@ -305,12 +305,11 @@ struct TrackStore {
         }
     }
 
-    /// Ordered in Swift rather than by `ORDER BY`: SQLite sorts a missing number first
-    /// and compares filenames byte by byte, which puts `ep-10` before `ep-9` — see
-    /// `EpisodeNumbers`.
+    /// Ordered in Swift rather than by `ORDER BY`: SQLite compares filenames byte by byte,
+    /// which puts `ep-10` before `ep-9` — see `EpisodeOrder`.
     func tracks(forAlbum albumID: String) throws -> [Track] {
         try dbQueue.read { db in
-            EpisodeNumbers.ordered(
+            EpisodeOrder.ordered(
                 try Track
                     .filter(Column("albumID") == albumID && Column("isLost") == false)
                     .fetchAll(db)
@@ -468,42 +467,6 @@ struct TrackStore {
                 }
             }
             return renamed
-        }
-    }
-
-    /// Gives every episode of a collection its number: filling blanks, and correcting any
-    /// number the app assigned earlier that no longer matches the filenames. Returns how
-    /// many changed. Numbers someone typed (`metadataEditedAt`) are left alone.
-    ///
-    /// Album by album, like the title pass: a number means "second in *this* series", so
-    /// the siblings are what it has to be worked out against. Episodes with no album have
-    /// no series to be numbered within and are left alone.
-    @discardableResult
-    func numberEpisodes(inAlbum albumID: String? = nil) throws -> Int {
-        try dbQueue.write { db in
-            // One album's rows when one album is asked about — this runs every time an album
-            // page opens, and reading the whole library for it was most of the cost.
-            var request = Track.filter(Column("isLost") == false)
-            if let albumID { request = request.filter(Column("albumID") == albumID) }
-            let all = try request.fetchAll(db)
-            let byAlbum = Dictionary(grouping: all) { $0.albumID }
-            var filled = 0
-            for (id, tracks) in byAlbum {
-                guard let id, albumID == nil || id == albumID else { continue }
-                let byID = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-                let assigned = EpisodeNumbers.assigned(tracks) { $0.metadataEditedAt != nil && $0.trackNumber != nil }
-                for (trackID, number) in assigned where byID[trackID]?.trackNumber != number {
-                    guard var track = byID[trackID] else { continue }
-                    track.trackNumber = number
-                    // Not `metadataEditedAt`: this is the app filling a blank, not the
-                    // listener stating something, and marking it would stop tags ever
-                    // being re-read for this episode.
-                    track.updatedAt = Date()
-                    try track.update(db)
-                    filled += 1
-                }
-            }
-            return filled
         }
     }
 

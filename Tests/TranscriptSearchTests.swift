@@ -16,7 +16,7 @@ final class TranscriptSearchTests: XCTestCase {
     private func addEpisode(_ id: String, lines: [String], in dbQueue: DatabaseQueue) throws {
         let track = Track(
             id: id, providerID: "p1", artistID: nil, albumID: nil,
-            filePath: "\(id).mp3", title: id, trackNumber: nil, durationMs: 600_000,
+            filePath: "\(id).mp3", title: id, durationMs: 600_000,
             sizeBytes: nil, isLost: false, updatedAt: Date()
         )
         try TrackStore(dbQueue: dbQueue).upsert(track, artistName: nil, albumName: nil)

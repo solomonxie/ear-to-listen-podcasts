@@ -5,7 +5,7 @@ final class LibrarySearchTests: XCTestCase {
     private func track(_ title: String, path: String = "show/ep.mp3") -> Track {
         Track(
             id: title + path, providerID: "p1", artistID: nil, albumID: nil, filePath: path,
-            title: title, trackNumber: nil, durationMs: nil, updatedAt: Date()
+            title: title, durationMs: nil, updatedAt: Date()
         )
     }
 

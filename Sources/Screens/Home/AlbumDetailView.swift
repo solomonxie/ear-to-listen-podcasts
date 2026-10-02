@@ -576,9 +576,6 @@ struct AlbumDetailView: View {
         let libraryStore = LibraryStore(dbQueue: dbQueue)
         let trackStore = TrackStore(dbQueue: dbQueue)
         let album = (try? libraryStore.album(id: albumID)) ?? nil
-        // Before the fetch, so an episode that arrived since the last visit is listed in
-        // its place in the series rather than at the end of it.
-        try? trackStore.numberEpisodes(inAlbum: albumID)
         let tracks = (try? trackStore.tracks(forAlbum: albumID)) ?? []
         // One query for every transcript, not one per episode.
         let transcripts = (try? TranscriptStore(dbQueue: dbQueue).find(trackIDs: tracks.map(\.id))) ?? [:]

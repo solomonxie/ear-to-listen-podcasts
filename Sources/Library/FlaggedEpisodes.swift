@@ -22,9 +22,6 @@ enum FlaggedEpisodes {
         /// Titled after its own file, which is what happens when no tag, no AI pass and
         /// nobody has given it a name.
         case filenameTitle
-        /// No place in its series. Only ever an episode with no collection to be numbered
-        /// within — see `EpisodeNumbers`.
-        case noNumber
 
         var id: String { rawValue }
     }
@@ -45,7 +42,6 @@ enum FlaggedEpisodes {
         if !hasTranscript { reasons.insert(.noTranscript) }
         if track.artistID == nil || track.albumID == nil { reasons.insert(.unplaced) }
         if isNamedAfterItsFile(track) { reasons.insert(.filenameTitle) }
-        if track.trackNumber == nil { reasons.insert(.noNumber) }
         return reasons
     }
 

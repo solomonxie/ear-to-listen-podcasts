@@ -20,7 +20,7 @@ final class AlbumMetadataSuggesterTests: XCTestCase {
     private func makeTrack(_ path: String, coveredTo: Double?, dbQueue: DatabaseQueue) throws -> Track {
         let track = Track(
             id: UUID().uuidString, providerID: "p1", artistID: nil, albumID: "a1",
-            filePath: path, title: "Collected talks", trackNumber: nil, durationMs: 60_000,
+            filePath: path, title: "Collected talks", durationMs: 60_000,
             sizeBytes: nil, isLost: false, updatedAt: Date()
         )
         try TrackStore(dbQueue: dbQueue).upsert(track, artistName: nil, albumName: nil)

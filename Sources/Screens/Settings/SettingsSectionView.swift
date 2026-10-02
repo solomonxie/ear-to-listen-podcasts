@@ -76,7 +76,6 @@ struct SettingsSectionView: View {
         case .noTranscript: return "Not transcribed"
         case .unplaced: return "No speaker or collection"
         case .filenameTitle: return "Titled after its file"
-        case .noNumber: return "No episode number"
         }
     }
 
@@ -85,7 +84,6 @@ struct SettingsSectionView: View {
         case .noTranscript: return "text.badge.xmark"
         case .unplaced: return "person.crop.circle.badge.questionmark"
         case .filenameTitle: return "doc.text"
-        case .noNumber: return "number"
         }
     }
 

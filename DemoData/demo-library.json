@@ -50,7 +50,7 @@
       "profile": "Maya and Tom take one everyday piece of technology each week and pull it apart: who built it, what they were trying to fix, and what it quietly costs the people who use it.\n\nExpect strong opinions, real examples, and very little hype.",
       "episodes": [
         {
-          "key": "signal-1", "number": 1, "title": "Your Files, Your Rules",
+          "key": "signal-1", "title": "Your Files, Your Rules",
           "progress": 1.0, "listened": true, "playedDaysAgo": 9, "favorite": true,
           "notes": "Great intro to local-first. Send to Dan.",
           "lines": [
@@ -73,7 +73,7 @@
           ]
         },
         {
-          "key": "signal-2", "number": 2, "title": "Everything Is a Subscription Now",
+          "key": "signal-2", "title": "Everything Is a Subscription Now",
           "progress": 0.55, "playedDaysAgo": 0,
           "lines": [
             ["tom", "Welcome back to Signal and Noise. Maya, how many subscriptions do you pay for right now?"],
@@ -93,7 +93,7 @@
           ]
         },
         {
-          "key": "signal-3", "number": 3, "title": "In Defense of the Settings Screen",
+          "key": "signal-3", "title": "In Defense of the Settings Screen",
           "listenLater": true,
           "lines": [
             ["maya", "This is Signal and Noise. Tom, you wanted a whole episode about settings screens."],
@@ -119,7 +119,7 @@
       "profile": "Each episode follows one small object, rule or accident that ended up shaping something much bigger.\n\nNo dates to memorise — just the story, and why it still matters.",
       "episodes": [
         {
-          "key": "footnotes-1", "number": 1, "title": "The Clock That Unified Britain",
+          "key": "footnotes-1", "title": "The Clock That Unified Britain",
           "progress": 1.0, "listened": true, "playedDaysAgo": 14,
           "lines": [
             ["eleanor", "Hello, and welcome to Footnotes of History. I'm Eleanor Hughes."],
@@ -140,7 +140,7 @@
           ]
         },
         {
-          "key": "footnotes-2", "number": 2, "title": "Why Ships Ate Sauerkraut",
+          "key": "footnotes-2", "title": "Why Ships Ate Sauerkraut",
           "progress": 0.3, "playedDaysAgo": 2,
           "lines": [
             ["eleanor", "This is Footnotes of History. Today, a story about cabbage, and the sea."],
@@ -157,7 +157,7 @@
           "terms": ["scurvy", "sauerkraut", "Captain James Cook"]
         },
         {
-          "key": "footnotes-3", "number": 3, "title": "The Library That Lent Out People",
+          "key": "footnotes-3", "title": "The Library That Lent Out People",
           "lines": [
             ["eleanor", "Welcome to Footnotes of History. This week, a library with an unusual catalogue."],
             ["eleanor", "In Copenhagen, in the year two thousand, a group of young people set up what they called a human library."],
@@ -180,7 +180,7 @@
       "profile": "A sleep researcher and a chronic insomniac go through one sleep question per episode, separating what the evidence says from what the internet says.",
       "episodes": [
         {
-          "key": "sleep-1", "number": 1, "title": "Does Melatonin Actually Work?",
+          "key": "sleep-1", "title": "Does Melatonin Actually Work?",
           "progress": 0.8, "playedDaysAgo": 1, "favorite": true,
           "lines": [
             ["sam", "Welcome to The Sleep Lab. I'm Sam Doyle, and I have not slept well since about two thousand nineteen."],
@@ -202,7 +202,7 @@
           ]
         },
         {
-          "key": "sleep-2", "number": 2, "title": "Phones in Bed: How Bad Is It?",
+          "key": "sleep-2", "title": "Phones in Bed: How Bad Is It?",
           "listenLater": true,
           "lines": [
             ["sam", "This is The Sleep Lab. Priya, I'm recording this from bed, on my phone. Judge me."],
@@ -227,7 +227,7 @@
       "profile": "Arjun explains one money habit per episode in plain language — no stock tips, no get-rich-quick, just the boring things that work.",
       "episodes": [
         {
-          "key": "money-1", "number": 1, "title": "The Three-Account System",
+          "key": "money-1", "title": "The Three-Account System",
           "progress": 1.0, "listened": true, "playedDaysAgo": 21,
           "lines": [
             ["arjun", "Hello and welcome to Slow Money. I'm Arjun Mehta."],
@@ -246,7 +246,7 @@
           ]
         },
         {
-          "key": "money-2", "number": 2, "title": "Why You Should Pay Yourself First",
+          "key": "money-2", "title": "Why You Should Pay Yourself First",
           "progress": 0.15, "playedDaysAgo": 4,
           "lines": [
             ["arjun", "Welcome back to Slow Money. Last time, three accounts. Today, the most important habit behind them."],
@@ -270,7 +270,7 @@
       "profile": "图书编辑林晓每期挑一本书，用十分钟讲清楚它为什么值得读。适合睡前听。",
       "episodes": [
         {
-          "key": "goodnight-1", "number": 1, "title": "《活着》：苦难里的温柔",
+          "key": "goodnight-1", "title": "《活着》：苦难里的温柔",
           "progress": 0.6, "playedDaysAgo": 3,
           "lines": [
             ["linxiao", "大家好，欢迎收听晚安读书，我是林晓。"],
@@ -289,7 +289,7 @@
           ]
         },
         {
-          "key": "goodnight-2", "number": 2, "title": "《小王子》：重要的东西眼睛看不见",
+          "key": "goodnight-2", "title": "《小王子》：重要的东西眼睛看不见",
           "lines": [
             ["linxiao", "欢迎收听晚安读书。今天这本书，很多人小时候就读过，那就是《小王子》。"],
             ["linxiao", "小时候读，它是一个童话。长大以后再读，才发现它是写给大人的。"],
