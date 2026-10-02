@@ -8,12 +8,12 @@ anything is **Edit** (the sheet below). The rarely looked-up rest folds away.
 ```
  ABOUT                         ✨ Read with AI   Edit   ← ✨ greyed until transcribed;
  2024 · 42 min · Chinese                                  the reason in a caption line
+ More details ›                                        ← folded by default
  SUMMARY                                   Edit  ✨    ← EpisodeSummaryView, 3 lines
  Two sentences about what this episode is…                until More
  ( More )
  ( melatonin 9 ) ( cortisol 5 ) ( Stanford 2 ) ( ＋ ) → ← one row, scrolls sideways;
                                                          tap → term page, hold → Delete
- More details ›                                        ← folded by default
  MY IMPRESSIONS
  ┌──────────────────────────────────────────────┐
  │ What you made of it                          │      ← 1…8 lines, saves on leave

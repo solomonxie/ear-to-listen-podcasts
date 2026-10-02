@@ -82,11 +82,11 @@ struct EpisodeDetailsPane: View {
                 Text(facts).font(.footnote).foregroundStyle(.secondary)
             }
 
+            moreDetails
+
             EpisodeSummaryView(track: track, analyzeRequest: analyzeRequest, onAnalyzed: { loadTerms() })
 
             termsRow
-
-            moreDetails
 
             VStack(alignment: .leading, spacing: 6) {
                 // Named for whose words these are: the only text on the page nobody but
