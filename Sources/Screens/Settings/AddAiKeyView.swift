@@ -54,7 +54,7 @@ struct AddAiKeyView: View {
                         }
                         .font(.footnote)
                     } else {
-                        Text("Any server that speaks the OpenAI chat completions API. Enter its base URL and the model to call.")
+                        Text("Any server with a standard chat completions API. Enter its base URL and the model to call.")
                             .font(.footnote)
                     }
                 }
