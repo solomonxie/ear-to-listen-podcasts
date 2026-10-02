@@ -215,7 +215,7 @@ struct EpisodeSummarizer {
     private func transcriptBlock(_ lines: [TranscriptSegment]) -> String {
         let kept = Self.thinned(lines, budget: Self.characterBudget)
         return kept
-            .map { "\(Scrubber.formatted($0.start)) \($0.text.trimmed)" }
+            .map { "\(SeekBar.formatted($0.start)) \($0.text.trimmed)" }
             .joined(separator: "\n")
     }
 

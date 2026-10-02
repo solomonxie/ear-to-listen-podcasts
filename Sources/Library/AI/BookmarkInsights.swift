@@ -146,7 +146,7 @@ struct BookmarkInsights {
         let byline = [episode.speaker, episode.collection].compactMap { $0?.nilIfEmpty }.joined(separator: " · ")
         var lines = ["## \(episode.title)" + (byline.isEmpty ? "" : " — \(byline)")]
         for mark in episode.marks {
-            var line = "- @\(Scrubber.formatted(mark.position))"
+            var line = "- @\(SeekBar.formatted(mark.position))"
             if !mark.tagList.isEmpty { line += " [\(mark.tagList.joined(separator: ", "))]" }
             if let note = mark.note?.trimmed.nilIfEmpty { line += " note: \(note)" }
             if let said = mark.transcriptText?.trimmed.nilIfEmpty { line += " said: \"\(said)\"" }

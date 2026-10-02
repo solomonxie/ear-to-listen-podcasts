@@ -41,7 +41,7 @@ struct EpisodeEditView: View {
         _notes = State(initialValue: track.notes ?? "")
         _artworkFileName = State(initialValue: track.artworkFileName)
         _language = State(initialValue: track.language)
-        _length = State(initialValue: track.durationMs.map { Scrubber.formatted(TimeInterval($0) / 1000) } ?? "")
+        _length = State(initialValue: track.durationMs.map { SeekBar.formatted(TimeInterval($0) / 1000) } ?? "")
     }
 
     /// What this episode would transcribe in without an answer of its own — its album's

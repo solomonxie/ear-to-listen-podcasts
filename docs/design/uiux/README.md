@@ -40,7 +40,7 @@ primary · `[ x ]` secondary · `( x )` text button · `›` pushes · `⟳` wor
 | File | Covers |
 |---|---|
 | `home.md` | root page, search (incl. transcripts), shelves, empty state, mini player |
-| `player.md` | Now Playing chrome, transport, scrubber, rail, Up Next |
+| `player.md` | Now Playing chrome, transport, seek bar, rail, Up Next |
 | `transcript.md` | transcript controls, lines, corrections, editor page |
 | `details.md` | episode detail cards, episode edit, bookmarks |
 | `collections.md` | album / speaker / show / playlist / list screens |

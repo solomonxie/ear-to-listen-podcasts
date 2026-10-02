@@ -181,7 +181,7 @@ but recapture before you care about the listing:
 4. Shots, named in upload order:
    1. `1-home.png` — **Home**, shelves filled: Continue Listening, Albums, Speakers
    2. `2-browse.png` — **Browse**, by year / topic / terms
-   3. `3-player.png` — **Now Playing**, artwork and the scrubber
+   3. `3-player.png` — **Now Playing**, artwork and the seek bar
    4. `4-transcript.png` — **Transcript**, following along, one line highlighted
    5. `5-search.png` — **Search**, a query with a spoken-word hit showing its line
    6. `6-sources.png` — **Sources**, a bucket connected and syncing
