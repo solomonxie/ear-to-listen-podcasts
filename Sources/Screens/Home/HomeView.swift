@@ -170,7 +170,7 @@ struct HomeView: View {
                 Image(systemName: isNamingPlaylist ? "xmark.circle.fill" : "plus.circle.fill")
             }
         }) {
-            ForEach(FixedPlaylist.allCases) { kind in
+            ForEach(FixedPlaylist.shown) { kind in
                 NavigationLink(value: HomeRoute.fixedPlaylist(kind)) {
                     FixedPlaylistCard(kind: kind, count: homeData.count(of: kind))
                 }

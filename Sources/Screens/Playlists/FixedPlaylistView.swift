@@ -65,7 +65,7 @@ struct FixedPlaylistView: View {
         switch kind {
         case .downloaded: return { offsets in removeDownloads(at: offsets) }
         case .listenLater: return { offsets in removeFromListenLater(at: offsets) }
-        case .favorites: return nil
+        case .favorites, .youTube: return nil
         case .listened: return { offsets in unmarkListened(at: offsets) }
         }
     }
@@ -95,6 +95,8 @@ struct FixedPlaylistView: View {
             entries = ((try? trackStore.favorites()) ?? []).map { Entry(track: $0) }
         case .listened:
             entries = ((try? trackStore.listened()) ?? []).map { Entry(track: $0) }
+        case .youTube:
+            entries = ((try? trackStore.youTubeEpisodes()) ?? []).map { Entry(track: $0) }
         case .downloaded:
             // One directory listing rather than a lookup per track — see `AudioCache.cachedKeys`.
             let keys = await AudioCache.shared.cachedKeys()
