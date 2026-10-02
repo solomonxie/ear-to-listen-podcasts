@@ -248,7 +248,7 @@ SEARCH WHAT WAS SAID
 • Then the transcripts themselves — a hit shows the line with its neighbours and plays the episode from that second
 
 TRANSCRIPTS YOU CAN FIX
-• Transcribe on the device with Apple's speech recognition, or with Whisper using your own OpenAI key
+• Transcribe on the device with Apple's speech recognition, or with a cloud service using your own key
 • Lyric-style, following along as it plays; tap any line to play from it
 • Correct a line in place, between the lines you're correcting it against
 • Your corrections come back as hints, so the rest of the episode comes out better
@@ -268,7 +268,7 @@ BACKUP YOU CAN SEE
 • Export or import by hand at any time — you can walk away with your data
 
 OPTIONAL AI, YOUR OWN KEY
-Add a key from OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, Qwen, Kimi, GLM or Doubao — or point it at any OpenAI-compatible server — and it will draft better titles and show names during a sync, summarise an episode, or sort out a whole album in one pass — every suggestion shown to you before it lands. Keys live in the Keychain on this device, are never included in backups, and are never sent to us. Add more than one and they fall back to each other on a rate limit. Skip all of it and the app works the same.
+Add a key from Anthropic, Google, Groq, Mistral, DeepSeek, Qwen, Kimi, GLM or Doubao — or point it at any compatible server — and it will draft better titles and show names during a sync, summarise an episode, or sort out a whole album in one pass — every suggestion shown to you before it lands. Keys live in the Keychain on this device, are never included in backups, and are never sent to us. Add more than one and they fall back to each other on a rate limit. Skip all of it and the app works the same.
 
 Free. No ads, no analytics, no tracking, no in-app purchases.
 
@@ -300,7 +300,9 @@ It is read-only and holds a few short public-domain recordings. Tap "Sync Now" o
 A folder on the phone works as a source too (Sources → Add Local Folder) if you prefer to supply your own audio via the Files app.
 
 Optional features a reviewer may want to skip:
-- AI suggestions (Settings → AI Keys): requires the reviewer's own API key from a provider such as OpenAI or Anthropic. Off by default; the rest of the app works without it.
+- AI suggestions (Settings → AI Keys): requires the reviewer's own API key from a provider such as Anthropic or DeepSeek. Off by default; the rest of the app works without it.
+
+China mainland: the app reads the App Store storefront (StoreKit Storefront.current). On the China storefront it offers only AI providers licensed in mainland China (DeepSeek, Qwen, Kimi, GLM, Doubao) and a user-supplied custom server; ChatGPT/OpenAI and every other unlicensed provider, and cloud transcription through them, are not offered or shown, and no metadata in any localization refers to them. A screen recording of the China build's AI settings is attached.
 - iCloud Drive backup (Settings → Sync & Backup): optional; the app is fully functional without it.
 
 All library data is stored in a local SQLite database on the device. We operate no server, have no accounts, and receive no user data. The only networking the app does is to the storage the user configures and, if enabled, to the AI provider the user supplies a key for.
@@ -452,7 +454,7 @@ Ear to Listen 播放你本来就有的播客。把它指向你自己的存储—
 • 随时手动导出或导入——你的数据随时可以带走
 
 可选的 AI，用你自己的密钥
-添加一个 DeepSeek、通义千问、Kimi、智谱 GLM、豆包，或任意兼容 OpenAI 接口的自定义服务的密钥，它就能在同步时帮你拟更好的标题和节目名、总结一集，或者一次性理清整张专辑——每一条建议都会先给你看过再生效。密钥保存在本机钥匙串里，不会进备份，也永远不会发给我们。可以添加多个，遇到限流会自动切换。完全不用它，应用照样好用。
+添加一个 DeepSeek、通义千问、Kimi、智谱 GLM、豆包，或任意兼容接口的自定义服务的密钥，它就能在同步时帮你拟更好的标题和节目名、总结一集，或者一次性理清整张专辑——每一条建议都会先给你看过再生效。密钥保存在本机钥匙串里，不会进备份，也永远不会发给我们。可以添加多个，遇到限流会自动切换。完全不用它，应用照样好用。
 
 免费。无广告，无统计分析，无追踪，无内购。
 
