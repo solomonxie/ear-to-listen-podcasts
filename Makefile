@@ -6,6 +6,7 @@ SIMULATOR ?= iPhone 18 Pro
 
 # App Store storefront a Debug install acts as — any code; CHN shows the China build.
 STOREFRONT ?= USA
+CARPLAY ?= 0
 
 XCB = xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
       -skipPackagePluginValidation -skipMacroValidation
@@ -13,6 +14,7 @@ XCB = xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
 help:
 	@echo "make install-ios  build + install onto the paired iPhone, in place (US storefront)"
 	@echo "  STOREFRONT=CHN   act as the China App Store: no non-China AI vendors, Chinese UI"
+	@echo "  CARPLAY=1        sign with the CarPlay entitlement (once Apple has granted it)"
 	@echo "make ios          same as install-ios"
 	@echo "make release      test, then archive + upload to App Store Connect"
 	@echo "make archive      same, but stop at the .ipa (no upload)"
@@ -37,7 +39,7 @@ test: gen
 	$(XCB) -destination 'platform=iOS Simulator,name=$(SIMULATOR)' test
 
 install-ios:
-	STOREFRONT=$(STOREFRONT) scripts/install-ios-device.sh
+	STOREFRONT=$(STOREFRONT) CARPLAY=$(CARPLAY) scripts/install-ios-device.sh
 
 ios: install-ios
 

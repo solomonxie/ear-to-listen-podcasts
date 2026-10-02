@@ -45,6 +45,15 @@ targets:
           UIColorName: LaunchBackground
         UIBackgroundModes:
           - audio
+        # CarPlay is the only scene declared here: the phone's window stays with SwiftUI's
+        # WindowGroup. The car only shows the app once the build carries the CarPlay
+        # entitlement — see `make ios CARPLAY=1`.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
         # Every screen is a portrait column and the store listing is portrait-only.
         # Delete these two lines to let the phone rotate.
         UISupportedInterfaceOrientations:

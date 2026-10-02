@@ -4900,6 +4900,116 @@
           }
         }
       }
+    },
+    "Listen Now": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "现在收听"
+          }
+        }
+      }
+    },
+    "Add a source on your iPhone.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在 iPhone 上添加一个来源。"
+          }
+        }
+      }
+    },
+    "Listen Later": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "稍后收听"
+          }
+        }
+      }
+    },
+    "Collections": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合集"
+          }
+        }
+      }
+    },
+    "No bookmarks yet": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有书签"
+          }
+        }
+      }
+    },
+    "Tap the bookmark while playing to mark a moment.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放时点书签按钮即可标记此刻。"
+          }
+        }
+      }
+    },
+    "Showing %lld–%lld of %lld": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示第 %1$lld–%2$lld 个，共 %3$lld 个"
+          }
+        }
+      }
+    },
+    "This episode isn't downloaded. Connect to the internet to play it.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这一集尚未下载。请连接网络后播放。"
+          }
+        }
+      }
+    },
+    "Played": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已听完"
+          }
+        }
+      }
+    },
+    "%lld min left": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "剩余 %lld 分钟"
+          }
+        }
+      }
+    },
+    "%lld min": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 分钟"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
