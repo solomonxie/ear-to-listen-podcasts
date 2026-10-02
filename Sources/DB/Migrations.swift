@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 
 enum Migrations {
@@ -615,6 +616,17 @@ enum Migrations {
                 UPDATE aiKeys SET model = 'deepseek-v4-pro'
                 WHERE vendor = 'deepseek' AND model IN ('deepseek-chat', 'deepseek-reasoner', 'deepseek-flash')
                 """)
+        }
+
+        // The row YouTube episodes belong to — see `YouTubeVideo.providerID`.
+        migrator.registerMigration("v37_youtube_source") { db in
+            try db.execute(
+                sql: """
+                    INSERT OR IGNORE INTO providers (id, type, label, configJSON, isActive, createdAt)
+                    VALUES (?, ?, 'YouTube', '{}', 0, ?)
+                    """,
+                arguments: [YouTubeVideo.providerID, YouTubeVideo.providerType, Date()]
+            )
         }
 
         return migrator

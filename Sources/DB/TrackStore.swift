@@ -562,6 +562,17 @@ struct TrackStore {
         }
     }
 
+    func setDuration(id: String, durationMs: Int) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE tracks SET durationMs = ? WHERE id = ?", arguments: [durationMs, id])
+        }
+    }
+
+    /// For episodes that are only a row — a YouTube video — never a file a sync found.
+    func delete(id: String) throws {
+        try dbQueue.write { db in try Self.forget(id, in: db) }
+    }
+
     /// Marks a track as just-started, without touching its stored resume position.
     func touchLastPlayed(id: String, playedAt: Date = Date()) throws {
         try dbQueue.write { db in

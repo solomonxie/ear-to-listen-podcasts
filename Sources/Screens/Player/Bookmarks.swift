@@ -17,6 +17,8 @@ struct BookmarkRow: View {
     /// Long press. The only way to throw a mark away now that the note card is two
     /// buttons, and deliberately not one of them.
     var onDelete: (() -> Void)?
+    /// Set when the mark is in a YouTube episode: the moment can be watched there.
+    var youTubeID: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -61,6 +63,18 @@ struct BookmarkRow: View {
             }
             .buttonStyle(.plain)
 
+            if let youTubeID {
+                Link(destination: YouTubeVideo.watchURL(id: youTubeID, at: bookmark.position)) {
+                    Image(systemName: "arrow.up.forward.app")
+                        .font(.title3)
+                        .padding(4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("Watch this moment in YouTube")
+            }
+
             Button(action: onEdit) {
                 Image(systemName: "pencil.circle")
                     .font(.title3)
@@ -72,6 +86,11 @@ struct BookmarkRow: View {
             .accessibilityLabel("Write a note on this moment")
         }
         .contextMenu {
+            if let youTubeID {
+                Link(destination: YouTubeVideo.watchURL(id: youTubeID, at: bookmark.position)) {
+                    Label("Open in YouTube at \(Scrubber.formatted(bookmark.position))", systemImage: "arrow.up.forward.app")
+                }
+            }
             if let onDelete {
                 Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
             }
@@ -90,6 +109,8 @@ struct NotesPane: View {
     let bookmarks: [Bookmark]
     /// Shown per row where the list spans more than one episode.
     var episodeTitle: (Bookmark) -> String? = { _ in nil }
+    /// The video a mark's episode is, where it's a YouTube one.
+    var youTubeID: (Bookmark) -> String? = { _ in nil }
     /// Folds the marks under the episode each came from, closed to start, the way Home's
     /// bookmark shelf does. A page that collects every mark across an album or a speaker
     /// is a wall of rows flat; folded, it says which episodes were worth marking and
@@ -211,7 +232,8 @@ struct NotesPane: View {
             episodeTitle: episodeTitle,
             onPlay: { onPlay(bookmark) },
             onEdit: { editing = bookmark },
-            onDelete: { delete(bookmark) }
+            onDelete: { delete(bookmark) },
+            youTubeID: youTubeID(bookmark)
         )
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
