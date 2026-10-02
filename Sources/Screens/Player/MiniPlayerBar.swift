@@ -20,7 +20,8 @@ struct MiniPlayerBar: View {
                 bookmarkCount: bookmarkCount,
                 onBookmark: { MomentMark.add(to: track, at: engine.currentTime) },
                 onShowBookmarks: onShowBookmarks,
-                onTapBar: { showingNowPlaying = true }
+                onTapBar: { showingNowPlaying = true },
+                onSeek: { engine.seek(to: $0) }
             )
             .task(id: track.id) { bookmarkCount = MomentMark.count(forTrack: track.id) }
             .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
