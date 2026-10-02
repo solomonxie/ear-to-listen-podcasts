@@ -19,6 +19,8 @@ struct EpisodeSummaryView: View {
 
     @State private var summary: String
     @State private var isExpanded = false
+    /// Set by a timestamp link, so the tap that followed it doesn't also fold the text.
+    @State private var openedLink = false
     @State private var isEditing = false
     @State private var draft = ""
     @State private var isRunning = false
@@ -124,8 +126,24 @@ struct EpisodeSummaryView: View {
                 // Every `[12:14]` in the text is a link; this is what they do.
                 .environment(\.openURL, OpenURLAction { url in
                     guard let seconds = EpisodeSummary.seconds(inURL: url) else { return .systemAction }
+                    openedLink = true
                     play(at: seconds)
                     return .handled
+                })
+                // The whole text folds and unfolds, not just the word under it. Alongside
+                // the links rather than over them: a tap that landed on a timestamp plays
+                // from there and leaves the text as it was.
+                .contentShape(Rectangle())
+                .simultaneousGesture(TapGesture().onEnded {
+                    guard isLong else { return }
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(80))
+                        if openedLink {
+                            openedLink = false
+                            return
+                        }
+                        withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() }
+                    }
                 })
             if isLong {
                 Button(isExpanded ? "Less" : "More") {
