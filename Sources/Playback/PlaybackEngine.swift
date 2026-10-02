@@ -38,11 +38,23 @@ final class PlaybackEngine: ObservableObject {
     private var hasRetriedCurrentTrack = false
     private var lastPersistedProgressAt = Date.distantPast
 
+    /// Plays YouTube episodes, in place of `player`. When it can't — offline, embedding
+    /// turned off by the uploader — `virtualClock` stands in, so the scrubber and marks
+    /// still work against the video playing somewhere else.
+    let youTube = YouTubeEmbed()
+    private var virtualClock: Timer?
+    private var virtualClockTickedAt = Date()
+    private var youTubeSeekedAt = Date.distantPast
+    /// A video whose length isn't known yet still needs a scrubber to slide along.
+    private static let unknownVideoLength: TimeInterval = 3 * 3600
+    private var isYouTube: Bool { currentTrack?.youTubeID != nil }
+
     private init() {
         configureAudioSession()
         configureRemoteCommands()
         observeTime()
         observeLibraryChanges()
+        observeYouTube()
     }
 
     /// An episode can be renamed or re-arted (`EpisodeEditView`) while it's playing, so
@@ -153,6 +165,9 @@ final class PlaybackEngine: ObservableObject {
     }
 
     private func loadAndPlay(track: Track) async {
+        if let id = track.youTubeID { return loadYouTube(id, track: track) }
+        youTube.stop()
+        stopVirtualClock()
         do {
             guard let record = try providerStore.all().first(where: { $0.id == track.providerID }) else {
                 lastError = "No storage provider configured for this track."
@@ -194,9 +209,14 @@ final class PlaybackEngine: ObservableObject {
 
     /// Resumes from where playback last left off, unless the track was already finished.
     private func seekToResumePosition(of track: Track) {
-        guard let positionMs = track.positionMs, positionMs > 2_000 else { return }
-        if let durationMs = track.durationMs, positionMs >= durationMs - 5_000 { return }
-        player.seek(to: CMTime(seconds: TimeInterval(positionMs) / 1000, preferredTimescale: 600))
+        guard let position = resumePosition(of: track) else { return }
+        player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
+    }
+
+    private func resumePosition(of track: Track) -> TimeInterval? {
+        guard let positionMs = track.positionMs, positionMs > 2_000 else { return nil }
+        if let durationMs = track.durationMs, positionMs >= durationMs - 5_000 { return nil }
+        return TimeInterval(positionMs) / 1000
     }
 
     /// A presigned stream URL can expire mid-playback (e.g. a long pause). On failure, drop any
@@ -319,6 +339,13 @@ final class PlaybackEngine: ObservableObject {
     }
 
     func pause() {
+        if isYouTube {
+            youTube.pause()
+            stopVirtualClock()
+            isPlaying = false
+            persistProgress(force: true)
+            return
+        }
         player.pause()
         isPlaying = false
         updateNowPlayingPlaybackState()
@@ -326,6 +353,11 @@ final class PlaybackEngine: ObservableObject {
     }
 
     func resume() {
+        if isYouTube {
+            youTube.isReady ? youTube.play() : startVirtualClock()
+            isPlaying = true
+            return
+        }
         activateAudioSession()
         player.play()
         isPlaying = true
@@ -336,6 +368,8 @@ final class PlaybackEngine: ObservableObject {
     /// out (`DemoMode`).
     func unload() {
         pause()
+        youTube.stop()
+        stopVirtualClock()
         player.removeAllItems()
         itemStatusObservation = nil
         if let endOfItemObserver { NotificationCenter.default.removeObserver(endOfItemObserver) }
@@ -379,6 +413,13 @@ final class PlaybackEngine: ObservableObject {
     }
 
     func seek(to time: TimeInterval) {
+        if isYouTube {
+            currentTime = time
+            youTubeSeekedAt = Date()
+            youTube.seek(to: time)
+            persistProgress(force: true)
+            return
+        }
         seekGeneration += 1
         let generation = seekGeneration
         player.seek(to: CMTime(seconds: time, preferredTimescale: 600)) { [weak self] _ in
@@ -419,7 +460,7 @@ final class PlaybackEngine: ObservableObject {
     private func observeTime() {
         player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, !self.isYouTube else { return }
                 // Mid-seek ticks still carry the old position; taking them snapped the
                 // transcript back to the line you'd just tapped away from.
                 if self.seekGeneration == 0, time.seconds.isFinite { self.currentTime = time.seconds }
@@ -476,6 +517,7 @@ final class PlaybackEngine: ObservableObject {
     /// read-modify-wrote it were republishing a dictionary with the title and artwork
     /// missing — which is what left the Control Center card blank a second into playing.
     private func updateNowPlayingInfo(track: Track) {
+        guard track.youTubeID == nil else { return }
         let album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
         let artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
 
@@ -524,6 +566,7 @@ final class PlaybackEngine: ObservableObject {
     /// goes out when the truth changes — a load, a pause, a seek, a duration that has
     /// finally resolved — and not with every tick of the half-second time observer.
     private func pushNowPlayingProgress(force: Bool = false) {
+        guard !isYouTube else { return }
         let elapsed = currentTime.isFinite ? currentTime : 0
         guard force || abs(elapsed - lastPublishedElapsed) > 4 || duration != lastPublishedDuration else { return }
         lastPublishedElapsed = elapsed
@@ -536,5 +579,83 @@ final class PlaybackEngine: ObservableObject {
 
     private func updateNowPlayingPlaybackState() {
         pushNowPlayingProgress(force: true)
+    }
+
+    // MARK: YouTube
+
+    private func loadYouTube(_ id: String, track: Track) {
+        player.pause()
+        player.removeAllItems()
+        itemStatusObservation = nil
+        if let endOfItemObserver { NotificationCenter.default.removeObserver(endOfItemObserver) }
+        endOfItemObserver = nil
+        stopVirtualClock()
+        nowPlayingInfo = [:]
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+
+        let start = pendingStart ?? resumePosition(of: track) ?? 0
+        pendingStart = nil
+        currentTime = start
+        duration = track.durationMs.map { TimeInterval($0) / 1000 } ?? Self.unknownVideoLength
+        lastError = nil
+        isPlaying = true
+        youTube.load(id: id, start: start, autoplay: true)
+    }
+
+    private func observeYouTube() {
+        youTube.onTime = { [weak self] time in
+            guard let self, self.isYouTube, Date().timeIntervalSince(self.youTubeSeekedAt) > 1 else { return }
+            self.currentTime = time
+            self.persistProgress()
+        }
+        youTube.onPlaying = { [weak self] playing in
+            guard let self, self.isYouTube else { return }
+            self.isPlaying = playing
+            if !playing { self.persistProgress(force: true) }
+        }
+        youTube.onDuration = { [weak self] seconds in self?.learnVideoLength(seconds) }
+        youTube.onEnded = { [weak self] in
+            guard let self, let track = self.currentTrack, track.youTubeID != nil else { return }
+            self.finishedPlaying(track)
+        }
+        youTube.onFailed = { [weak self] code in
+            guard let self, self.isYouTube else { return }
+            self.isPlaying = false
+            self.lastError = code == 101 || code == 150
+                ? "The uploader doesn't allow this video to play inside other apps. Watch it in YouTube — the scrubber here still keeps time for your marks."
+                : "The video couldn't load here. Watch it in YouTube — the scrubber here still keeps time for your marks."
+        }
+    }
+
+    /// The embed knows the real length; the listener may have typed a guess, or nothing.
+    private func learnVideoLength(_ seconds: TimeInterval) {
+        guard var track = currentTrack, track.youTubeID != nil, seconds > 0 else { return }
+        duration = seconds
+        let ms = Int(seconds * 1000)
+        guard abs((track.durationMs ?? 0) - ms) > 1_000 else { return }
+        track.durationMs = ms
+        currentTrack = track
+        try? trackStore.setDuration(id: track.id, durationMs: ms)
+    }
+
+    /// Time passing with nothing playing — for a video watched on another screen.
+    private func startVirtualClock() {
+        stopVirtualClock()
+        virtualClockTickedAt = Date()
+        virtualClock = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                let now = Date()
+                self.currentTime = min(self.currentTime + now.timeIntervalSince(self.virtualClockTickedAt), self.duration)
+                self.virtualClockTickedAt = now
+                self.persistProgress()
+                if self.duration > 0, self.currentTime >= self.duration { self.pause() }
+            }
+        }
+    }
+
+    private func stopVirtualClock() {
+        virtualClock?.invalidate()
+        virtualClock = nil
     }
 }

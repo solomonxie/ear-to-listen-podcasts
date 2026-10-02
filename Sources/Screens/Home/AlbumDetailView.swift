@@ -191,6 +191,7 @@ struct AlbumDetailView: View {
                     NotesPane(
                         bookmarks: bookmarks,
                         episodeTitle: { bookmark in tracks.first { $0.id == bookmark.trackID }?.title },
+                        youTubeID: { bookmark in tracks.first { $0.id == bookmark.trackID }?.youTubeID },
                         foldsByEpisode: true,
                         onPlay: { play($0) },
                         onChange: { bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? [] }

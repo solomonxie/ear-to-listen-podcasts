@@ -46,11 +46,12 @@ struct CarLibrary: Sendable {
             s.onDeviceProviderIDs = Set(((try? this.providers.all()) ?? [])
                 .filter { [LocalFilesProvider.providerType, DemoProvider.providerType].contains($0.type) }
                 .map(\.id))
-            let all = (try? this.tracks.all()) ?? []
+            // A video has nothing to play in the car.
+            let all = ((try? this.tracks.all()) ?? []).filter { $0.youTubeID == nil }
             s.tracksByID = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-            s.continueListening = ((try? this.tracks.recentlyPlayed()) ?? []).filter { $0.listenedAt == nil }
-            s.listenLater = (try? this.tracks.listenLater()) ?? []
-            s.favorites = (try? this.tracks.favorites()) ?? []
+            s.continueListening = ((try? this.tracks.recentlyPlayed()) ?? []).filter { $0.youTubeID == nil && $0.listenedAt == nil }
+            s.listenLater = ((try? this.tracks.listenLater()) ?? []).filter { $0.youTubeID == nil }
+            s.favorites = ((try? this.tracks.favorites()) ?? []).filter { $0.youTubeID == nil }
             s.downloaded = all.filter {
                 AudioCache.shared.isCached(cachedKeys, providerID: $0.providerID, filePath: $0.filePath)
             }
@@ -59,7 +60,7 @@ struct CarLibrary: Sendable {
             s.albumsByID = Dictionary(s.collections.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             s.speakers = SpeakerOrder.byLastActivity((try? this.library.artists()) ?? [], tracks: all)
             s.speakerNames = Dictionary(s.speakers.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-            s.bookmarks = (try? this.bookmarks.recent(limit: 100)) ?? []
+            s.bookmarks = ((try? this.bookmarks.recent(limit: 100)) ?? []).filter { s.tracksByID[$0.trackID] != nil }
             return s
         }.value
     }
@@ -67,11 +68,13 @@ struct CarLibrary: Sendable {
     func episodes(of source: Source) async -> [Track] {
         let this = self
         return await Task.detached(priority: .userInitiated) {
+            let episodes: [Track]
             switch source {
-            case .playlist(let id): return (try? this.playlists.tracks(inPlaylist: id)) ?? []
-            case .collection(let id): return (try? this.tracks.tracks(forAlbum: id)) ?? []
-            case .speaker(let id): return (try? this.tracks.tracks(forArtist: id)) ?? []
+            case .playlist(let id): episodes = (try? this.playlists.tracks(inPlaylist: id)) ?? []
+            case .collection(let id): episodes = (try? this.tracks.tracks(forAlbum: id)) ?? []
+            case .speaker(let id): episodes = (try? this.tracks.tracks(forArtist: id)) ?? []
             }
+            return episodes.filter { $0.youTubeID == nil }
         }.value
     }
 

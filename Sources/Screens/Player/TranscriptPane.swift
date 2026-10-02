@@ -59,6 +59,8 @@ struct TranscriptPane: View {
     /// Whether the upload warning is up. Never skipped: the files it writes over are the
     /// listener's own, and may be ones they wrote.
     @State private var isConfirmingUpload = false
+    @State private var isConfirmingPaste = false
+    @State private var pasteError: String?
     @State private var searchQuery = ""
     @State private var hits: [TranscriptPhraseSearch.Hit] = []
     @FocusState private var isTypingSearch: Bool
@@ -66,6 +68,9 @@ struct TranscriptPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             controls
+            if let pasteError {
+                Text(pasteError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
+            }
             if let status {
                 Text(status).sectionRowSecondary().padding(.horizontal)
             }
@@ -90,6 +95,13 @@ struct TranscriptPane: View {
                 selection = []
             }
         }
+        .confirmationDialog("Replace this transcript?", isPresented: $isConfirmingPaste) {
+            Button("Replace", role: .destructive) { paste() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("What's on the clipboard takes its place. Reject brings this one back.")
+        }
+        .onChange(of: transcript.track?.id) { _, _ in pasteError = nil }
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
         }
@@ -161,25 +173,32 @@ struct TranscriptPane: View {
             }
 
             HStack(spacing: 10) {
-                ForEach(TranscriptionEngineKind.offered, id: \.self) { engine in
-                    engineButton(engine)
-                }
-                // The selection bar used to replace this whole row, which kept these out of
-                // reach for free. Now that it sits down among the lines instead, they need
-                // saying no to explicitly: starting a fresh pass over lines somebody is
-                // halfway through rearranging is offering to destroy them.
-                .disabled(!selection.isEmpty)
+                if isYouTube {
+                    TranscriptControlButton(title: "Paste", systemImage: "doc.on.clipboard", isOn: false) {
+                        if transcript.lines.isEmpty { paste() } else { isConfirmingPaste = true }
+                    }
+                    .disabled(!selection.isEmpty)
+                } else {
+                    ForEach(TranscriptionEngineKind.offered, id: \.self) { engine in
+                        engineButton(engine)
+                    }
+                    // The selection bar used to replace this whole row, which kept these out of
+                    // reach for free. Now that it sits down among the lines instead, they need
+                    // saying no to explicitly: starting a fresh pass over lines somebody is
+                    // halfway through rearranging is offering to destroy them.
+                    .disabled(!selection.isEmpty)
 
-                // After the two that make a transcript, because it is what you do once
-                // you have one — and the only control on this page that touches the files
-                // in someone's own storage. Everything else here writes to the phone and
-                // stops, which is why this one is a press with a warning on it.
-                TranscriptControlButton(
-                    title: transcript.isUploading ? "Uploading…" : "Upload",
-                    systemImage: transcript.isUploading ? "arrow.up.circle.dotted" : "arrow.up.circle",
-                    isOn: transcript.isUploading
-                ) { isConfirmingUpload = true }
-                    .disabled(transcript.lines.isEmpty || transcript.isRunning || transcript.isUploading)
+                    // After the two that make a transcript, because it is what you do once
+                    // you have one — and the only control on this page that touches the files
+                    // in someone's own storage. Everything else here writes to the phone and
+                    // stops, which is why this one is a press with a warning on it.
+                    TranscriptControlButton(
+                        title: transcript.isUploading ? "Uploading…" : "Upload",
+                        systemImage: transcript.isUploading ? "arrow.up.circle.dotted" : "arrow.up.circle",
+                        isOn: transcript.isUploading
+                    ) { isConfirmingUpload = true }
+                        .disabled(transcript.lines.isEmpty || transcript.isRunning || transcript.isUploading)
+                }
 
                 TranscriptControlButton(
                     title: isFollowing ? "Following" : "Follow",
@@ -415,7 +434,17 @@ struct TranscriptPane: View {
         transcript.coverageFraction.formatted(.percent.precision(.fractionLength(0)))
     }
 
+    private var isYouTube: Bool { transcript.track?.youTubeID != nil }
+
+    private func paste() {
+        let read = transcript.importPasted(UIPasteboard.general.string ?? "")
+        pasteError = read > 0 ? nil : "No timed lines on the clipboard. Copy the transcript from YouTube first — timestamps included."
+    }
+
     private var emptyStateDetail: LocalizedStringKey {
+        if isYouTube {
+            return "On YouTube, open the video's description and tap Show transcript, then select and copy it all — timestamps included — and tap Paste. Subtitle files (.vtt, .srt) pasted as text work too."
+        }
         if transcript.isRunning {
             return "Working through the episode — \(percent) done. The whole transcript appears here at once when it's finished — and leaving the app doesn't lose what's already done."
         }

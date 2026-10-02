@@ -99,6 +99,9 @@ struct LibrarySnapshot: Codable {
         /// Nil for an episode that travels only for its favourite/bookmarks — nobody
         /// edited its details.
         var editedAt: Date?
+        /// Only for YouTube episodes, which a restore has to rebuild from this entry alone —
+        /// there's no file for a sync to find them by.
+        var durationMs: Int?
 
         /// Hand-written for the same reason `LibrarySnapshot`'s is: a synthesized decoder
         /// demands every key, so an archive written before favourites and bookmarks
@@ -120,13 +123,15 @@ struct LibrarySnapshot: Codable {
             listenedAt = try container.decodeIfPresent(Date.self, forKey: .listenedAt)
             bookmarks = try container.decodeIfPresent([BookmarkEntry].self, forKey: .bookmarks) ?? []
             editedAt = try container.decodeIfPresent(Date.self, forKey: .editedAt)
+            durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
         }
 
         init(
             providerID: String, filePath: String, title: String, artistName: String?, albumName: String?,
             year: Int?, trackNumber: Int?, notes: String?, summary: String? = nil,
             terms: [String: Int] = [:], artworkFileName: String?,
-            isFavorite: Bool = false, listenedAt: Date? = nil, bookmarks: [BookmarkEntry] = [], editedAt: Date?
+            isFavorite: Bool = false, listenedAt: Date? = nil, bookmarks: [BookmarkEntry] = [], editedAt: Date?,
+            durationMs: Int? = nil
         ) {
             self.providerID = providerID
             self.filePath = filePath
@@ -143,6 +148,7 @@ struct LibrarySnapshot: Codable {
             self.listenedAt = listenedAt
             self.bookmarks = bookmarks
             self.editedAt = editedAt
+            self.durationMs = durationMs
         }
     }
 

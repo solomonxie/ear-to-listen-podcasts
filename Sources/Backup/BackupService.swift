@@ -113,7 +113,8 @@ struct BackupService {
                         transcriptText: $0.transcriptText, createdAt: $0.createdAt
                     )
                 },
-                editedAt: track.metadataEditedAt
+                editedAt: track.metadataEditedAt,
+                durationMs: track.youTubeID != nil ? track.durationMs : nil
             )
         }
         return LibrarySnapshot(
@@ -250,7 +251,7 @@ struct BackupService {
         // sensible row to pre-seed from a path alone. What doesn't match yet is counted,
         // not dropped: `PendingRestore` comes back for it after the next sync.
         for entry in snapshot.episodes {
-            guard var track = try track(named: entry.providerID, at: entry.filePath) else {
+            guard var track = try track(named: entry.providerID, at: entry.filePath) ?? youTubeEpisode(entry) else {
                 awaiting += 1
                 continue
             }
@@ -297,6 +298,15 @@ struct BackupService {
         return BackupImportResult(
             playlistsImported: snapshot.playlists.count, tracksMatched: matched,
             tracksUnmatched: unmatched, editsAwaitingSync: awaiting
+        )
+    }
+
+    /// A YouTube episode is nothing but its row, so restoring is making it again.
+    private func youTubeEpisode(_ entry: LibrarySnapshot.EpisodeEntry) -> Track? {
+        guard entry.providerID == YouTubeVideo.providerID, YouTubeVideo.isValidID(entry.filePath) else { return nil }
+        return Track(
+            id: UUID().uuidString, providerID: YouTubeVideo.providerID, filePath: entry.filePath,
+            title: entry.title, durationMs: entry.durationMs, updatedAt: Date()
         )
     }
 
