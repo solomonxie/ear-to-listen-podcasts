@@ -277,7 +277,7 @@ struct RealPlayerView: View {
     }
 
     @ViewBuilder private func artwork(for track: Track) -> some View {
-        if let videoID = track.youTubeID {
+        if track.isVideoOnly, let videoID = track.youTubeID {
             video(videoID, track: track)
         } else {
             cover(for: track)

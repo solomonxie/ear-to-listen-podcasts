@@ -443,7 +443,7 @@ struct TranscriptPane: View {
         transcript.coverageFraction.formatted(.percent.precision(.fractionLength(0)))
     }
 
-    private var isYouTube: Bool { transcript.track?.youTubeID != nil }
+    private var isYouTube: Bool { transcript.track?.isVideoOnly == true }
 
     private static let transcriptTypes: [UTType] =
         [.plainText, .text, .json] + ["vtt", "srt", "lrc"].compactMap { UTType(filenameExtension: $0) }
