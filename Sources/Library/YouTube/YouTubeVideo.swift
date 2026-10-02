@@ -1,8 +1,9 @@
 import Foundation
 
-/// A YouTube video kept as an episode: no audio of ours, only the video's ID, what the
-/// listener wrote about it, and links back to YouTube. No Data API — oEmbed for the
-/// title and channel, the embedded player for everything else.
+/// A YouTube video kept as an episode: the video's ID, what the listener wrote about it,
+/// and links back to YouTube. Played as the embedded video unless the listener's storage
+/// holds an audio file named with its ID (`Track.youTubeVideoID`). No Data API — oEmbed
+/// for the title and channel, the embedded player for the rest.
 enum YouTubeVideo {
     /// The `providers` row every YouTube episode hangs off, so `(providerID, filePath)`
     /// — the key backups use — is `("youtube", <video ID>)` on every install.
@@ -81,6 +82,18 @@ enum YouTubeVideo {
     }
 }
 
+extension YouTubeVideo {
+    /// The ID in a file name like `Title [dQw4w9WgXcQ].mp3` — how a file in a bucket says
+    /// which video it belongs to.
+    static func id(inFileName path: String) -> String? {
+        let name = (path as NSString).lastPathComponent
+        guard let match = name.firstMatch(of: /\[([A-Za-z0-9_-]{11})\]/) else { return nil }
+        return String(match.1)
+    }
+}
+
 extension Track {
-    var youTubeID: String? { providerID == YouTubeVideo.providerID ? filePath : nil }
+    var youTubeID: String? { youTubeVideoID }
+    /// A YouTube episode with no audio file of its own — played as the embedded video.
+    var isVideoOnly: Bool { providerID == YouTubeVideo.providerID }
 }

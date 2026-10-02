@@ -1,9 +1,9 @@
 import Foundation
 
-/// Plain text with timestamps — what YouTube's "Show transcript" panel gives when
-/// copied and saved. Subtitle formats are passed through to `TranscriptFile`.
+/// Plain text with a timestamp on each line, the way video sites lay out a transcript.
+/// Subtitle formats are passed through to `TranscriptFile`.
 ///
-/// The panel copies as a timestamp line, then the words, then the next timestamp —
+/// Usually a timestamp line, then the words, then the next timestamp —
 /// sometimes with the timestamp and words on one line, sometimes with a spoken-out
 /// duration ("1 minute, 5 seconds") between them for screen readers.
 enum TimestampedText {

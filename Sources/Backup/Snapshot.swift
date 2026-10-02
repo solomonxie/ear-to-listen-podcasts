@@ -99,9 +99,11 @@ struct LibrarySnapshot: Codable {
         /// Nil for an episode that travels only for its favourite/bookmarks — nobody
         /// edited its details.
         var editedAt: Date?
-        /// Only for YouTube episodes, which a restore has to rebuild from this entry alone —
-        /// there's no file for a sync to find them by.
+        /// Only for video-only YouTube episodes, which a restore has to rebuild from this
+        /// entry alone — there's no file for a sync to find them by.
         var durationMs: Int?
+        /// The YouTube video an episode is, whether it plays the video or a file.
+        var youTubeVideoID: String?
 
         /// Hand-written for the same reason `LibrarySnapshot`'s is: a synthesized decoder
         /// demands every key, so an archive written before favourites and bookmarks
@@ -124,6 +126,7 @@ struct LibrarySnapshot: Codable {
             bookmarks = try container.decodeIfPresent([BookmarkEntry].self, forKey: .bookmarks) ?? []
             editedAt = try container.decodeIfPresent(Date.self, forKey: .editedAt)
             durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
+            youTubeVideoID = try container.decodeIfPresent(String.self, forKey: .youTubeVideoID)
         }
 
         init(
@@ -131,7 +134,7 @@ struct LibrarySnapshot: Codable {
             year: Int?, trackNumber: Int?, notes: String?, summary: String? = nil,
             terms: [String: Int] = [:], artworkFileName: String?,
             isFavorite: Bool = false, listenedAt: Date? = nil, bookmarks: [BookmarkEntry] = [], editedAt: Date?,
-            durationMs: Int? = nil
+            durationMs: Int? = nil, youTubeVideoID: String? = nil
         ) {
             self.providerID = providerID
             self.filePath = filePath
@@ -149,6 +152,7 @@ struct LibrarySnapshot: Codable {
             self.bookmarks = bookmarks
             self.editedAt = editedAt
             self.durationMs = durationMs
+            self.youTubeVideoID = youTubeVideoID
         }
     }
 
