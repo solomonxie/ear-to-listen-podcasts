@@ -164,7 +164,7 @@ episode shows a short card instead of a column of blanks.
 
 ```
 EPISODE          Speaker · Album · Show  (each pushes that page) · Year ·
-                 Duration · Track no. · Topics as chips · Edit Details
+                 Duration · Topics as chips · Edit Details
 NOTES            free text, only if there is any
 FILE             Connection · Folder · File · Format · Size ·
                  Downloaded (size, or "Not downloaded")

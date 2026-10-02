@@ -1,18 +1,11 @@
 import PhotosUI
 import SwiftUI
 
-/// Everything known about what's playing — the tags that came off the file, and where the
-/// file actually lives. Grouped cards rather than one flat list, so "who/what" doesn't
-/// blur into "which file".
-///
-/// The dates are not here. Synced-at, changed-on-storage, details-edited: five rows
-/// answering a question nobody was asking while listening, and all five are still in the
-/// database for the things that do ask.
-///
-/// The Episode card is the editor too: every field is a live control, showing even when
-/// empty, and a change lands as soon as you leave the field. Correcting a title is the
-/// commonest thing anyone does here, and routing it through a modal cost a tap in, a tap
-/// out and the scroll position of a long transcript.
+/// What the episode is about, under the transport: one line of facts, the summary, the
+/// terms it keeps coming back to, and the listener's own impressions — the things read
+/// while listening. Title, speaker and album are already under the cover, and changing any
+/// of it is Edit's sheet; the file, its size, its playlists and its picture fold away
+/// under More details, unfolding in place.
 struct EpisodeDetailsPane: View {
     let playingTrack: Track
 
@@ -25,13 +18,15 @@ struct EpisodeDetailsPane: View {
     @State private var playlistNames: [String] = []
     @State private var terms: [TermCount] = []
     @State private var showingAddToPlaylist = false
+    @State private var showingEdit = false
+    @State private var showsMore = false
+    @State private var isAddingTerm = false
+    @State private var newTerm = ""
     /// Every place this episode's audio is — usually one, more when the same recording
     /// turned up in a second bucket or under a second name.
     @State private var copies: [FileLocation] = []
 
     @State private var title = ""
-    /// Which unfolding control is open — one at a time, across the whole card.
-    @State private var openPicker: String?
     @State private var artistName = ""
     @State private var albumName = ""
     @State private var year = ""
@@ -61,59 +56,67 @@ struct EpisodeDetailsPane: View {
     private var track: Track { latest ?? playingTrack }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             if track.isLost {
                 Label("Missing from the last sync — the file wasn't in the bucket listing.", systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
 
-            DetailCard("Episode", accessory: { suggestButton }) { episodeFields }
-
-            // Its own card, under the one whose ✨ produced it: the names an episode
-            // talks about are a different kind of thing from its title and its year, and
-            // there are two dozen of them.
-            // Shown even when empty, now that terms can be added by hand: a card that
-            // only appears once the AI has run can't be used to write the first one in.
-            DetailCard("Terms") {
-                TermsField(terms: terms, open: $openPicker, onAdd: { addTerm($0) }) { term in
-                    NavigationLink(value: PlayerRoute.term(term.term)) {
-                        TermChip(term: term)
-                    }
-                    .buttonStyle(.plain)
-                    // Long press to remove, as everywhere else here — a second glyph
-                    // inside the chip would be a target the size of a full stop, and
-                    // tapping the chip has to keep meaning "go to it".
-                    .contextMenu {
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            removeTerm(term)
-                        }
-                    }
-                }
-                // What the number on a chip counts changes with the page it's on —
-                // this episode here, the whole collection on an album, the whole
-                // library on Home — so each says which.
-                Text("Times said in this episode — counted in the transcript, not guessed. Hold a term to remove it.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            HStack(alignment: .firstTextBaseline, spacing: 14) {
+                Text("ABOUT").sectionHeading()
+                Spacer(minLength: 8)
+                suggestButton
+                Button("Edit") { showingEdit = true }
+                    .font(.caption)
+            }
+            if let suggestionError {
+                Text(suggestionError).font(.caption).foregroundStyle(.orange)
+            } else if let blockedReason = readiness.blockedReason {
+                Text(blockedReason).font(.caption2).foregroundStyle(.tertiary)
             }
 
-            // Named for whose words these are, not for the subject: what the episode is
-            // about is the summary's job, written from the transcript a few rows up. This
-            // is the only text on the page nobody but the listener can write.
-            DetailCard("My impressions") {
+            // The title, speaker and album are under the cover already; what's left fits
+            // on one line, and changing any of it is what Edit is for.
+            if let facts {
+                Text(facts).font(.footnote).foregroundStyle(.secondary)
+            }
+
+            EpisodeSummaryView(track: track, analyzeRequest: analyzeRequest, onAnalyzed: { loadTerms() })
+
+            termsRow
+
+            moreDetails
+
+            VStack(alignment: .leading, spacing: 6) {
+                // Named for whose words these are: the only text on the page nobody but
+                // the listener can write.
+                Text("MY IMPRESSIONS").sectionHeading()
                 TextField("What you made of it", text: $notes, axis: .vertical)
                     .font(.footnote)
-                    .lineLimit(2...8)
+                    .lineLimit(1...8)
                     .focused($focusedField, equals: .notes)
+                    .padding(10)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
             }
-
         }
         .padding(.horizontal)
         // The sheet posts nothing when it adds to a hand-made list, so the row reloads
         // on the way out rather than waiting for the next `libraryDidChange`.
         .sheet(isPresented: $showingAddToPlaylist, onDismiss: { loadPlaylists() }) {
             AddToPlaylistSheet(track: track)
+        }
+        .sheet(isPresented: $showingEdit) { EpisodeEditView(track: track) }
+        .alert("Add a term", isPresented: $isAddingTerm) {
+            TextField("Name", text: $newTerm)
+            Button("Add") {
+                let name = newTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty { addTerm(name) }
+                newTerm = ""
+            }
+            Button("Cancel", role: .cancel) { newTerm = "" }
+        } message: {
+            Text("Counted in the transcript.")
         }
         .task(id: playingTrack.id) { await load() }
         // Off the main actor: it reads every timed line of the transcript to work out how
@@ -145,9 +148,6 @@ struct EpisodeDetailsPane: View {
             Task { await handleArtworkPick(item) }
         }
         .onDisappear { save() }
-        // Nothing on this page is a form with a Save button, so the keyboard needs its own
-        // way out — tapping the artwork or scrolling the page works too, but Done is the
-        // one that's always in the same place.
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -156,92 +156,90 @@ struct EpisodeDetailsPane: View {
         }
     }
 
-    @ViewBuilder
-    private var episodeFields: some View {
-        // Why the heading's Suggest button is greyed out, and what came back when it
-        // wasn't — at the top of the card, next to the control they belong to.
-        if let blockedReason = readiness.blockedReason {
-            Text(blockedReason).font(.caption).foregroundStyle(.secondary)
-        }
-        if let suggestionError {
-            Text(suggestionError).font(.caption).foregroundStyle(.orange)
-        }
+    /// Year · length · language, whichever are known. Nil when none are.
+    private var facts: String? {
+        let language = (track.language ?? album?.language ?? artist?.language)
+            .map { TranscriptPane.languageName(Locale(identifier: $0)) }
+        let parts = [
+            (track.year ?? album?.year).map(String.init),
+            track.durationMs.map(TrackRow.formattedDuration),
+            language,
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
-        // One line, and deliberately not `axis: .vertical`: a vertical field treats
-        // Return as "new paragraph", so Done added a blank row to the title instead of
-        // putting the keyboard away.
-        TextField("Title", text: $title)
-            .font(.subheadline.weight(.medium))
-            .lineLimit(1)
-            .focused($focusedField, equals: .title)
-            .submitLabel(.done)
-            .onSubmit { focusedField = nil }
-
-        // Whole-row links rather than a text field with a chevron pinned to the far
-        // edge. Going to the speaker's page is what anyone does from here; renaming the
-        // speaker of one episode is what `EpisodeEditView` is for. One target per row,
-        // and the target is the row.
-        LinkRow("Speaker", value: artistName, route: artist.map { PlayerRoute.speaker($0.id) })
-        LinkRow("Album", value: albumName, route: album.map { PlayerRoute.album($0.id) })
-
-        // Up with who and what, not down among the numbers: language is inherited from
-        // the speaker or the album above it, so it reads as the third answer to "what is
-        // this", and it's what decides how the episode gets transcribed.
-        EpisodeLanguageRow(open: $openPicker)
-
-        UnfoldingWheel(
-            title: "Year", id: "year", open: $openPicker, value: yearValue,
-            choices: NumberChoices.years,
-            placeholder: album?.year.map { "\($0) · from album" } ?? "—"
-        )
-
-        DetailRow("Duration", track.durationMs.map(TrackRow.formattedDuration))
-        DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
-        // Where the file actually is, written the way that cloud's own tooling writes it.
-        // One row per copy: the same recording in two buckets is one episode with two
-        // addresses, not two episodes.
-        ForEach(Array(copies.enumerated()), id: \.element.id) { index, copy in
-            FilePathRow(label: index == 0 ? "File" : "Also at", location: copy)
-        }
-        // Above Topics, which belong to the album: this is the one membership that's
-        // about *this episode* and the one you decide while listening to it.
-        PlaylistsRow(names: playlistNames, onAdd: { showingAddToPlaylist = true })
-        // Shown even when empty now that it can be added to — an editable row that only
-        // appears once it has something in it can't be used to put the first thing in.
-        TagField(
-            names: topics.map(\.name),
-            ownerName: album?.name,
-            labelWidth: DetailLayout.labelWidth,
-            open: $openPicker,
-            onChange: { names in
-                guard let albumID = track.albumID else { return }
-                try? libraryStore.setTopics(names, forAlbum: albumID)
-                topics = (try? libraryStore.topics(forAlbum: albumID)) ?? []
-                NotificationCenter.default.post(name: .libraryDidChange, object: nil)
-            }
-        )
-
-        Divider()
-        // Words, at the end of the list, with the other things you can do to this
-        // episode. The picture already has a full-size copy at the top of the page, and a
-        // second thumbnail of it in the middle of a list of fields read as a stray badge
-        // rather than a control.
-        ArtworkSourceRow(
-            subject: artworkSubject,
-            hasArtwork: track.artworkFileName != nil,
-            libraryPicker: {
-                PhotosPicker(selection: $artworkItem, matching: .images) {
-                    Label("Photos", systemImage: "photo.on.rectangle")
+    /// One line, scrolled sideways: the names the episode keeps coming back to, most-said
+    /// first. A wrapping wall of two dozen chips was most of the old card's height.
+    private var termsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(terms) { term in
+                    NavigationLink(value: PlayerRoute.term(term.term)) {
+                        TermChip(term: term)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Delete", systemImage: "trash", role: .destructive) { removeTerm(term) }
+                    }
                 }
-            },
-            onUse: { data in Task { await saveArtwork(data) } },
-            onRemove: { setArtwork(nil) }
-        )
+                Button { isAddingTerm = true } label: {
+                    Image(systemName: "plus")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.quaternary, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add a term")
+            }
+        }
+    }
 
-        Divider()
-        // Last in the card and the only part of it written in sentences — the fields
-        // above are what the episode *is*, this is what it says.
-        EpisodeSummaryView(track: track, analyzeRequest: analyzeRequest, onAnalyzed: { loadTerms() })
+    /// What's looked up now and then — the file, its size, the lists it's on, the
+    /// picture — folded away, unfolding in place when asked for.
+    @ViewBuilder
+    private var moreDetails: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { showsMore.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Text("More details")
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .rotationEffect(.degrees(showsMore ? 90 : 0))
+                Spacer()
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
+        if showsMore {
+            VStack(alignment: .leading, spacing: 4) {
+                DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
+                // One row per copy: the same recording in two buckets is one episode with
+                // two addresses, not two episodes.
+                ForEach(Array(copies.enumerated()), id: \.element.id) { index, copy in
+                    FilePathRow(label: index == 0 ? "File" : "Also at", location: copy)
+                }
+                PlaylistsRow(names: playlistNames, onAdd: { showingAddToPlaylist = true })
+                ArtworkSourceRow(
+                    subject: artworkSubject,
+                    hasArtwork: track.artworkFileName != nil,
+                    libraryPicker: {
+                        PhotosPicker(selection: $artworkItem, matching: .images) {
+                            Label("Photos", systemImage: "photo.on.rectangle")
+                        }
+                    },
+                    onUse: { data in Task { await saveArtwork(data) } },
+                    onRemove: { setArtwork(nil) }
+                )
+            }
+            .padding(12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .transition(.opacity)
+        }
     }
 
     /// **The page's one ✨.** It used to be two — this one for the fields, another in the
@@ -284,12 +282,6 @@ struct EpisodeDetailsPane: View {
                 label: file.isLost ? "\(uri) — missing" : uri
             )
         }
-    }
-
-    /// The wheels speak `Int?`; the fields behind them are still the strings the save
-    /// path parses, so nothing downstream has to change.
-    private var yearValue: Binding<Int?> {
-        Binding(get: { Int(year) }, set: { year = $0.map(String.init) ?? "" })
     }
 
 
@@ -476,46 +468,9 @@ struct EpisodeDetailsPane: View {
     }
 }
 
-private struct DetailCard<Content: View, Accessory: View>: View {
-    let title: String
-    /// The one action that belongs to the whole card, sitting on its heading line.
-    @ViewBuilder var accessory: Accessory
-    @ViewBuilder var content: Content
-
-    init(
-        _ title: String, @ViewBuilder accessory: () -> Accessory,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.accessory = accessory()
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(title).sectionHeading()
-                Spacer(minLength: 8)
-                accessory
-            }
-            VStack(alignment: .leading, spacing: 8) { content }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        }
-    }
-}
-
-extension DetailCard where Accessory == EmptyView {
-    init(_ title: String, @ViewBuilder content: () -> Content) {
-        self.init(title, accessory: { EmptyView() }, content: content)
-    }
-}
-
-/// Where a field's value is also a page of its own — the chevron stays, so a speaker is
-/// still one tap from their episodes even though the name is now editable in place.
+/// The one field typed into on the card.
 private enum EpisodeField: Hashable {
-    case title, speaker, album, year, notes
+    case notes
 }
 
 /// How wide the label column is. Fixed, so every value in a card starts at the same
@@ -557,51 +512,6 @@ private struct DetailRow: View {
     }
 }
 
-/// An editable field dressed as a detail row: the value sits in the same column the
-/// read-only rows use, so a card doesn't visibly split into "things you can change" and
-/// "things you can't". Shown even when empty — a blank Year is something to fill in, not
-/// something to hide.
-private struct EditableRow: View {
-    let label: String
-    @Binding var text: String
-    let field: EpisodeField
-    var focus: FocusState<EpisodeField?>.Binding
-    var keyboard: UIKeyboardType = .default
-    var placeholder: String = "—"
-
-    init(
-        _ label: String, text: Binding<String>, field: EpisodeField,
-        focus: FocusState<EpisodeField?>.Binding, keyboard: UIKeyboardType = .default,
-        placeholder: String = "—"
-    ) {
-        self.label = label
-        self._text = text
-        self.field = field
-        self.focus = focus
-        self.keyboard = keyboard
-        self.placeholder = placeholder
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .sectionRowSecondary()
-                .frame(width: DetailLayout.labelWidth, alignment: .leading)
-            // The placeholder is what the episode would show if this were left alone — the
-            // album's year, say — rather than the field's own name, which the label to the
-            // left already says.
-            TextField(placeholder, text: $text)
-                .font(.subheadline)
-                .keyboardType(keyboard)
-                .focused(focus, equals: field)
-                .submitLabel(.done)
-                .onSubmit { focus.wrappedValue = nil }
-        }
-        .frame(minHeight: DetailLayout.rowHeight)
-        .contentShape(Rectangle())
-    }
-}
-
 /// Which lists this episode is on, and the way onto another one. Chips rather than a
 /// line of text: an episode is on none or a few, and "none" has to still be a control —
 /// a row that only appears once it has something in it can't be used to put the first
@@ -638,55 +548,6 @@ private struct PlaylistsRow: View {
         }
         .frame(minHeight: DetailLayout.rowHeight)
     }
-}
-
-/// A row whose whole width goes somewhere — the speaker's page, the album's.
-///
-/// The value is in the accent colour and the chevron sits where iOS puts it, but neither
-/// is the target: the row is. A chevron alone, at the far edge, is both invisible as an
-/// affordance and a long reach from the text you were reading when you decided to tap.
-private struct LinkRow: View {
-    let label: String
-    let value: String
-    /// A route, not a view: the player's stack routes these so the now-playing bar can
-    /// follow onto the pushed page and pop back from it.
-    let route: PlayerRoute?
-
-    init(_ label: String, value: String, route: PlayerRoute?) {
-        self.label = label
-        self.value = value
-        self.route = route
-    }
-
-    var body: some View {
-        if let route {
-            NavigationLink(value: route) {
-                row(isLink: true)
-            }
-            .buttonStyle(.plain)
-        } else if !value.isEmpty {
-            row(isLink: false)
-        }
-    }
-
-    private func row(isLink: Bool) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .sectionRowSecondary()
-                .frame(width: DetailLayout.labelWidth, alignment: .leading)
-            // No chevron. The accent colour already says "this goes somewhere", and the
-            // whole row is the target — an arrow at the far edge added a second thing to
-            // look at that pointed back at what you'd already decided to tap.
-            Text(value.isEmpty ? "—" : value)
-                .font(.subheadline)
-                .foregroundStyle(isLink ? Color.accentColor : .primary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(minHeight: DetailLayout.rowHeight)
-        .contentShape(Rectangle())
-    }
-
 }
 
 /// Everything the card reads from the database, in one value — so one hop off the main
@@ -767,18 +628,5 @@ private struct FilePathRow: View {
                 .padding(.leading, DetailLayout.labelWidth + 8)
             }
         }
-    }
-}
-
-/// The episode's language. Its own view so the twice-a-second churn of a transcription
-/// run redraws one row rather than every field on the page.
-private struct EpisodeLanguageRow: View {
-    @Binding var open: String?
-    @ObservedObject private var transcript = TranscriptRunner.shared
-
-    var body: some View {
-        // No label column here — the field draws its own row, like the wheels beside it.
-        EpisodeLanguageField(playing: transcript, id: "language", open: $open)
-            .equatable()
     }
 }
