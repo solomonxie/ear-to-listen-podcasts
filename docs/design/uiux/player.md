@@ -45,7 +45,7 @@ edge, which is what both the swipe and the ‹ promise. Closing is a flag on the
 engine rather than `@Environment(\.dismiss)`, since there is no presentation to
 dismiss.
 
-Edge-only — the page is full of things that answer a horizontal drag, the scrubber
+Edge-only — the page is full of things that answer a horizontal drag, the seek bar
 above all, and a swipe recognised anywhere would compete with all of them for every
 stroke. **72pt of it**, though, not the ~20 iOS watches for its own back gesture:
 this page is used one-handed with something playing, and a strip a fingertip wide
@@ -219,7 +219,7 @@ is how you reach the transcript, and that belongs to the scroll view.
   seat it's reached for without looking, and the rewind is drawn a size smaller so
   the two don't read as equals. Identical on every page it appears on — the whole
   point of assembling it once.
-- Scrubber holds the finger's position locally while dragging, so the engine's
+- SeekBar holds the finger's position locally while dragging, so the engine's
   0.5s time publishing cannot yank the thumb back.
 
 ```

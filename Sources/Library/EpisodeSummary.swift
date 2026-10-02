@@ -18,7 +18,7 @@ enum EpisodeSummary {
     )
 
     static func marker(for seconds: TimeInterval) -> String {
-        "[\(Scrubber.formatted(seconds))]"
+        "[\(SeekBar.formatted(seconds))]"
     }
 
     /// `12:34` / `1:02:03` → seconds. Nil for anything that isn't a time.
@@ -130,7 +130,7 @@ enum EpisodeSummary {
                 } else if let raw = (try? container.decode(Double.self, forKey: .time))
                             ?? (try? container.decode(Double.self, forKey: .start)) {
                     // Seconds, because it was told to copy a prefix and did arithmetic.
-                    time = Scrubber.formatted(raw)
+                    time = SeekBar.formatted(raw)
                 }
             }
 

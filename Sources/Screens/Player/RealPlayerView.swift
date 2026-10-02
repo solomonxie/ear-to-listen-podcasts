@@ -13,10 +13,10 @@ struct RealPlayerView: View {
     /// The mark just made, lit for a moment so the jump to Notes lands on something the
     /// eye can find.
     @State private var highlightedBookmark: String?
-    /// Where the scrubber is on screen. The bar runs the full width of the page, so its
+    /// Where the seek bar is on screen. The bar runs the full width of the page, so its
     /// left end sits inside the strip the back swipe watches — and a seek started there
     /// used to slide the whole player off instead of moving the playhead.
-    @State private var scrubberArea: CGRect = .zero
+    @State private var seekBarArea: CGRect = .zero
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
     /// at the transport, and text that scrolls itself the moment you arrive takes the
@@ -107,7 +107,7 @@ struct RealPlayerView: View {
                                     let lines = transcript.lines
                                     let line = index - Self.pageAnchors.count
                                     guard line < lines.count else { return "" }
-                                    return Scrubber.formatted(lines[line].start)
+                                    return SeekBar.formatted(lines[line].start)
                                 }
                             )
                             // Pinned: the page is now arbitrarily long, and the transport
@@ -204,7 +204,7 @@ struct RealPlayerView: View {
         // Stood down the moment anything is pushed: a pushed page has the system's own
         // back swipe, and a page that can't be swiped back from is a page with no way out
         // for anyone who doesn't look for the ‹.
-        .swipeToGoBack(canBegin: { path.isEmpty && !scrubberArea.contains($0) }, perform: close)
+        .swipeToGoBack(canBegin: { path.isEmpty && !seekBarArea.contains($0) }, perform: close)
     }
 
     /// Split out of `body` purely so the type-checker can cope — it timed out once the
@@ -221,9 +221,9 @@ struct RealPlayerView: View {
                     artwork(for: track)
                     titles(for: track)
                 }
-                Scrubber(
+                SeekBar(
                     currentTime: engine.currentTime, duration: engine.duration,
-                    area: $scrubberArea
+                    area: $seekBarArea
                 ) { engine.seek(to: $0) }
                     .padding(.horizontal, 36)
                 transport(for: track, proxy: proxy)
@@ -313,7 +313,7 @@ struct RealPlayerView: View {
                     .multilineTextAlignment(.center)
             }
             Link(destination: YouTubeVideo.watchURL(id: videoID, at: engine.currentTime)) {
-                Label("Open in YouTube at \(Scrubber.formatted(engine.currentTime))", systemImage: "arrow.up.forward.app")
+                Label("Open in YouTube at \(SeekBar.formatted(engine.currentTime))", systemImage: "arrow.up.forward.app")
                     .font(.caption.weight(.semibold))
             }
         }
@@ -750,9 +750,9 @@ struct NowPlayingBarContent: View {
 
                 ZStack {
                     HStack {
-                        Text(Scrubber.formatted(currentTime))
+                        Text(SeekBar.formatted(currentTime))
                         Spacer()
-                        Text(Scrubber.formatted(duration))
+                        Text(SeekBar.formatted(duration))
                     }
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
@@ -836,22 +836,22 @@ struct NowPlayingBarContent: View {
 /// left end. Without a hold there is no moment at which to raise a flag — the swipe has
 /// already claimed the stroke by then — so the swipe keeps off the bar's rectangle
 /// instead, decided at touch-down.
-struct Scrubber: View {
+struct SeekBar: View {
     let currentTime: TimeInterval
     let duration: TimeInterval
     /// The bar's place in the window, for the back swipe to stand off.
     @Binding var area: CGRect
     let onSeek: (TimeInterval) -> Void
 
-    @State private var isScrubbing = false
+    @State private var isDragging = false
     @State private var dragTime: TimeInterval = 0
 
-    private var displayedTime: TimeInterval { isScrubbing ? dragTime : currentTime }
+    private var displayedTime: TimeInterval { isDragging ? dragTime : currentTime }
     private var progress: Double { duration > 0 ? min(max(displayedTime / duration, 0), 1) : 0 }
-    private var trackHeight: CGFloat { isScrubbing ? 7 : 4 }
+    private var trackHeight: CGFloat { isDragging ? 7 : 4 }
     /// Always shown, and grown under the finger: a dot on the line is what tells you the
     /// line can be dragged.
-    private var knobSize: CGFloat { isScrubbing ? 18 : 12 }
+    private var knobSize: CGFloat { isDragging ? 18 : 12 }
 
     var body: some View {
         VStack(spacing: 4) {
@@ -862,20 +862,20 @@ struct Scrubber: View {
                         .frame(width: geo.size.width * progress, height: trackHeight)
                     Circle().fill(Color.accentColor)
                         .frame(width: knobSize, height: knobSize)
-                        .shadow(radius: isScrubbing ? 3 : 0)
+                        .shadow(radius: isDragging ? 3 : 0)
                         .offset(x: geo.size.width * progress - knobSize / 2)
                 }
-                .animation(.easeOut(duration: 0.15), value: isScrubbing)
+                .animation(.easeOut(duration: 0.15), value: isDragging)
                 .frame(maxHeight: .infinity, alignment: .center)
                 // Taller than it looks, so the bar can be caught without aiming.
                 .contentShape(Rectangle())
-                .gesture(scrub(width: geo.size.width))
+                .gesture(seekDrag(width: geo.size.width))
                 .onChange(of: geo.frame(in: .global), initial: true) { area = $1 }
             }
             .frame(height: 32)
             HStack {
                 Text(Self.formatted(displayedTime))
-                    .foregroundStyle(isScrubbing ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+                    .foregroundStyle(isDragging ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
                 Spacer()
                 Text(Self.formatted(duration))
             }
@@ -886,18 +886,18 @@ struct Scrubber: View {
 
     /// Zero minimum distance: the first touch already moves the playhead, so a tap seeks
     /// and a drag needs no run-up.
-    private func scrub(width: CGFloat) -> some Gesture {
+    private func seekDrag(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                if !isScrubbing {
-                    isScrubbing = true
+                if !isDragging {
+                    isDragging = true
                     UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                 }
                 dragTime = time(atX: value.location.x, width: width)
             }
             .onEnded { value in
                 dragTime = time(atX: value.location.x, width: width)
-                isScrubbing = false
+                isDragging = false
                 onSeek(dragTime)
             }
     }

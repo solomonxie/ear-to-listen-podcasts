@@ -153,7 +153,7 @@ final class CarPlayController: NSObject {
             let items: [CPListItem] = snapshot.bookmarks.prefix(limit).compactMap { mark in
                 guard let track = self.snapshot.tracksByID[mark.trackID] else { return nil }
                 let said = mark.note?.nilIfEmpty ?? mark.transcriptText?.nilIfEmpty
-                let item = CPListItem(text: "\(Scrubber.formatted(mark.position)) · \(track.title)", detailText: said)
+                let item = CPListItem(text: "\(SeekBar.formatted(mark.position)) · \(track.title)", detailText: said)
                 setImage(of: item, for: track)
                 item.handler = { [weak self] _, completion in
                     MainActor.assumeIsolated {
