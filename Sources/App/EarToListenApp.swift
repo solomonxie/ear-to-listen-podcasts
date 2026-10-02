@@ -44,6 +44,7 @@ struct EarToListenApp: App {
             if newPhase == .active {
                 SyncScheduler.shared.start()
                 ScreenAwake.apply()
+                Task { await YouTubeEpisodes.addShared() }
                 AutoBackup.shared.refreshCloudDriveStatus()
                 // A transcription pass the system took down while the app was away picks
                 // up where it stopped, rather than waiting to be asked again.
