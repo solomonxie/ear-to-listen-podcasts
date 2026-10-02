@@ -5,6 +5,8 @@ import SwiftUI
 struct MiniPlayerBar: View {
     @ObservedObject private var engine = PlaybackEngine.shared
     @Binding var showingNowPlaying: Bool
+    let onShowBookmarks: () -> Void
+    @State private var bookmarkCount = 0
 
     var body: some View {
         if let track = engine.currentTrack {
@@ -15,9 +17,15 @@ struct MiniPlayerBar: View {
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
+                bookmarkCount: bookmarkCount,
                 onBookmark: { MomentMark.add(to: track, at: engine.currentTime) },
+                onShowBookmarks: onShowBookmarks,
                 onTapBar: { showingNowPlaying = true }
             )
+            .task(id: track.id) { bookmarkCount = MomentMark.count(forTrack: track.id) }
+            .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
+                bookmarkCount = MomentMark.count(forTrack: track.id)
+            }
         }
     }
 }

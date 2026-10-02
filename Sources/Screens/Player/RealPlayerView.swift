@@ -32,6 +32,13 @@ struct RealPlayerView: View {
     /// the player itself or on a page pushed from it — and can pop back rather than
     /// scroll.
     @State private var path: [PlayerRoute] = []
+    /// Bumped to send the page to Notes from outside the page's own scroll — a long press
+    /// on the bar's bookmark, here or from Home.
+    @State private var notesRequests: Int
+
+    init(opensAtNotes: Bool = false) {
+        _notesRequests = State(initialValue: opensAtNotes ? 1 : 0)
+    }
 
     private static let scrollSpace = "player.scroll"
     private static let topAnchor = "player.top"
@@ -128,6 +135,12 @@ struct RealPlayerView: View {
                             }
                             .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
                                 refreshBookmarks(track)
+                            }
+                            // Waits out the page sliding in, or a pushed page popping.
+                            .task(id: notesRequests) {
+                                guard notesRequests > 0 else { return }
+                                try? await Task.sleep(for: .milliseconds(350))
+                                showBookmarks(proxy)
                             }
                     } else {
                         ContentUnavailableView("Nothing playing", systemImage: "mic.slash")
@@ -397,7 +410,7 @@ struct RealPlayerView: View {
             // worth knowing before you mark the same minute twice.
             transportButton("Bookmark this moment") { markMoment(track) } glyph: {
                 Image(systemName: "bookmark.fill")
-                    .overlay(alignment: .topTrailing) { markCount() }
+                    .overlay(alignment: .topTrailing) { MarkCountBadge(count: bookmarks.count) }
             }
             .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
         }
@@ -432,31 +445,6 @@ struct RealPlayerView: View {
         .accessibilityLabel(label)
     }
 
-    /// How many marks this episode has, on the shoulder of the button that makes them.
-    /// Drawn outside the glyph rather than beside it: a number next to the bookmark would
-    /// be a second thing in a row of five evenly spaced controls, and shove the transport
-    /// off centre every time it reached double figures.
-    ///
-    /// The offset is the caller's because the two buttons that carry this are different
-    /// shapes — a bare symbol in the transport, a capsule in the floating row — and the
-    /// shoulder of one is the middle of the other.
-    @ViewBuilder
-    private func markCount(offset: CGSize = CGSize(width: 11, height: -7)) -> some View {
-        if !bookmarks.isEmpty {
-            Text("\(bookmarks.count)")
-                .font(.system(size: 10, weight: .bold).monospacedDigit())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(Color.accentColor, in: Capsule())
-                .offset(x: offset.width, y: offset.height)
-                // The digit rolls rather than blinks — the point is that it went *up*.
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.2), value: bookmarks.count)
-                .fixedSize()
-        }
-    }
-
     /// The list actions and the way down to the text, under the transport where the rest
     /// of the controls are — they used to be a menu in the top-left corner, which is
     /// nowhere near the thumb and hid the queue's length.
@@ -478,20 +466,20 @@ struct RealPlayerView: View {
                 Label("Up Next", systemImage: "list.bullet")
                     .pillLabel()
             }
-            // Goes to the marks without making one — the transport's bookmark, a hand's
-            // width above this row, is what makes them.
-            Button {
-                showBookmarks(proxy)
-            } label: {
-                Label("Bookmarks", systemImage: bookmarks.isEmpty ? "bookmark" : "bookmark.fill")
-                    .pillLabel()
-            }
             // The details card sits between the transport and the text, so on an episode
             // with a transcript this saves a long scroll past everything you already know.
             Button {
                 showTranscript(proxy)
             } label: {
                 Label("Transcript", systemImage: "captions.bubble")
+                    .pillLabel()
+            }
+            // Goes to the marks without making one — the transport's bookmark, a hand's
+            // width above this row, is what makes them.
+            Button {
+                showBookmarks(proxy)
+            } label: {
+                Label("Bookmarks", systemImage: bookmarks.isEmpty ? "bookmark" : "bookmark.fill")
                     .pillLabel()
             }
         }
@@ -639,7 +627,12 @@ struct RealPlayerView: View {
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
+                bookmarkCount: bookmarks.count,
                 onBookmark: { if let track = engine.currentTrack { markMoment(track) } },
+                onShowBookmarks: {
+                    path.removeAll()
+                    notesRequests += 1
+                },
                 onTapBar: { path.removeAll() }
             )
         }
@@ -659,7 +652,9 @@ struct RealPlayerView: View {
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
                 onTogglePlay: { engine.togglePlayPause() },
+                bookmarkCount: bookmarks.count,
                 onBookmark: { if let track = engine.currentTrack { markMoment(track) } },
+                onShowBookmarks: { showBookmarks(proxy) },
                 // Already on this page, so the bar's job is the way back up rather than
                 // a screen transition to where you already are — and following goes off
                 // with it. Leaving it on made the tap look
@@ -687,10 +682,15 @@ struct NowPlayingBarContent: View {
     let isPlaying: Bool
     let onSkipBack: () -> Void
     let onTogglePlay: () -> Void
+    let bookmarkCount: Int
     let onBookmark: () -> Void
+    /// Long press on the bookmark: go to the marks rather than make one.
+    let onShowBookmarks: () -> Void
     let onTapBar: () -> Void
 
     @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 34
+    @State private var marksMade = 0
+    @State private var isFlashing = false
 
     var body: some View {
         if track != nil {
@@ -714,7 +714,7 @@ struct NowPlayingBarContent: View {
                         barButton("gobackward.10", size: min(glyphSize - 4, 34), label: "Back ten seconds", action: onSkipBack)
                         barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 12, 48),
                                   label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
-                        barButton("bookmark", size: min(glyphSize - 6, 30), label: "Bookmark this moment", action: onBookmark)
+                        bookmarkButton
                     }
                 }
                 .padding(.horizontal, 16)
@@ -724,7 +724,38 @@ struct NowPlayingBarContent: View {
                 .onTapGesture(perform: onTapBar)
             }
             .background(.ultraThinMaterial)
+            .overlay { Color.white.opacity(isFlashing ? 0.25 : 0).allowsHitTesting(false) }
         }
+    }
+
+    /// A mark is a snapshot of the moment, so it lands like one: the bar flashes, the
+    /// glyph bounces, and the count rolls up.
+    private var bookmarkButton: some View {
+        Image(systemName: bookmarkCount > 0 ? "bookmark.fill" : "bookmark")
+            .font(.system(size: min(glyphSize - 6, 30)))
+            .symbolEffect(.bounce, value: marksMade)
+            .overlay(alignment: .topTrailing) {
+                MarkCountBadge(count: bookmarkCount, offset: CGSize(width: 12, height: -6))
+            }
+            .frame(width: 64, height: 52)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onBookmark()
+                marksMade += 1
+                withAnimation(.easeIn(duration: 0.05)) { isFlashing = true } completion: {
+                    withAnimation(.easeOut(duration: 0.35)) { isFlashing = false }
+                }
+            }
+            .onLongPressGesture(minimumDuration: 0.4) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onShowBookmarks()
+            }
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Bookmark this moment")
+            .accessibilityValue(bookmarkCount == 0 ? "No marks yet" : "\(bookmarkCount) marks")
+            .accessibilityAction { onBookmark() }
+            .accessibilityAction(named: "Show bookmarks", onShowBookmarks)
     }
 
     private func barButton(
@@ -940,9 +971,6 @@ private extension View {
         lineLimit(1)
             .minimumScaleFactor(0.8)
             .frame(maxWidth: .infinity)
-            // ~1.5x a stock bordered capsule: these are reached for mid-listen, often
-            // without looking.
-            .padding(.vertical, 8)
     }
 }
 
@@ -982,5 +1010,28 @@ private extension View {
                     isOn ? AnyShapeStyle(Color.clear) : AnyShapeStyle(HierarchicalShapeStyle.quaternary)
                 )
             )
+    }
+}
+
+/// How many marks this episode has, on the shoulder of the button that makes them.
+/// Drawn outside the glyph rather than beside it, so the row of controls stays centred.
+struct MarkCountBadge: View {
+    let count: Int
+    var offset = CGSize(width: 11, height: -7)
+
+    var body: some View {
+        if count > 0 {
+            Text("\(count)")
+                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Color.accentColor, in: Capsule())
+                .offset(x: offset.width, y: offset.height)
+                // Rolls rather than blinks — the point is that it went *up*.
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.2), value: count)
+                .fixedSize()
+        }
     }
 }
