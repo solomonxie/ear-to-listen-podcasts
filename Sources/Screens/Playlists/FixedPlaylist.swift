@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The playlists the app owns rather than the listener: **Listen Later**, **Favorites**,
-/// **Downloaded** and **Listened**.
+/// **Downloaded**, **Listened** and **YouTube**.
 ///
 /// They're computed, not stored — the first two from a flag on the track, downloads from
 /// what's actually in `AudioCache` — so there's no row to delete and nothing to keep in
@@ -17,8 +17,15 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
     case listenLater
     case favorites
     case downloaded
-    /// Last: it fills itself as episodes are finished, and is where done ones go.
+    /// It fills itself as episodes are finished, and is where done ones go.
     case listened
+    /// Every YouTube video added as an episode.
+    case youTube
+
+    /// What Home shows — YouTube's left out where YouTube doesn't reach.
+    static var shown: [FixedPlaylist] {
+        AppStorefront.isChina ? allCases.filter { $0 != .youTube } : allCases
+    }
 
     var id: String { rawValue }
 
@@ -28,6 +35,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .favorites: return "Favorites"
         case .downloaded: return "Downloaded"
         case .listened: return "Listened"
+        case .youTube: return "YouTube"
         }
     }
 
@@ -38,6 +46,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .favorites: return String(localized: "Favorites")
         case .downloaded: return String(localized: "Downloaded")
         case .listened: return String(localized: "Listened")
+        case .youTube: return "YouTube"
         }
     }
 
@@ -47,6 +56,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .favorites: return "heart.fill"
         case .downloaded: return "arrow.down.circle.fill"
         case .listened: return "checkmark.circle.fill"
+        case .youTube: return "play.rectangle.fill"
         }
     }
 
@@ -56,6 +66,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .favorites: return .pink
         case .downloaded: return .teal
         case .listened: return .green
+        case .youTube: return .red
         }
     }
 
@@ -66,6 +77,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
         case .favorites: return "Nothing favourited yet. Tap the heart on an episode to keep it here."
         case .downloaded: return "Nothing downloaded yet. Anything you play is saved here automatically."
         case .listened: return "Nothing finished yet. An episode lands here when it plays to the end, or when you mark it listened."
+        case .youTube: return "No videos yet. Paste a YouTube link into search on Home to add one."
         }
     }
 }
