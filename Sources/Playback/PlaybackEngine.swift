@@ -18,6 +18,8 @@ final class PlaybackEngine: ObservableObject {
     /// Raised when the listener picked an episode themselves, so the root can bring the
     /// full player up with it.
     @Published var isPresentingPlayer = false
+    /// Whether the YouTube video can be shown — the page puts the thumbnail up otherwise.
+    @Published private(set) var youTubeDisplay: YouTubeEmbed.Display = .loading
 
     /// Where the next load should start, when something asked for a particular moment
     /// rather than "carry on where I was".
@@ -618,12 +620,10 @@ final class PlaybackEngine: ObservableObject {
             guard let self, let track = self.currentTrack, track.youTubeID != nil else { return }
             self.finishedPlaying(track)
         }
-        youTube.onFailed = { [weak self] code in
-            guard let self, self.isYouTube else { return }
-            self.isPlaying = false
-            self.lastError = code == 101 || code == 150
-                ? "The uploader doesn't allow this video to play inside other apps. Watch it in YouTube — the scrubber here still keeps time for your marks."
-                : "The video couldn't load here. Watch it in YouTube — the scrubber here still keeps time for your marks."
+        youTube.onDisplay = { [weak self] display in
+            guard let self else { return }
+            self.youTubeDisplay = display
+            if display == .blocked, self.isYouTube { self.isPlaying = false }
         }
     }
 

@@ -278,7 +278,7 @@ struct RealPlayerView: View {
 
     @ViewBuilder private func artwork(for track: Track) -> some View {
         if let videoID = track.youTubeID {
-            video(videoID)
+            video(videoID, track: track)
         } else {
             cover(for: track)
         }
@@ -287,11 +287,31 @@ struct RealPlayerView: View {
     /// The video where the cover would be, 16:9 and nearly full width. It scrolls away
     /// with the page like the cover does — reading the transcript doesn't need it in view,
     /// and it keeps playing out of sight.
-    private func video(_ videoID: String) -> some View {
+    ///
+    /// The thumbnail stands in until the video is actually playing, and stays when YouTube
+    /// won't play it here — its error screen, a sign-in wall nobody can get past from
+    /// inside an app, is kept loaded underneath but never shown.
+    private func video(_ videoID: String, track: Track) -> some View {
         VStack(spacing: 8) {
-            YouTubePlayerView(embed: engine.youTube)
-                .aspectRatio(16 / 9, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            ZStack {
+                YouTubePlayerView(embed: engine.youTube)
+                    .opacity(engine.youTubeDisplay == .showing ? 1 : 0)
+                if engine.youTubeDisplay != .showing {
+                    ArtworkTile(track: track, cornerRadius: 0, symbolSize: 44)
+                        .overlay {
+                            if engine.youTubeDisplay == .loading { ProgressView().tint(.white) }
+                        }
+                        .allowsHitTesting(false)
+                }
+            }
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            if engine.youTubeDisplay == .blocked {
+                Text("YouTube won't play this one here. Play still keeps time for your marks.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
             Link(destination: YouTubeVideo.watchURL(id: videoID, at: engine.currentTime)) {
                 Label("Open in YouTube at \(Scrubber.formatted(engine.currentTime))", systemImage: "arrow.up.forward.app")
                     .font(.caption.weight(.semibold))
