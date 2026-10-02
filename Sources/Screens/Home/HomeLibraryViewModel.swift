@@ -41,6 +41,7 @@ final class HomeLibraryViewModel: ObservableObject {
     /// thread — at launch, before Home could draw, and again every time the player closed.
     /// Each `@Published` set was its own redraw too.
     func refresh() async {
+        if tracks.isEmpty { await showFirstShelves() }
         let cachedKeys = await AudioCache.shared.cachedKeys()
         let load = Snapshot.loader(
             libraryStore: libraryStore, trackStore: trackStore, playlistStore: playlistStore,
@@ -63,6 +64,23 @@ final class HomeLibraryViewModel: ObservableObject {
         downloadedTracks = snapshot.downloadedTracks
         bookmarkGroups = snapshot.bookmarkGroups
         searchIndex = snapshot.searchIndex
+    }
+
+    /// The top of Home — Continue Listening and the speakers — from a few small queries,
+    /// on screen before the whole library has been read. Only on the first load: after
+    /// that, the full refresh has them already.
+    private func showFirstShelves() async {
+        let trackStore = trackStore, libraryStore = libraryStore
+        let (recent, speakers) = await Task.detached(priority: .userInitiated) {
+            let played = (try? trackStore.played()) ?? []
+            return (
+                (try? trackStore.recentlyPlayed()) ?? [],
+                SpeakerOrder.byLastActivity((try? libraryStore.artists()) ?? [], tracks: played)
+            )
+        }.value
+        guard tracks.isEmpty else { return }
+        recentTracks = recent
+        artists = speakers
     }
 
     private struct Snapshot: Sendable {

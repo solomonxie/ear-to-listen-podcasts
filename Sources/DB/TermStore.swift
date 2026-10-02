@@ -127,6 +127,22 @@ struct TermStore {
             """, arguments: [trackID])
     }
 
+    /// Every episode's terms at once — trackID → term name → mentions.
+    func mentionsByTrack() throws -> [String: [String: Int]] {
+        try dbQueue.read { db in
+            var result: [String: [String: Int]] = [:]
+            let rows = try Row.fetchCursor(db, sql: """
+                SELECT trackTerms.trackID, terms.name, SUM(trackTerms.mentions) AS mentions
+                FROM trackTerms JOIN terms ON terms.id = trackTerms.termID
+                GROUP BY trackTerms.trackID, terms.id
+                """)
+            while let row = try rows.next() {
+                result[row["trackID"], default: [:]][row["name"]] = row["mentions"] ?? 0
+            }
+            return result
+        }
+    }
+
     /// Summed across the album's episodes — what the collection as a whole keeps coming
     /// back to, which is a different list from any one episode's.
     func terms(forAlbum albumID: String) throws -> [TermCount] {
