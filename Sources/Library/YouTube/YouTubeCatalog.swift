@@ -4,8 +4,8 @@ import GRDB
 
 /// Every YouTube episode, written to the connected bucket beside the backups
 /// (`ear-to-listen-podcasts/youtube-catalog.json`): what each one is and where in the
-/// bucket its files go, so files put there later — by hand or by the listener's own
-/// tools — land where sync picks them up. See docs/design/youtube-catalog.md.
+/// bucket its files go, so a file put there by hand lands where sync picks it up. See
+/// docs/design/youtube-catalog.md.
 ///
 /// Written only when it changed, after edits go quiet (`AutoBackup`). Anything else the
 /// listener keeps beside it is theirs; this app never reads or writes it.
