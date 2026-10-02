@@ -42,21 +42,17 @@ struct EarToListenApp: App {
             // Auto-sync only runs in the foreground — no background-refresh entitlement.
             if newPhase == .active {
                 SyncScheduler.shared.start()
-                AutoBackup.shared.start()
+                AutoBackup.shared.refreshCloudDriveStatus()
                 // A transcription pass the system took down while the app was away picks
                 // up where it stopped, rather than waiting to be asked again.
                 TranscriptRunner.shared.resumeIfInterrupted()
             } else {
                 SyncScheduler.shared.stop()
-                AutoBackup.shared.stop()
-                // Leaving the app is the moment nothing is mid-write, so it's when the
-                // copies that stay on the phone are taken. At most once a day, and only if
-                // something was written — see `LocalBackups`.
-                //
-                // Only on a real move into the background. The `initial` call at launch
-                // arrives with the phase the app starts in, which isn't `.active` — and
-                // took the day's backup there, on the main thread, in front of Home.
-                if newPhase == .background, oldPhase != newPhase { LocalBackups.runInBackground() }
+                // Leaving the app is when an owed backup goes out, rather than waiting for
+                // the next edit. Only on a real move into the background: the `initial`
+                // call at launch arrives with the phase the app starts in, which isn't
+                // `.active`, and a backup there sat in front of Home.
+                if newPhase == .background, oldPhase != newPhase { AutoBackup.shared.backUpOnLeaving() }
             }
         }
     }

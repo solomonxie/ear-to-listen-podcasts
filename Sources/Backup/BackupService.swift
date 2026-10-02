@@ -96,7 +96,8 @@ struct BackupService {
         let termsByTrack = try termStore.mentionsByTrack()
         let artistNames = Dictionary(try libraryStore.artists().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
         let albumNames = Dictionary(try libraryStore.albums().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        let episodes = try trackStore.all(includingLost: true).compactMap { track -> LibrarySnapshot.EpisodeEntry? in
+        let allTracks = try trackStore.all(includingLost: true)
+        let episodes = allTracks.compactMap { track -> LibrarySnapshot.EpisodeEntry? in
             let bookmarks = bookmarksByTrack[track.id] ?? []
             let terms = termsByTrack[track.id] ?? [:]
             guard track.metadataEditedAt != nil || track.isFavorite || track.listenedAt != nil || !bookmarks.isEmpty
@@ -128,16 +129,16 @@ struct BackupService {
         return LibrarySnapshot(
             exportedAt: Date(), playlists: playlists, providers: providers,
             importSources: importSources, artists: artists, episodes: episodes,
-            transcripts: try transcripts()
+            transcripts: try transcripts(of: allTracks)
         )
     }
 
     /// Unlike speaker/episode entries there's no "only if edited" rule here — a machine
     /// transcript is expensive to rebuild (battery or API spend) even when nobody has
     /// touched it, so all of it travels.
-    private func transcripts() throws -> [LibrarySnapshot.TranscriptEntry] {
+    private func transcripts(of tracks: [Track]) throws -> [LibrarySnapshot.TranscriptEntry] {
         let tracksByID = Dictionary(
-            try trackStore.all(includingLost: true).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
+            tracks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         )
         return try transcriptStore.allRecords().compactMap { record in
             guard let track = tracksByID[record.trackID] else { return nil }
