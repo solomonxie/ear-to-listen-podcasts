@@ -217,7 +217,7 @@ struct RealPlayerView: View {
         // On the stack, so it reaches pages pushed from pushed pages too — the browser
         // walks into subfolders with plain links of its own, and a per-destination inset
         // never saw those.
-        .safeAreaInset(edge: .bottom) { pushedPageBar }
+        .dockedBottomBar { pushedPageBar }
         // Stood down the moment anything is pushed: a pushed page has the system's own
         // back swipe, and a page that can't be swiped back from is a page with no way out
         // for anyone who doesn't look for the ‹.

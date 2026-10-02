@@ -20,7 +20,7 @@ struct ContentView: View {
             NavigationStack {
                 HomeView()
             }
-            .safeAreaInset(edge: .bottom) {
+            .dockedBottomBar {
                 // Hidden behind the player, where it would be a second copy of the same
                 // controls sitting on top of the real ones.
                 if !engine.isPresentingPlayer {
