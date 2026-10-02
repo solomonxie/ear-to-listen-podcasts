@@ -23,6 +23,5 @@ YouTube episodes change (`YouTubeCatalog`): per episode `episodeID`, `videoID`, 
 `title`, `speaker`, `album`, and where its files go — `transcriptPath` and `audioPath`,
 `<root>/<Speaker>/<Album>/<Title> [<videoID>].<ext>`.
 
-It's for whatever the listener does outside the app — by hand or with their own tools,
-which live elsewhere. The app only writes this file; anything such a tool keeps beside
-it (e.g. a list of what it has handled) is its own, never read or written here.
+It's the listener's checklist for adding files by hand. The app only writes this file;
+anything else the listener keeps in that folder is theirs, never read or written here.
