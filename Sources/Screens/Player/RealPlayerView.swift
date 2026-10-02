@@ -37,9 +37,13 @@ struct RealPlayerView: View {
     /// Bumped to send the page to Notes from outside the page's own scroll — a long press
     /// on the bar's bookmark, here or from Home.
     @State private var notesRequests: Int
+    /// The same, for the bar's Top and Follow pressed somewhere other than this page.
+    @State private var topRequests = 0
+    @State private var followRequests: Int
 
-    init(opensAtNotes: Bool = false) {
-        _notesRequests = State(initialValue: opensAtNotes ? 1 : 0)
+    init(opensAt landing: PlayerLanding? = nil) {
+        _notesRequests = State(initialValue: landing == .notes ? 1 : 0)
+        _followRequests = State(initialValue: landing == .following ? 1 : 0)
     }
 
     private static let scrollSpace = "player.scroll"
@@ -142,6 +146,17 @@ struct RealPlayerView: View {
                                 guard notesRequests > 0 else { return }
                                 try? await Task.sleep(for: .milliseconds(350))
                                 showBookmarks(proxy)
+                            }
+                            .task(id: topRequests) {
+                                guard topRequests > 0 else { return }
+                                try? await Task.sleep(for: .milliseconds(350))
+                                scrollToTop(proxy)
+                            }
+                            .task(id: followRequests) {
+                                guard followRequests > 0 else { return }
+                                // Longer: the transcript may still be loading on a fresh open.
+                                try? await Task.sleep(for: .milliseconds(600))
+                                follow(proxy)
                             }
                     } else {
                         ContentUnavailableView("Nothing playing", systemImage: "mic.slash")
@@ -380,6 +395,11 @@ struct RealPlayerView: View {
     }
 
     /// see `isFollowingTranscript`.
+    private func scrollToTop(_ proxy: ScrollViewProxy) {
+        isFollowingTranscript = false
+        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
+    }
+
     private func follow(_ proxy: ScrollViewProxy) {
         guard let start = transcript.currentLine(at: engine.currentTime)?.start else { return }
         isFollowingTranscript = true
@@ -664,7 +684,15 @@ struct RealPlayerView: View {
                     notesRequests += 1
                 },
                 onTapBar: { path.removeAll() },
-                onSeek: { engine.seek(to: $0) }
+                onSeek: { engine.seek(to: $0) },
+                onTop: {
+                    path.removeAll()
+                    topRequests += 1
+                },
+                onFollow: {
+                    path.removeAll()
+                    followRequests += 1
+                }
             )
         }
     }
@@ -692,13 +720,9 @@ struct RealPlayerView: View {
                 },
                 onSeek: { engine.seek(to: $0) },
                 seekArea: $barSeekArea,
-                onTop: {
-                    isFollowingTranscript = false
-                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                },
-                follow: transcript.lines.isEmpty ? nil : (isFollowingTranscript, {
-                    if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
-                })
+                onTop: { scrollToTop(proxy) },
+                isFollowing: isFollowingTranscript,
+                onFollow: { if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) } }
             )
         }
     }
@@ -710,6 +734,9 @@ struct RealPlayerView: View {
 /// Controls only — rewind, play/pause, mark — centred, with play in the middle where the
 /// thumb finds it without looking. What's playing is named in the player's top bar, not
 /// repeated here. Tapping anywhere else on the bar does the page's `onTapBar`.
+/// Where the episode page lands when something outside it opens it.
+enum PlayerLanding { case notes, following }
+
 /// The bar's progress line, and a way to move it: drag along it to go anywhere in the
 /// episode. Thin at rest; it thickens and shows the time under the finger while dragged.
 /// A plain tap on the bar still opens the episode — the drag needs a few points of
@@ -796,10 +823,11 @@ struct NowPlayingBarContent: View {
     let onSeek: (TimeInterval) -> Void
     /// Where the bar's seek line is, for a back swipe to stand off.
     var seekArea: Binding<CGRect>? = nil
-    /// The episode page's own two, at the ends of the bar: back to the top of the page,
-    /// and the transcript following playback. Absent anywhere else.
-    var onTop: (() -> Void)? = nil
-    var follow: (isOn: Bool, toggle: () -> Void)? = nil
+    /// The two at the ends: back to the top of the page you're on, and the transcript
+    /// following playback. On every bar, so the bar is the same five wherever it is.
+    let onTop: () -> Void
+    var isFollowing = false
+    let onFollow: () -> Void
 
     @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 34
     @State private var marksMade = 0
@@ -815,18 +843,16 @@ struct NowPlayingBarContent: View {
                 // being dragged it says so in numbers. Each button takes an equal share of
                 // the width, so they sit as far apart as the bar allows.
                 HStack(spacing: 0) {
-                    if let onTop {
-                        barButton("arrow.up", size: min(glyphSize - 4, 28), label: "Top of the page", action: onTop)
-                    }
+                    sideButton("arrow.up.to.line", label: "Top of the page", action: onTop)
                     barButton("gobackward.10", size: min(glyphSize + 2, 40), label: "Back ten seconds", action: onSkipBack)
                     barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 24, 60),
                               label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
                     bookmarkButton
-                    if let follow {
-                        barButton(follow.isOn ? "location.fill" : "location", size: min(glyphSize - 4, 28),
-                                  label: follow.isOn ? "Stop following" : "Follow the transcript", action: follow.toggle)
-                            .foregroundStyle(follow.isOn ? Color.accentColor : Color.primary)
-                    }
+                    sideButton(
+                        isFollowing ? "captions.bubble.fill" : "captions.bubble",
+                        label: isFollowing ? "Stop following the transcript" : "Follow the transcript",
+                        isOn: isFollowing, action: onFollow
+                    )
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, -4)
@@ -865,6 +891,23 @@ struct NowPlayingBarContent: View {
             .accessibilityValue(bookmarkCount == 0 ? "No marks yet" : "\(bookmarkCount) marks")
             .accessibilityAction { onBookmark() }
             .accessibilityAction(named: "Show bookmarks", onShowBookmarks)
+    }
+
+    /// The quieter pair at the ends — page moves rather than playback, so they sit back in
+    /// grey at one size and weight, and only Follow lights up, while it's on.
+    private func sideButton(
+        _ systemImage: String, label: LocalizedStringKey, isOn: Bool = false, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: min(glyphSize - 8, 24), weight: .medium))
+                .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+                .contentTransition(.symbolEffect(.replace))
+                .frame(maxWidth: .infinity, minHeight: Self.buttonHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private func barButton(

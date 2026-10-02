@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject private var engine = PlaybackEngine.shared
-    @State private var playerOpensAtNotes = false
+    @State private var playerLanding: PlayerLanding?
 
     var body: some View {
         // One place shows the player, so tapping an episode behaves the same wherever you
@@ -24,15 +24,16 @@ struct ContentView: View {
                 // Hidden behind the player, where it would be a second copy of the same
                 // controls sitting on top of the real ones.
                 if !engine.isPresentingPlayer {
-                    MiniPlayerBar(showingNowPlaying: $engine.isPresentingPlayer) {
-                        playerOpensAtNotes = true
-                        engine.isPresentingPlayer = true
-                    }
+                    MiniPlayerBar(
+                        showingNowPlaying: $engine.isPresentingPlayer,
+                        onShowBookmarks: { open(at: .notes) },
+                        onFollow: { open(at: .following) }
+                    )
                 }
             }
 
             if engine.isPresentingPlayer {
-                RealPlayerView(opensAtNotes: playerOpensAtNotes)
+                RealPlayerView(opensAt: playerLanding)
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
@@ -41,12 +42,17 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.28), value: engine.isPresentingPlayer)
         .onChange(of: engine.isPresentingPlayer) { _, isShowing in
-            if !isShowing { playerOpensAtNotes = false }
+            if !isShowing { playerLanding = nil }
         }
         // Attached once, at the root: it works on the window, so every page, sheet and
         // full-screen cover in the app gets it.
         .dismissesKeyboardOnBackgroundTap()
         .preferredColorScheme(.dark)
+    }
+
+    private func open(at landing: PlayerLanding) {
+        playerLanding = landing
+        engine.isPresentingPlayer = true
     }
 }
 

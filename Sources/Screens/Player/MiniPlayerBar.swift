@@ -6,6 +6,7 @@ struct MiniPlayerBar: View {
     @ObservedObject private var engine = PlaybackEngine.shared
     @Binding var showingNowPlaying: Bool
     let onShowBookmarks: () -> Void
+    let onFollow: () -> Void
     @State private var bookmarkCount = 0
 
     var body: some View {
@@ -21,7 +22,9 @@ struct MiniPlayerBar: View {
                 onBookmark: { MomentMark.add(to: track, at: engine.currentTime) },
                 onShowBookmarks: onShowBookmarks,
                 onTapBar: { showingNowPlaying = true },
-                onSeek: { engine.seek(to: $0) }
+                onSeek: { engine.seek(to: $0) },
+                onTop: { NotificationCenter.default.post(name: .homeScrollToTop, object: nil) },
+                onFollow: onFollow
             )
             .task(id: track.id) { bookmarkCount = MomentMark.count(forTrack: track.id) }
             .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
