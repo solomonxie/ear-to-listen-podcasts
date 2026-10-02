@@ -34,6 +34,11 @@ extension CloudProvider {
         try await uploadBackup(data, named: BackupArchiveName.current())
     }
 
+    /// A file of the app's own beside the backups — `YouTubeCatalog`.
+    func uploadAppData(_ data: Data, named name: String, contentType: String) async throws {
+        try await upload(data, toPath: backupFolder + name, contentType: contentType)
+    }
+
     func uploadBackup(_ data: Data, named name: String) async throws {
         try await upload(
             data, toPath: backupFolder + name, contentType: "application/zip"

@@ -164,6 +164,8 @@ struct SyncEngine {
         try trackStore.updateTranscriptPaths(providerID: record.id, sidecars: sidecars)
         // Likewise a picture; the episodes still in the queue take theirs in `perform`.
         await ArtworkSidecar.adopt(artwork, providerID: record.id, provider: provider, dbQueue: dbQueue)
+        // And transcripts for YouTube episodes, which have no audio to sit beside.
+        await YouTubeTranscripts.adopt(listing, provider: provider, dbQueue: dbQueue)
 
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
         try providerStore.updateLastSynced(id: record.id, at: Date())
