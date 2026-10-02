@@ -20,6 +20,7 @@ targets:
           - "**/README.md"
       - path: Resources
       - path: Extensions/Share/ShareInbox.swift
+      - path: Extensions/Share/YouTubeLinks.swift
       # The sample library behind Settings > Demo mode. Ships in every build.
       - path: DemoData
         excludes:
