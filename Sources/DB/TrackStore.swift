@@ -582,6 +582,15 @@ struct TrackStore {
         }
     }
 
+    /// Newest added first.
+    func youTubeEpisodes() throws -> [Track] {
+        try dbQueue.read { db in
+            try Track.filter(Column("providerID") == YouTubeVideo.providerID)
+                .order(Column("rowid").desc)
+                .fetchAll(db)
+        }
+    }
+
     /// Every episode ever played — all that `SpeakerOrder` looks at.
     func played() throws -> [Track] {
         try dbQueue.read { db in try Track.filter(Column("lastPlayedAt") != nil).fetchAll(db) }
