@@ -43,7 +43,9 @@ enum AiVendor: String, Codable, CaseIterable {
         case .moonshot: return "Kimi (Moonshot)"
         case .zhipu: return "GLM (Zhipu)"
         case .doubao: return "Doubao (Volcengine)"
-        case .custom: return String(localized: "Custom (OpenAI-compatible)")
+        // Not named after any vendor: this is what the China storefront offers, where no
+        // reference to a vendor unlicensed there may appear.
+        case .custom: return String(localized: "Custom server")
         }
     }
 
