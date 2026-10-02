@@ -386,20 +386,35 @@ final class TranscriptRunner: ObservableObject {
     /// Puts back what the last pass replaced, and writes that back out. Available only
     /// until the next pass or a change of episode, because the copy it restores from is
     /// only held that long.
-    /// A transcript pasted in — how a YouTube episode gets one, since there's no audio
-    /// here to transcribe. Replaces what's there, which stays one Reject away. Returns
-    /// how many lines it read; nothing changes when that's none.
+    static let fileEngine = "file"
+
+    /// A transcript file picked from the phone — how a YouTube episode gets one, since
+    /// there's no audio here to transcribe. Any format a sidecar can be. Replaces what's
+    /// there, which stays one Reject away. Returns how many lines it read; nothing
+    /// changes when that's none.
     @discardableResult
-    func importPasted(_ text: String) -> Int {
+    func importFile(_ url: URL) -> Int {
         guard let track else { return 0 }
-        let pasted = PastedTranscript.parse(text)
-        guard !pasted.isEmpty else { return 0 }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else { return 0 }
+        let loaded = Self.segments(in: String(decoding: data, as: UTF8.self), extension: url.pathExtension, duration: duration)
+        guard !loaded.isEmpty else { return 0 }
         replacedSegments = segments.isEmpty ? nil : segments
-        try? transcriptStore.save(trackID: track.id, segments: pasted, engine: PastedTranscript.engine)
-        segments = pasted
+        try? transcriptStore.save(trackID: track.id, segments: loaded, engine: Self.fileEngine)
+        segments = loaded
         lastError = nil
         canRejectLastPass = replacedSegments != nil
-        return pasted.count
+        return loaded.count
+    }
+
+    /// Timestamps in a `.txt` are read as times before the text is spread evenly across
+    /// the episode — a saved YouTube transcript is a `.txt` with a time on every line.
+    nonisolated static func segments(in text: String, extension ext: String, duration: Double) -> [TranscriptSegment] {
+        let timed = TimestampedText.parse(text)
+        if ext.lowercased() == "txt", !timed.isEmpty { return timed }
+        let parsed = TranscriptFile.parse(text, extension: ext, duration: duration > 0 ? duration : nil)
+        return parsed.isEmpty ? timed : parsed
     }
 
     func rejectLastPass() {
