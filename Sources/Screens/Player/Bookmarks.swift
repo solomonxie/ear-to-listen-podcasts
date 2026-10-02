@@ -24,7 +24,7 @@ struct BookmarkRow: View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: onPlay) {
                 HStack(alignment: .top, spacing: 10) {
-                    Text(Scrubber.formatted(bookmark.position))
+                    Text(SeekBar.formatted(bookmark.position))
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -88,7 +88,7 @@ struct BookmarkRow: View {
         .contextMenu {
             if let youTubeID {
                 Link(destination: YouTubeVideo.watchURL(id: youTubeID, at: bookmark.position)) {
-                    Label("Open in YouTube at \(Scrubber.formatted(bookmark.position))", systemImage: "arrow.up.forward.app")
+                    Label("Open in YouTube at \(SeekBar.formatted(bookmark.position))", systemImage: "arrow.up.forward.app")
                 }
             }
             if let onDelete {
@@ -290,7 +290,7 @@ struct NotesPane: View {
 /// second or two past the one you meant, which lands it on the following line. The
 /// chevrons walk the mark back and forth a spoken line at a time, and the words under
 /// them change as it moves, so the right one can be picked by reading rather than by
-/// scrubbing. They only appear once the episode has a transcript: with no lines there is
+/// dragging the seek bar. They only appear once the episode has a transcript: with no lines there is
 /// nothing to step through.
 ///
 /// Deleting is a trash glyph in the card's top corner, as far from Save as the card is
@@ -365,7 +365,7 @@ struct BookmarkEditorView: View {
                     if !lines.isEmpty {
                         stepButton(-1, systemImage: "chevron.left", label: "The line before this one")
                     }
-                    Text(Scrubber.formatted(TimeInterval(positionMs) / 1000))
+                    Text(SeekBar.formatted(TimeInterval(positionMs) / 1000))
                         .font(.subheadline.monospacedDigit().weight(.semibold))
                         .foregroundStyle(Color.accentColor)
                     if !lines.isEmpty {

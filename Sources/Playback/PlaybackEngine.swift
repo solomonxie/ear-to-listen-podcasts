@@ -41,13 +41,13 @@ final class PlaybackEngine: ObservableObject {
     private var lastPersistedProgressAt = Date.distantPast
 
     /// Plays YouTube episodes, in place of `player`. When it can't — offline, embedding
-    /// turned off by the uploader — `virtualClock` stands in, so the scrubber and marks
+    /// turned off by the uploader — `virtualClock` stands in, so the seek bar and marks
     /// still work against the video playing somewhere else.
     let youTube = YouTubeEmbed()
     private var virtualClock: Timer?
     private var virtualClockTickedAt = Date()
     private var youTubeSeekedAt = Date.distantPast
-    /// A video whose length isn't known yet still needs a scrubber to slide along.
+    /// A video whose length isn't known yet still needs a seek bar to slide along.
     private static let unknownVideoLength: TimeInterval = 3 * 3600
     private var isYouTube: Bool { currentTrack?.youTubeID != nil }
 
@@ -431,7 +431,7 @@ final class PlaybackEngine: ObservableObject {
             }
         }
         currentTime = time
-        // Straight away, so a scrub in the app doesn't leave the lock screen sitting on
+        // Straight away, so a seek in the app doesn't leave the lock screen sitting on
         // the old position until the next time observer fires.
         pushNowPlayingProgress(force: true)
     }
@@ -477,7 +477,7 @@ final class PlaybackEngine: ObservableObject {
         }
     }
 
-    /// Throttled so scrubbing/seeking doesn't hammer the database; `force` bypasses that
+    /// Throttled so seeking doesn't hammer the database; `force` bypasses that
     /// for moments that matter (pause, track switch).
     private func persistProgress(force: Bool = false) {
         guard let track = currentTrack, currentTime.isFinite, currentTime >= 0 else { return }

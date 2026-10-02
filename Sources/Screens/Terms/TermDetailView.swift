@@ -118,7 +118,7 @@ struct TermDetailView: View {
                     )
                 } label: {
                     HStack(alignment: .top, spacing: 8) {
-                        Text(Scrubber.formatted(mention.start))
+                        Text(SeekBar.formatted(mention.start))
                             .font(.caption.monospacedDigit().weight(.semibold))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)

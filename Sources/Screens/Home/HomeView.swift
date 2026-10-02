@@ -457,7 +457,7 @@ private struct TranscriptMatchRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(match.text).font(.footnote).lineLimit(3)
             HStack(spacing: 6) {
-                Text(Scrubber.formatted(match.start)).monospacedDigit()
+                Text(SeekBar.formatted(match.start)).monospacedDigit()
                 if let episodeTitle {
                     Text("· \(episodeTitle)").lineLimit(1)
                 }

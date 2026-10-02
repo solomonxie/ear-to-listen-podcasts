@@ -214,7 +214,7 @@ private struct BookmarkGroupRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(Scrubber.formatted(bookmark.position))
+                        Text(SeekBar.formatted(bookmark.position))
                             .font(.caption.monospacedDigit().weight(.semibold))
                             .foregroundStyle(Color.accentColor)
                         ForEach(bookmark.tagList, id: \.self) { tag in
@@ -250,7 +250,7 @@ private struct BookmarkGroupRow: View {
         .contextMenu {
             if let youTubeID = group.track.youTubeID {
                 Link(destination: YouTubeVideo.watchURL(id: youTubeID, at: bookmark.position)) {
-                    Label("Open in YouTube at \(Scrubber.formatted(bookmark.position))", systemImage: "arrow.up.forward.app")
+                    Label("Open in YouTube at \(SeekBar.formatted(bookmark.position))", systemImage: "arrow.up.forward.app")
                 }
             }
             Button("Delete", systemImage: "trash", role: .destructive) {

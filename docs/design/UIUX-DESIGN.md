@@ -143,7 +143,7 @@ visible page.
 │             [ artwork ]                  │ ← deterministic colour/icon from track id
 │             Sleep Toolkit                │
 │  Speaker: Huberman · Album: Season 3     │ ← one line; each half pushes that page
-│  ├──────────●───────────────────────┤    │ ← custom scrubber, tap anywhere to seek
+│  ├──────────●───────────────────────┤    │ ← custom seek bar, tap anywhere to seek
 │      ⏮       ⏸       ⏭                   │
 │  ▼ details cards, then the transcript    │ ← the WHOLE page scrolls as one; the
 ├──────────────────────────────────────────┤   artwork and transport scroll away
