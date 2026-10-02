@@ -301,9 +301,9 @@ A folder on the phone works as a source too (Sources → Add Local Folder) if yo
 
 Optional features a reviewer may want to skip:
 - AI suggestions (Settings → AI Keys): requires the reviewer's own API key from a provider such as Anthropic or DeepSeek. Off by default; the rest of the app works without it.
+- iCloud Drive backup (Settings → Sync & Backup): optional; the app is fully functional without it.
 
 China mainland: the app reads the App Store storefront (StoreKit Storefront.current). On the China storefront it offers only AI providers licensed in mainland China (DeepSeek, Qwen, Kimi, GLM, Doubao) and a user-supplied custom server; ChatGPT/OpenAI and every other unlicensed provider, and cloud transcription through them, are not offered or shown, and no metadata in any localization refers to them. A screen recording of the China build's AI settings is attached.
-- iCloud Drive backup (Settings → Sync & Backup): optional; the app is fully functional without it.
 
 All library data is stored in a local SQLite database on the device. We operate no server, have no accounts, and receive no user data. The only networking the app does is to the storage the user configures and, if enabled, to the AI provider the user supplies a key for.
 ```
