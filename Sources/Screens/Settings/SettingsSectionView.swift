@@ -18,6 +18,7 @@ struct SettingsSectionView: View {
     @State private var showingAddAiKey = false
     @State private var showingRemoveAllConfirmation = false
     @State private var isDemo = AppMode.isDemo
+    @AppStorage(ScreenAwake.key) private var keepsScreenOn = false
 
     /// Says which of the four reasons an iCloud folder can be unusable applies, because
     /// they need four different things said — and the explanation *replaces* the location
@@ -304,6 +305,16 @@ struct SettingsSectionView: View {
                     options: AppLanguage.allCases.map { UnfoldingPicker.Option($0, $0.displayName) },
                     valueAlignment: .leading
                 )
+            }
+            .padding(.horizontal)
+
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeading(
+                    title: "SCREEN",
+                    info: "While the app is open, the phone doesn't dim or lock on its own. Leaving the app or pressing the side button still locks it."
+                )
+                Toggle("Keep screen on", isOn: $keepsScreenOn)
+                    .onChange(of: keepsScreenOn) { _, _ in ScreenAwake.apply() }
             }
             .padding(.horizontal)
 

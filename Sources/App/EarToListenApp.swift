@@ -43,6 +43,7 @@ struct EarToListenApp: App {
             // Auto-sync only runs in the foreground — no background-refresh entitlement.
             if newPhase == .active {
                 SyncScheduler.shared.start()
+                ScreenAwake.apply()
                 AutoBackup.shared.refreshCloudDriveStatus()
                 // A transcription pass the system took down while the app was away picks
                 // up where it stopped, rather than waiting to be asked again.
