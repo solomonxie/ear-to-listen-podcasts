@@ -13,6 +13,8 @@ extension Notification.Name {
     /// once — the player's button, Now Playing's list, the album page and Home — and none
     /// of them owns the others.
     static let bookmarksDidChange = Notification.Name("bookmarksDidChange")
+    /// A moment was just marked, from any button — what `MarkFlash` answers.
+    static let momentMarked = Notification.Name("momentMarked")
 
     /// Posted once by `SyncEngine.sync(providerRecord:)` when a listing pass has queued
     /// its files. It's the wake-up as well as the refresh: `SyncQueueManager` both

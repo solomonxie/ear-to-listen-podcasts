@@ -458,6 +458,7 @@ struct RealPlayerView: View {
             // worth knowing before you mark the same minute twice.
             transportButton("Bookmark this moment") { markMoment(track) } glyph: {
                 Image(systemName: "bookmark.fill")
+                    .symbolEffect(.bounce, value: bookmarks.count)
                     .overlay(alignment: .topTrailing) { MarkCountBadge(count: bookmarks.count) }
             }
             .accessibilityValue(bookmarks.isEmpty ? "No marks yet" : "\(bookmarks.count) marks")
@@ -751,7 +752,6 @@ struct NowPlayingBarContent: View {
 
     @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 34
     @State private var marksMade = 0
-    @State private var isFlashing = false
 
     var body: some View {
         if track != nil {
@@ -785,12 +785,11 @@ struct NowPlayingBarContent: View {
                 .onTapGesture(perform: onTapBar)
             }
             .background(.ultraThinMaterial)
-            .overlay { Color.white.opacity(isFlashing ? 0.25 : 0).allowsHitTesting(false) }
         }
     }
 
-    /// A mark is a snapshot of the moment, so it lands like one: the bar flashes, the
-    /// glyph bounces, and the count rolls up.
+    /// A mark is a snapshot of the moment, so it lands like one: the screen flashes
+    /// (`MarkFlash`), the glyph bounces, and the count rolls up.
     private var bookmarkButton: some View {
         Image(systemName: bookmarkCount > 0 ? "bookmark.fill" : "bookmark")
             .font(.system(size: min(glyphSize - 6, 30)))
@@ -803,9 +802,6 @@ struct NowPlayingBarContent: View {
             .onTapGesture {
                 onBookmark()
                 marksMade += 1
-                withAnimation(.easeIn(duration: 0.05)) { isFlashing = true } completion: {
-                    withAnimation(.easeOut(duration: 0.35)) { isFlashing = false }
-                }
             }
             .onLongPressGesture(minimumDuration: 0.4) {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()

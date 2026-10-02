@@ -15,8 +15,9 @@ enum MomentMark {
         guard let saved = try? store.add(
             trackID: track.id, positionMs: Int(time * 1000), transcriptText: spoken
         ) else { return nil }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
+        NotificationCenter.default.post(name: .momentMarked, object: nil)
         return saved
     }
 
