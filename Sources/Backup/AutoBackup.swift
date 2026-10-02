@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Keeps the app's own data — playlists, speaker and episode edits, the images they
 /// reference, and transcripts — copied somewhere that outlives this install, so a
@@ -10,9 +11,13 @@ import Foundation
 /// backup, not multi-device merge. Episode audio never goes up — it came out of that
 /// bucket in the first place, and `SyncEngine` finds it again by itself.
 ///
-/// Foreground-only, like `SyncScheduler` — there's no background-refresh entitlement. A
-/// run ships the whole archive, so it happens once a day at most, and only if the change
-/// log moved since the copy that destination last took. The mark is written down only
+/// **Driven by changes, not by the clock or the app's lifecycle.** A write to anything a
+/// backup carries schedules one for when edits go quiet (`quietPeriod`), and leaving the
+/// app sends out whatever is still owed. Nothing runs at launch and nothing polls. Each
+/// destination — this phone (`LocalBackups`), iCloud Drive, the bucket — still takes a
+/// whole archive at most once a day and only if the change log moved since its last
+/// copy, and the archive is built once, off the main thread, for all three.
+/// The mark is written down only
 /// after the upload succeeds: record it before, and a failed upload is remembered as done,
 /// so the next day's gate sees nothing new and skips — indefinitely.
 ///
@@ -29,7 +34,9 @@ final class AutoBackup: ObservableObject {
     private static let cloudDriveEnabledKey = "backup.icloud"
     private static let cloudDriveLastKey = "backup.icloud.lastAt"
     private static let cloudDriveMarkKey = "backup.icloud.mark"
-    private static let pollInterval: Duration = .seconds(60)
+    /// Long enough that typing a note or working through an album is one backup, not one
+    /// per row.
+    private static let quietPeriod: Duration = .seconds(60)
 
     @Published var isEnabled: Bool {
         didSet { persist(isEnabled, forKey: Self.bucketEnabledKey, changedFrom: oldValue) }
@@ -41,7 +48,7 @@ final class AutoBackup: ObservableObject {
         didSet {
             persist(isCloudDriveEnabled, forKey: Self.cloudDriveEnabledKey, changedFrom: oldValue)
             guard isCloudDriveEnabled, isCloudDriveEnabled != oldValue else { return }
-            Task { await backUp(toBucket: false, toCloudDrive: true) }
+            Task { await backUp(toPhone: false, toBucket: false, toCloudDrive: true) }
         }
     }
 
@@ -52,7 +59,7 @@ final class AutoBackup: ObservableObject {
     @Published private(set) var cloudDriveError: String?
     @Published private(set) var cloudDriveStatus: CloudDriveStatus = .notReady
 
-    private var loopTask: Task<Void, Never>?
+    private var scheduled: Task<Void, Never>?
 
     private init() {
         let defaults = UserDefaults.standard
@@ -60,6 +67,9 @@ final class AutoBackup: ObservableObject {
         isCloudDriveEnabled = defaults.bool(forKey: Self.cloudDriveEnabledKey)
         lastBackupAt = defaults.object(forKey: Self.bucketLastKey) as? Date
         lastCloudDriveBackupAt = defaults.object(forKey: Self.cloudDriveLastKey) as? Date
+        NotificationCenter.default.addObserver(forName: .backedUpDataDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.backUpSoon() }
+        }
     }
 
     /// Called when a remote source is connected. An explicit "off" is left alone —
@@ -91,7 +101,7 @@ final class AutoBackup: ObservableObject {
         lastCloudDriveBackupAt = nil
         lastError = nil
         cloudDriveError = nil
-        stop()
+        scheduled?.cancel()
         let defaults = UserDefaults.standard
         for key in [
             Self.bucketEnabledKey, Self.bucketLastKey, Self.bucketMarkKey,
@@ -104,24 +114,32 @@ final class AutoBackup: ObservableObject {
     /// Called on every foreground, because the fix for a blocked iCloud row happens in
     /// the Settings app — the listener leaves, changes it, and comes back to a row that
     /// has to agree with what they just did.
-    func start() {
+    func refreshCloudDriveStatus() {
         Task { cloudDriveStatus = await CloudDrive.status() }
-        guard isEnabled || isCloudDriveEnabled, loopTask == nil, !AppMode.isDemo else { return }
-        loopTask = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.backUpIfDue()
-                try? await Task.sleep(for: Self.pollInterval)
-            }
+    }
+
+    /// Restarted by every write, so a burst of them is one backup at its end.
+    private func backUpSoon() {
+        scheduled?.cancel()
+        scheduled = Task { [weak self] in
+            try? await Task.sleep(for: Self.quietPeriod)
+            guard !Task.isCancelled else { return }
+            await self?.backUpIfDue()
         }
     }
 
-    func stop() {
-        loopTask?.cancel()
-        loopTask = nil
+    /// With the time iOS gives an app that has just been put away.
+    func backUpOnLeaving() {
+        scheduled?.cancel()
+        let assertion = BackgroundAssertion(name: "backup")
+        Task {
+            await backUpIfDue()
+            assertion.end()
+        }
     }
 
     func backUpNow() async {
-        await backUp(toBucket: isEnabled, toCloudDrive: isCloudDriveEnabled)
+        await backUp(toPhone: false, toBucket: isEnabled, toCloudDrive: isCloudDriveEnabled)
     }
 
     /// The recovery point written immediately before an irreversible local reset, under a
@@ -172,18 +190,12 @@ final class AutoBackup: ObservableObject {
 
     private func persist(_ value: Bool, forKey key: String, changedFrom oldValue: Bool) {
         UserDefaults.standard.set(value, forKey: key)
-        guard value != oldValue else { return }
-        value ? start() : stopIfIdle()
-    }
-
-    private func stopIfIdle() {
-        guard !isEnabled, !isCloudDriveEnabled else { return }
-        stop()
     }
 
     private func backUpIfDue() async {
         guard !isBackingUp else { return }
         await backUp(
+            toPhone: LocalBackups.isDue,
             toBucket: isEnabled && isDue(lastBackupAt, markKey: Self.bucketMarkKey),
             toCloudDrive: isCloudDriveEnabled && isDue(lastCloudDriveBackupAt, markKey: Self.cloudDriveMarkKey)
         )
@@ -199,30 +211,34 @@ final class AutoBackup: ObservableObject {
         return !Calendar.current.isDateInToday(lastAt)
     }
 
-    private func backUp(toBucket: Bool, toCloudDrive: Bool) async {
-        guard !isBackingUp, toBucket || toCloudDrive, !AppMode.isDemo else { return }
+    private func backUp(toPhone: Bool, toBucket: Bool, toCloudDrive: Bool) async {
+        guard !isBackingUp, toPhone || toBucket || toCloudDrive, !AppMode.isDemo else { return }
         isBackingUp = true
         defer { isBackingUp = false }
 
-        let service = BackupService()
+        let mark = ChangeLog.mark
+        let built = await Self.buildArchive()
         let archive: Data
-        do {
-            let snapshot = try service.makeSnapshot()
+        switch built {
+        case .success(let data?):
+            archive = data
+        case .success(nil):
             // A library with nothing in it is a state to be recovered from, not one to
             // ship: today's key in the bucket is taken by it, and ten empty days prune
             // iCloud clean of every copy that still had the library in it.
-            guard !snapshot.isEmpty else { return }
-            archive = try service.archive(snapshot)
-        } catch {
+            return
+        case .failure(let error):
             if toBucket { lastError = error.localizedDescription }
             if toCloudDrive { cloudDriveError = error.localizedDescription }
             return
         }
 
-        let mark = ChangeLog.mark
+        if toPhone {
+            await Task.detached(priority: .utility) { LocalBackups.save(archive, mark: mark) }.value
+        }
         if toBucket {
             do {
-                try await service.upload(archive)
+                try await BackupService().upload(archive)
                 lastBackupAt = Date()
                 UserDefaults.standard.set(lastBackupAt, forKey: Self.bucketLastKey)
                 UserDefaults.standard.set(mark, forKey: Self.bucketMarkKey)
@@ -251,5 +267,31 @@ final class AutoBackup: ObservableObject {
                 cloudDriveError = error.localizedDescription
             }
         }
+    }
+
+    /// Seconds of work on a big library, so never on the main thread. Nil for an empty one.
+    private nonisolated static func buildArchive() async -> Result<Data?, Error> {
+        await Task.detached(priority: .utility) {
+            Result {
+                let service = BackupService()
+                let snapshot = try service.makeSnapshot()
+                return snapshot.isEmpty ? nil : try service.archive(snapshot)
+            }
+        }.value
+    }
+}
+
+@MainActor
+private final class BackgroundAssertion {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init(name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in self?.end() }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

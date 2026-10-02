@@ -4,9 +4,9 @@ Three tiers, each answering a failure the others don't.
 
 | Tier | Answers | Survives deleting the app | Cadence | Retention |
 |---|---|---|---|---|
-| **1. This phone** — `LocalBackups`, `ChangeLog` | the data is still here and now **wrong**: a bad import, the wrong archive restored, an edit nobody meant | No | on app-background, max daily; plus before any large operation; log on every write | copies 7 days, by age; the log for the life of the install |
-| **2. iCloud Drive** — `CloudDrive` | phone lost or app reinstalled; also "let me see the file myself" | Yes | daily, only if changed | latest 10, older pruned |
-| **3. The bucket** — any connected cloud | everything else, plus "what did this look like in March" | Yes | daily, only if changed | never deleted |
+| **1. This phone** — `LocalBackups`, `ChangeLog` | the data is still here and now **wrong**: a bad import, the wrong archive restored, an edit nobody meant | No | after a change (once edits go quiet) or on leaving the app, max daily; plus before any large operation; log on every write | copies 7 days, by age; the log for the life of the install |
+| **2. iCloud Drive** — `CloudDrive` | phone lost or app reinstalled; also "let me see the file myself" | Yes | after a change or on leaving, max daily | latest 10, older pruned |
+| **3. The bucket** — any connected cloud | everything else, plus "what did this look like in March" | Yes | after a change or on leaving, max daily | never deleted |
 
 Tier 1 not surviving deletion isn't a weakness, it's a different job: it's the
 only copy that's instant, offline and there the moment it's wanted. Most real
@@ -51,7 +51,8 @@ What ships is a zip (`BackupService.archive`/`unarchive`, via the hand-rolled
 
 ## Tier 1: the copies that stay here
 
-`LocalBackups` runs on app-background, at most once a day, and only if the
+`LocalBackups` runs when `AutoBackup` says — a minute after the last edit, or on
+leaving the app; never at launch — at most once a day, and only if the
 change log moved. Copying megabytes per keystroke to guard against a
 once-a-year event is the wrong trade, and the log covers what falls between.
 It keeps three different things:
