@@ -21,7 +21,7 @@ final class CarLibraryTests: XCTestCase {
     private func track(durationMs: Int?, positionMs: Int? = nil, listened: Bool = false) -> Track {
         var track = Track(
             id: "t", providerID: "p", artistID: nil, albumID: nil, filePath: "t.mp3",
-            title: "T", trackNumber: nil, durationMs: durationMs, updatedAt: Date()
+            title: "T", durationMs: durationMs, updatedAt: Date()
         )
         track.positionMs = positionMs
         track.listenedAt = listened ? Date() : nil

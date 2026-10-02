@@ -120,7 +120,7 @@ final class TranscriptSidecarFallbackTests: XCTestCase {
     private func track(transcriptPath: String?) -> Track {
         Track(
             id: "t1", providerID: "p1", artistID: nil, albumID: nil,
-            filePath: "show/ep-01.mp3", title: "Episode", trackNumber: nil, durationMs: nil,
+            filePath: "show/ep-01.mp3", title: "Episode", durationMs: nil,
             transcriptPath: transcriptPath, updatedAt: Date()
         )
     }

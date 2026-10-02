@@ -17,7 +17,7 @@ final class TermStoreTests: XCTestCase {
         try TrackStore(dbQueue: dbQueue).upsert(
             Track(
                 id: id, providerID: "p1", artistID: nil, albumID: albumID, filePath: "\(id).mp3",
-                title: "Episode \(id)", trackNumber: nil, durationMs: nil, updatedAt: Date()
+                title: "Episode \(id)", durationMs: nil, updatedAt: Date()
             ),
             artistName: nil, albumName: album
         )

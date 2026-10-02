@@ -8,7 +8,7 @@ final class SpokenLanguageTests: XCTestCase {
     private func makeTrack(language: String?) -> Track {
         Track(
             id: "t1", providerID: "p1", artistID: "a1", albumID: "al1", filePath: "ep.mp3",
-            title: "ep", trackNumber: nil, durationMs: nil, sizeBytes: nil, isLost: false,
+            title: "ep", durationMs: nil, sizeBytes: nil, isLost: false,
             language: language, updatedAt: Date()
         )
     }

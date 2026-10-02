@@ -57,7 +57,7 @@ enum DemoDataSeeder {
                 let track = Track(
                     id: UUID().uuidString, providerID: provider.id, artistID: artist?.id, albumID: album.id,
                     filePath: DemoProvider.fileName(for: episode.key), title: episode.title,
-                    trackNumber: episode.number, durationMs: timing.durationMs, year: seed.year,
+                    durationMs: timing.durationMs, year: seed.year,
                     sizeBytes: timing.sizeBytes, contentHash: nil, language: seed.language,
                     updatedAt: now, notes: episode.notes,
                     summary: episode.summary.map { fillMarkers($0, starts: starts) },
@@ -156,7 +156,6 @@ enum DemoDataSeeder {
 
     struct EpisodeSeed: Decodable {
         var key: String
-        var number: Int?
         var title: String
         var speaker: String?
         var progress: Double?

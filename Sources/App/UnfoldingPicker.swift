@@ -192,19 +192,18 @@ struct UnfoldingTextField: View {
 
 /// A number chosen from a wheel that unfolds in the row, instead of typed on a keypad.
 ///
-/// A year and a track number are picked from a short, ordered, known range — the kind of
+/// A year is picked from a short, ordered, known range — the kind of
 /// thing a keypad is a bad fit for: it covers half the screen, offers every number
 /// including the wrong ones, and needs a Done to dismiss. A wheel in the row shows the
 /// neighbours, can't produce a value outside the range, and needs no dismissal.
 ///
 /// ```
-///  Year            2026  ›        Year            2026  ⌄
-///  Track no.        —    ›   →    ┌────────────────────────┐
+///  Year            2026  ›   →    Year            2026  ⌄
+///                                 ┌────────────────────────┐
 ///                                 │         2027           │
 ///                                 │      ▸  2026  ◂        │
 ///                                 │         2025           │
 ///                                 └────────────────────────┘
-///                                 Track no.        —    ›
 /// ```
 ///
 /// Per the guideline, a continuous control **commits as it moves** — there is no Done,
@@ -264,9 +263,6 @@ enum NumberChoices {
         let thisYear = Calendar.current.component(.year, from: Date())
         return Array((1950...(thisYear + 1)).reversed())
     }
-
-    /// Long enough for a lecture series, short enough to scroll.
-    static let trackNumbers = Array(1...300)
 }
 
 /// `UnfoldingPicker`'s list replaced by a wheel, for options there are too many of to

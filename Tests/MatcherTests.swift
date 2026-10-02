@@ -10,7 +10,6 @@ final class MatcherTests: XCTestCase {
             albumID: nil,
             filePath: "\(title).mp3",
             title: title,
-            trackNumber: nil,
             durationMs: durationMs,
             sizeBytes: nil,
             isLost: false,

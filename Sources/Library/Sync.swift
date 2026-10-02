@@ -281,7 +281,6 @@ struct SyncEngine {
             albumID: album?.id,
             filePath: file.path,
             title: title,
-            trackNumber: nil,
             durationMs: metadata.durationMs,
             year: metadata.year,
             sizeBytes: file.sizeBytes,

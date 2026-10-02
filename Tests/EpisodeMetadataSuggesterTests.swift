@@ -45,7 +45,7 @@ final class EpisodeMetadataSuggesterTests: XCTestCase {
         )
         let track = Track(
             id: UUID().uuidString, providerID: "p1", artistID: nil, albumID: nil,
-            filePath: "ep.mp3", title: "ep", trackNumber: nil, durationMs: durationMs,
+            filePath: "ep.mp3", title: "ep", durationMs: durationMs,
             sizeBytes: nil, isLost: false, updatedAt: Date()
         )
         try TrackStore(dbQueue: dbQueue).upsert(track, artistName: nil, albumName: nil)
