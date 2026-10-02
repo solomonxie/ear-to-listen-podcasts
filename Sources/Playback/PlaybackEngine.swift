@@ -97,6 +97,16 @@ final class PlaybackEngine: ObservableObject {
         }
     }
 
+    /// An edit made on the episode page, shown before the database has it — the reload
+    /// that follows a save brings the same value back.
+    func showEdit(of trackID: String, _ change: (inout Track) -> Void) {
+        if var track = currentTrack, track.id == trackID {
+            change(&track)
+            currentTrack = track
+        }
+        if let index = queue.firstIndex(where: { $0.id == trackID }) { change(&queue[index]) }
+    }
+
     /// What the player and the lock screen draw from a track — the fields an edit can
     /// change. Compared so an unrelated change elsewhere in the library doesn't redraw.
     private static func displayKey(_ track: Track) -> String {
