@@ -38,7 +38,7 @@ struct EarToListenApp: App {
                 // in Settings takes effect without a relaunch.
                 .environment(\.locale, language.locale)
         }
-        .onChange(of: scenePhase, initial: true) { _, newPhase in
+        .onChange(of: scenePhase, initial: true) { oldPhase, newPhase in
             // Auto-sync only runs in the foreground — no background-refresh entitlement.
             if newPhase == .active {
                 SyncScheduler.shared.start()
@@ -52,7 +52,11 @@ struct EarToListenApp: App {
                 // Leaving the app is the moment nothing is mid-write, so it's when the
                 // copies that stay on the phone are taken. At most once a day, and only if
                 // something was written — see `LocalBackups`.
-                LocalBackups.runIfDue { try BackupService().currentArchive() }
+                //
+                // Only on a real move into the background. The `initial` call at launch
+                // arrives with the phase the app starts in, which isn't `.active` — and
+                // took the day's backup there, on the main thread, in front of Home.
+                if newPhase == .background, oldPhase != newPhase { LocalBackups.runInBackground() }
             }
         }
     }

@@ -582,6 +582,11 @@ struct TrackStore {
         }
     }
 
+    /// Every episode ever played — all that `SpeakerOrder` looks at.
+    func played() throws -> [Track] {
+        try dbQueue.read { db in try Track.filter(Column("lastPlayedAt") != nil).fetchAll(db) }
+    }
+
     /// Tracks with playback history, most recently played first.
     func recentlyPlayed(limit: Int = 20) throws -> [Track] {
         try dbQueue.read { db in
