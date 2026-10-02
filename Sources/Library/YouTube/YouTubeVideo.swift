@@ -10,36 +10,9 @@ enum YouTubeVideo {
     static let providerID = "youtube"
     static let providerType = "youtube"
 
-    private static let idCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+    static func isValidID(_ id: String) -> Bool { YouTubeLinks.isValidID(id) }
 
-    static func isValidID(_ id: String) -> Bool {
-        id.count == 11 && id.unicodeScalars.allSatisfy(idCharacters.contains)
-    }
-
-    /// The video ID in a link, or a bare ID. `youtu.be/…`, `watch?v=…`, `/shorts/…`,
-    /// `/live/…`, `/embed/…`, on any youtube.com host.
-    static func id(from link: String) -> String? {
-        let text = link.trimmingCharacters(in: .whitespacesAndNewlines)
-        if isValidID(text) { return text }
-        let withScheme = text.contains("://") ? text : "https://" + text
-        guard let components = URLComponents(string: withScheme), let host = components.host?.lowercased() else { return nil }
-        let parts = components.path.split(separator: "/").map(String.init)
-        let candidate: String?
-        if host == "youtu.be" {
-            candidate = parts.first
-        } else if host.hasSuffix("youtube.com") || host.hasSuffix("youtube-nocookie.com") {
-            if let v = components.queryItems?.first(where: { $0.name == "v" })?.value {
-                candidate = v
-            } else if parts.count >= 2, ["shorts", "live", "embed", "v"].contains(parts[0]) {
-                candidate = parts[1]
-            } else {
-                candidate = nil
-            }
-        } else {
-            candidate = nil
-        }
-        return candidate.flatMap { isValidID($0) ? $0 : nil }
-    }
+    static func id(from link: String) -> String? { YouTubeLinks.videoID(in: link) }
 
     /// Opens the YouTube app at that moment when it's installed, Safari otherwise.
     static func watchURL(id: String, at seconds: TimeInterval = 0) -> URL {

@@ -34,19 +34,20 @@ final class ShareViewController: UIViewController {
         super.viewDidAppear(animated)
         Task {
             let link = await sharedLink()
-            if let link, Self.isYouTube(link) {
+            if let link {
                 ShareInbox.add(link)
                 message.text = String(localized: "Added to Ear to Listen. It's in the YouTube playlist next time you open the app.")
             } else {
-                message.text = String(localized: "Only YouTube links can be added.")
+                message.text = String(localized: "Only YouTube video links can be added.")
             }
             try? await Task.sleep(for: .seconds(1.6))
             extensionContext?.completeRequest(returningItems: nil)
         }
     }
 
-    /// The YouTube link among what was shared — browsers send the page's URL, often with
-    /// its title as text beside it, and the YouTube app sends the link as both.
+    /// The YouTube video link among what was shared — browsers send the page's URL, often
+    /// with its title as text beside it, and the YouTube app sends the link as both. A link
+    /// to YouTube's home or search page names no video, so it doesn't count.
     private func sharedLink() async -> String? {
         let providers = (extensionContext?.inputItems as? [NSExtensionItem] ?? []).flatMap { $0.attachments ?? [] }
         var candidates: [String] = []
@@ -60,7 +61,7 @@ final class ShareViewController: UIViewController {
                 candidates += text.matches(of: /https?:\/\/\S+/).map { String($0.output) }
             }
         }
-        return candidates.lazy.map(Self.unwrapped).first(where: Self.isYouTube)
+        return candidates.lazy.map(Self.unwrapped).first { YouTubeLinks.videoID(in: $0) != nil }
     }
 
     /// A Google result link (`google.com/url?q=…`) carries the page it points to.
@@ -72,8 +73,4 @@ final class ShareViewController: UIViewController {
         return target
     }
 
-    private static func isYouTube(_ link: String) -> Bool {
-        guard let host = URL(string: link)?.host?.lowercased() else { return false }
-        return host == "youtu.be" || host.hasSuffix("youtube.com")
-    }
 }
