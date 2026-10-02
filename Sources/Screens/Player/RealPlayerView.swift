@@ -38,12 +38,13 @@ struct RealPlayerView: View {
     /// on the bar's bookmark, here or from Home.
     @State private var notesRequests: Int
     /// The same, for the bar's Top and Follow pressed somewhere other than this page.
-    @State private var topRequests = 0
+    @State private var topRequests: Int
     @State private var followRequests: Int
 
     init(opensAt landing: PlayerLanding? = nil) {
         _notesRequests = State(initialValue: landing == .notes ? 1 : 0)
         _followRequests = State(initialValue: landing == .following ? 1 : 0)
+        _topRequests = State(initialValue: landing == .top ? 1 : 0)
     }
 
     private static let scrollSpace = "player.scroll"
@@ -735,7 +736,7 @@ struct RealPlayerView: View {
 /// thumb finds it without looking. What's playing is named in the player's top bar, not
 /// repeated here. Tapping anywhere else on the bar does the page's `onTapBar`.
 /// Where the episode page lands when something outside it opens it.
-enum PlayerLanding { case notes, following }
+enum PlayerLanding { case top, notes, following }
 
 /// The bar's progress line, and a way to move it: drag along it to go anywhere in the
 /// episode. Thin at rest; it thickens and shows the time under the finger while dragged.
@@ -823,8 +824,9 @@ struct NowPlayingBarContent: View {
     let onSeek: (TimeInterval) -> Void
     /// Where the bar's seek line is, for a back swipe to stand off.
     var seekArea: Binding<CGRect>? = nil
-    /// The two at the ends: back to the top of the page you're on, and the transcript
-    /// following playback. On every bar, so the bar is the same five wherever it is.
+    /// The two at the ends: the top of the playing episode's page, from wherever the bar
+    /// is, and the transcript following playback. On every bar, so the bar is the same
+    /// five wherever it is.
     let onTop: () -> Void
     var isFollowing = false
     let onFollow: () -> Void
