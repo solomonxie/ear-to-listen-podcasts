@@ -422,6 +422,9 @@ struct BackupService {
     /// The first connected bucket that takes writes, whichever cloud it's in — the
     /// archive is written through the `CloudProvider` protocol, so S3, COS, OSS, Azure and
     /// Google are all equally somewhere to put it.
+    /// The bucket the app's own files go to, or nil when none is connected.
+    func remoteProviderForAppData() -> CloudProvider? { try? activeRemoteProvider() }
+
     private func activeRemoteProvider() throws -> CloudProvider {
         for record in try providerStore.active() where record.cloudKind != nil {
             guard let provider = try? ProviderManager.shared.provider(for: record), provider.isWritable else { continue }
