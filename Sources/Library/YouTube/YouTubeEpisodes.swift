@@ -23,7 +23,7 @@ enum YouTubeEpisodes {
     }
 
     static func existing(_ videoID: String) -> Track? {
-        try? trackStore.find(providerID: YouTubeVideo.providerID, filePath: videoID)
+        try? trackStore.find(youTubeVideoID: videoID)
     }
 
     @discardableResult
@@ -43,6 +43,7 @@ enum YouTubeEpisodes {
             artistID: artist.id, albumID: collection.id, filePath: videoID, title: title,
             durationMs: durationMs, updatedAt: Date()
         )
+        track.youTubeVideoID = videoID
         track.notes = notes
         track.artworkFileName = artworkFileName
         track.metadataEditedAt = Date()

@@ -66,4 +66,8 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendabl
     /// file didn't give enough to be sure, which means it is never folded with anything.
     /// Every place the file lives is a `TrackFile`; the pair above is the one it plays.
     var fingerprint: String? = nil
+    /// The YouTube video this episode is, if it is one. Kept apart from where it plays
+    /// from: a video-only episode plays from the `youtube` source, and one with an audio
+    /// file in a connected bucket plays that file like any other episode.
+    var youTubeVideoID: String? = nil
 }
