@@ -244,6 +244,22 @@ struct SyncEngine {
             return false
         }
 
+        // Named with a YouTube episode's video ID: that episode's audio, not a new one.
+        if let videoID = YouTubeVideo.id(inFileName: file.path),
+           let episode = try trackStore.find(youTubeVideoID: videoID) {
+            stage(.saving)
+            try trackStore.attach(
+                TrackFile(
+                    trackID: episode.id, providerID: record.id, filePath: file.path, sizeBytes: file.sizeBytes,
+                    contentHash: file.contentHash, transcriptPath: transcriptPath, transcriptPaths: transcriptPaths,
+                    remoteModifiedAt: file.modifiedAt
+                ),
+                toYouTubeEpisode: episode.id
+            )
+            NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+            return false
+        }
+
         stage(.readingTags)
         let metadata = await extractMetadata(provider: provider, fileID: file.path)
         stage(.askingAI)

@@ -123,7 +123,8 @@ struct BackupService {
                     )
                 },
                 editedAt: track.metadataEditedAt,
-                durationMs: track.youTubeID != nil ? track.durationMs : nil
+                durationMs: track.isVideoOnly ? track.durationMs : nil,
+                youTubeVideoID: track.youTubeVideoID
             )
         }
         return LibrarySnapshot(
@@ -265,7 +266,7 @@ struct BackupService {
                 continue
             }
             var names = (speaker: entry.artistName, album: entry.albumName)
-            if entry.providerID == YouTubeVideo.providerID {
+            if entry.providerID == YouTubeVideo.providerID || entry.youTubeVideoID != nil {
                 let filed = YouTubeEpisodes.filing(speaker: names.speaker, album: names.album)
                 names = (filed.speaker, filed.album)
             }
@@ -282,6 +283,7 @@ struct BackupService {
             track.isFavorite = track.isFavorite || entry.isFavorite
             track.listenedAt = track.listenedAt ?? entry.listenedAt
             track.metadataEditedAt = entry.editedAt
+            track.youTubeVideoID = entry.youTubeVideoID ?? track.youTubeVideoID
             try trackStore.upsert(track, artistName: artist?.name, albumName: album?.name)
             try restore(entry.bookmarks, on: track.id)
             if !entry.terms.isEmpty { try termStore.setTerms(entry.terms, forTrack: track.id) }
@@ -320,7 +322,7 @@ struct BackupService {
         guard entry.providerID == YouTubeVideo.providerID, YouTubeVideo.isValidID(entry.filePath) else { return nil }
         return Track(
             id: UUID().uuidString, providerID: YouTubeVideo.providerID, filePath: entry.filePath,
-            title: entry.title, durationMs: entry.durationMs, updatedAt: Date()
+            title: entry.title, durationMs: entry.durationMs, updatedAt: Date(), youTubeVideoID: entry.filePath
         )
     }
 

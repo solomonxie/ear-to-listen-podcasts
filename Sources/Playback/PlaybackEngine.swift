@@ -49,7 +49,7 @@ final class PlaybackEngine: ObservableObject {
     private var youTubeSeekedAt = Date.distantPast
     /// A video whose length isn't known yet still needs a seek bar to slide along.
     private static let unknownVideoLength: TimeInterval = 3 * 3600
-    private var isYouTube: Bool { currentTrack?.youTubeID != nil }
+    private var isYouTube: Bool { currentTrack?.isVideoOnly == true }
 
     private init() {
         configureAudioSession()
@@ -177,7 +177,7 @@ final class PlaybackEngine: ObservableObject {
     }
 
     private func loadAndPlay(track: Track) async {
-        if let id = track.youTubeID { return loadYouTube(id, track: track) }
+        if track.isVideoOnly, let id = track.youTubeID { return loadYouTube(id, track: track) }
         youTube.stop()
         stopVirtualClock()
         do {
@@ -529,7 +529,7 @@ final class PlaybackEngine: ObservableObject {
     /// read-modify-wrote it were republishing a dictionary with the title and artwork
     /// missing — which is what left the Control Center card blank a second into playing.
     private func updateNowPlayingInfo(track: Track) {
-        guard track.youTubeID == nil else { return }
+        guard !track.isVideoOnly else { return }
         let album = track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil
         let artist = track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil
 
@@ -627,7 +627,7 @@ final class PlaybackEngine: ObservableObject {
         }
         youTube.onDuration = { [weak self] seconds in self?.learnVideoLength(seconds) }
         youTube.onEnded = { [weak self] in
-            guard let self, let track = self.currentTrack, track.youTubeID != nil else { return }
+            guard let self, let track = self.currentTrack, track.isVideoOnly else { return }
             self.finishedPlaying(track)
         }
         youTube.onDisplay = { [weak self] display in
@@ -639,7 +639,7 @@ final class PlaybackEngine: ObservableObject {
 
     /// The embed knows the real length; the listener may have typed a guess, or nothing.
     private func learnVideoLength(_ seconds: TimeInterval) {
-        guard var track = currentTrack, track.youTubeID != nil, seconds > 0 else { return }
+        guard var track = currentTrack, track.isVideoOnly, seconds > 0 else { return }
         duration = seconds
         let ms = Int(seconds * 1000)
         guard abs((track.durationMs ?? 0) - ms) > 1_000 else { return }

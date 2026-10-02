@@ -132,7 +132,7 @@ struct TrackStore {
 
             guard var track = try Track.fetchOne(db, key: copy.trackID) else { return }
             let isPlayedCopy = track.providerID == copy.providerID && track.filePath == copy.filePath
-            guard isPlayedCopy || track.isLost else { return }
+            guard isPlayedCopy || track.isLost || track.isVideoOnly else { return }
             Self.point(&track, at: copy)
             track.fingerprint = FileFingerprint.of(track)
             try track.save(db)
@@ -536,6 +536,7 @@ struct TrackStore {
             for trackID in touched {
                 guard var track = try Track.fetchOne(db, key: trackID) else { continue }
                 let copies = try TrackFile.filter(Column("trackID") == trackID).fetchAll(db)
+                    .sorted { ($0.providerID == YouTubeVideo.providerID ? 1 : 0) < ($1.providerID == YouTubeVideo.providerID ? 1 : 0) }
                 guard let alive = copies.first(where: { !$0.isLost }) else {
                     guard !track.isLost else { continue }
                     track.isLost = true
@@ -585,9 +586,28 @@ struct TrackStore {
     /// Newest added first.
     func youTubeEpisodes() throws -> [Track] {
         try dbQueue.read { db in
-            try Track.filter(Column("providerID") == YouTubeVideo.providerID)
+            try Track.filter(Column("youTubeVideoID") != nil)
                 .order(Column("rowid").desc)
                 .fetchAll(db)
+        }
+    }
+
+    func find(youTubeVideoID videoID: String) throws -> Track? {
+        try dbQueue.read { db in try Track.filter(Column("youTubeVideoID") == videoID).fetchOne(db) }
+    }
+
+    /// An audio file for a YouTube episode — named with its video ID — becomes another
+    /// place that episode lives, and the one it plays from: a file plays in the
+    /// background, on the lock screen and in the car, where the video can't.
+    func attach(_ copy: TrackFile, toYouTubeEpisode trackID: String) throws {
+        try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: trackID) else { return }
+            var file = copy
+            file.trackID = trackID
+            try file.save(db)
+            guard track.isVideoOnly || track.isLost else { return }
+            Self.point(&track, at: file)
+            try track.save(db)
         }
     }
 

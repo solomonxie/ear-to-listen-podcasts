@@ -1,3 +1,4 @@
+import GRDB
 import XCTest
 @testable import EarToListen
 
@@ -104,7 +105,10 @@ final class YouTubeFilingTests: XCTestCase {
 
 final class YouTubeCatalogTests: XCTestCase {
     private func track(_ id: String, video: String, title: String, artist: String? = "s1", album: String? = "a1") -> Track {
-        Track(id: id, providerID: YouTubeVideo.providerID, artistID: artist, albumID: album, filePath: video, title: title, updatedAt: Date())
+        Track(
+            id: id, providerID: YouTubeVideo.providerID, artistID: artist, albumID: album, filePath: video, title: title,
+            updatedAt: Date(), youTubeVideoID: video
+        )
     }
 
     func testEntriesPutTheTranscriptUnderSpeakerAndAlbum() {
@@ -114,6 +118,7 @@ final class YouTubeCatalogTests: XCTestCase {
         )
         XCTAssertEqual(entries.first?.transcriptPath, "audio/Tim Keller/Sermons/Grace - Truth [dQw4w9WgXcQ].vtt")
         XCTAssertEqual(entries.first?.url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        XCTAssertEqual(entries.first?.audioPath, "audio/Tim Keller/Sermons/Grace - Truth [dQw4w9WgXcQ].mp3")
     }
 
     func testUnfiledEpisodesUseTheDefaultAlbum() {
@@ -130,5 +135,46 @@ final class YouTubeCatalogTests: XCTestCase {
         XCTAssertEqual(found["dQw4w9WgXcQ"], ["a/b/T [dQw4w9WgXcQ].vtt", "a/b/T [dQw4w9WgXcQ].zh-Hans.vtt"])
         XCTAssertEqual(found["jNQXAC9IVRw"], ["x/[jNQXAC9IVRw].srt"])
         XCTAssertEqual(found.count, 2)
+    }
+}
+
+final class YouTubeAudioFileTests: XCTestCase {
+    private func setUp(_ dbQueue: DatabaseQueue) throws -> TrackStore {
+        try Migrations.migrator().migrate(dbQueue)
+        try ProviderStore(dbQueue: dbQueue).upsert(
+            ProviderRecord(id: "p1", type: "s3", label: "p1", configJSON: "", isActive: true, createdAt: Date())
+        )
+        let store = TrackStore(dbQueue: dbQueue)
+        var video = Track(
+            id: "e1", providerID: YouTubeVideo.providerID, filePath: "dQw4w9WgXcQ", title: "Grace", updatedAt: Date()
+        )
+        video.youTubeVideoID = "dQw4w9WgXcQ"
+        try store.upsert(video, artistName: nil, albumName: nil)
+        return store
+    }
+
+    func testTheIDIsReadFromTheFileName() {
+        XCTAssertEqual(YouTubeVideo.id(inFileName: "a/b/Grace [dQw4w9WgXcQ].mp3"), "dQw4w9WgXcQ")
+        XCTAssertNil(YouTubeVideo.id(inFileName: "a/[dQw4w9WgXcQ]/ep1.mp3"))
+        XCTAssertNil(YouTubeVideo.id(inFileName: "a/b/ep [short].mp3"))
+    }
+
+    func testAnAudioFilePlaysInsteadOfTheVideoAndTheVideoComesBackWhenItGoes() throws {
+        let dbQueue = try DatabaseQueue()
+        let store = try setUp(dbQueue)
+        try store.attach(
+            TrackFile(trackID: "e1", providerID: "p1", filePath: "a/Grace [dQw4w9WgXcQ].mp3", sizeBytes: 1_000),
+            toYouTubeEpisode: "e1"
+        )
+        var episode = try XCTUnwrap(store.find(id: "e1"))
+        XCTAssertFalse(episode.isVideoOnly)
+        XCTAssertEqual(episode.filePath, "a/Grace [dQw4w9WgXcQ].mp3")
+        XCTAssertEqual(episode.youTubeID, "dQw4w9WgXcQ")
+        XCTAssertEqual(try store.youTubeEpisodes().map(\.id), ["e1"])
+
+        _ = try store.markLost(providerID: "p1", keepingPaths: [])
+        episode = try XCTUnwrap(store.find(id: "e1"))
+        XCTAssertTrue(episode.isVideoOnly)
+        XCTAssertFalse(episode.isLost)
     }
 }

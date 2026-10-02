@@ -1,31 +1,28 @@
-# YouTube catalog and transcripts
+# YouTube episodes, the catalog, and files in the bucket
 
-The app plays YouTube episodes through YouTube's embed and never fetches anything else
-from YouTube. Transcripts for them come from files in the listener's bucket, put there
-by a **batch job that lives outside this repo** (the owner's dotfiles,
-`scripts/youtube/`). Nothing here depends on it: any tool, or a person, can do its job.
+A YouTube episode is a video's ID plus everything the listener adds to it. It plays as
+YouTube's embedded video — unless the listener's own storage holds files for it, which
+are then used like any other episode's.
 
-## Contract
+## Matching
 
-| File (beside the backups, `<root>/ear-to-listen-podcasts/`) | Written by | Read by |
-|---|---|---|
-| `youtube-catalog.json` | the app (`YouTubeCatalog`), when YouTube episodes change | the batch job |
-| `youtube-catalog-processed.json` | the batch job, one row per video handled, including ones with no transcript | the batch job only |
+Files named with the video ID in brackets, anywhere in a connected bucket:
 
-Catalog entry: `episodeID`, `videoID`, `url`, `title`, `speaker`, `album`,
-`transcriptPath` — a whole bucket key, `<root>/<Speaker>/<Album>/<Title> [<videoID>].vtt`.
-Extra languages go beside it as `… [<videoID>].<lang>.vtt`.
+| File | Effect on the next sync |
+|---|---|
+| `… [<videoID>].vtt` (`.srt`, `.lrc`, `.json`, `.txt`; `.<lang>.vtt` for more languages) | becomes the episode's transcript, if it has none (`YouTubeTranscripts`) |
+| `… [<videoID>].mp3` (any audio type) | becomes the episode's audio: it plays from the file — background, lock screen, CarPlay — and transcripts beside it work as for any episode (`TrackStore.attach`) |
 
-The app never reads the processed file and the job never writes the catalog: two writers
-on one S3 object lose each other's updates.
+The ID is the whole match, so renaming the speaker or album later doesn't strand a file.
+If the audio file goes away, the episode plays the video again.
 
-## Pickup
+## Catalog
 
-Every sync matches `[<videoID>]` in transcript file names anywhere in the bucket against
-YouTube episodes with no transcript yet (`YouTubeTranscripts`), so a file still lands if
-the speaker or album is renamed after the catalog was written.
+`<root>/ear-to-listen-podcasts/youtube-catalog.json`, beside the backups, rewritten when
+YouTube episodes change (`YouTubeCatalog`): per episode `episodeID`, `videoID`, `url`,
+`title`, `speaker`, `album`, and where its files go — `transcriptPath` and `audioPath`,
+`<root>/<Speaker>/<Album>/<Title> [<videoID>].<ext>`.
 
-## Manual step
-
-Run the job from the dotfiles checkout after adding videos in the app; it needs no
-arguments. It reads its bucket credentials from its own `envfile-local` there.
+It's for whatever the listener does outside the app — by hand or with their own tools,
+which live elsewhere. The app only writes this file; anything such a tool keeps beside
+it (e.g. a list of what it has handled) is its own, never read or written here.

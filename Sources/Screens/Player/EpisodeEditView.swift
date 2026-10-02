@@ -144,11 +144,16 @@ struct EpisodeEditView: View {
                         Link(destination: YouTubeVideo.watchURL(id: videoID)) {
                             Text(YouTubeVideo.watchURL(id: videoID).absoluteString).font(.footnote)
                         }
-                        TextField("Length, e.g. 1:02:30", text: $length)
-                            .keyboardType(.numbersAndPunctuation)
-                        Button("Delete Episode", role: .destructive) { isConfirmingDelete = true }
+                        // A video-only episode is nothing but this row. One with a file is
+                        // that file's, and the file says how long it is.
+                        if track.isVideoOnly {
+                            TextField("Length, e.g. 1:02:30", text: $length)
+                                .keyboardType(.numbersAndPunctuation)
+                            Button("Delete Episode", role: .destructive) { isConfirmingDelete = true }
+                        }
                     }
-                } else {
+                }
+                if !track.isVideoOnly {
                     Section("File") {
                         Text(track.filePath)
                             .font(.footnote)
@@ -255,7 +260,7 @@ struct EpisodeEditView: View {
         updated.notes = trimmed(notes)
         updated.artworkFileName = artworkFileName
         updated.metadataEditedAt = Date()
-        if track.youTubeID != nil {
+        if track.isVideoOnly {
             updated.durationMs = AddYouTubeEpisodeView.seconds(in: length).map { Int($0 * 1000) } ?? track.durationMs
         }
         try? trackStore.saveEdit(updated, artistName: artist?.name, albumName: album?.name)

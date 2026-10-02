@@ -3,8 +3,8 @@ import GRDB
 
 /// Transcript files anywhere in a bucket named with a YouTube video's ID —
 /// `… [dQw4w9WgXcQ].vtt`, `… [dQw4w9WgXcQ].zh-Hans.vtt` — taken in by the YouTube
-/// episode they name. There's no audio for them to sit beside, so the ID in the name is
-/// the whole match. Where they come from is up to the listener (see `YouTubeCatalog`).
+/// episode they name. A video-only episode has no audio for them to sit beside, so the ID
+/// in the name is the whole match (see `YouTubeCatalog` for where they're expected).
 ///
 /// From the listing a sync already made, matched in memory; a file is only downloaded
 /// for an episode that has no transcript yet.

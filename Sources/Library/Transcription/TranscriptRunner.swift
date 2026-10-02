@@ -409,7 +409,7 @@ final class TranscriptRunner: ObservableObject {
     }
 
     /// Timestamps in a `.txt` are read as times before the text is spread evenly across
-    /// the episode — a saved YouTube transcript is a `.txt` with a time on every line.
+    /// the episode — a transcript saved from a video page is a `.txt` with a time on every line.
     nonisolated static func segments(in text: String, extension ext: String, duration: Double) -> [TranscriptSegment] {
         let timed = TimestampedText.parse(text)
         if ext.lowercased() == "txt", !timed.isEmpty { return timed }

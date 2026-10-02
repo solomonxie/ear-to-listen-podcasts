@@ -667,6 +667,17 @@ enum Migrations {
             }
         }
 
+        // A YouTube episode's video, separate from where it plays from (`Track.youTubeVideoID`).
+        migrator.registerMigration("v39_youtube_video_id") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "youTubeVideoID", .text)
+            }
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_tracks_youTubeVideoID ON tracks(youTubeVideoID)")
+            try db.execute(
+                sql: "UPDATE tracks SET youTubeVideoID = filePath WHERE providerID = ?", arguments: [YouTubeVideo.providerID]
+            )
+        }
+
         return migrator
     }
 }

@@ -3,11 +3,12 @@ import Foundation
 import GRDB
 
 /// Every YouTube episode, written to the connected bucket beside the backups
-/// (`ear-to-listen-podcasts/youtube-catalog.json`) — the list a batch job outside the app
-/// reads to put transcript files where each entry says. See docs/design/youtube-catalog.md.
+/// (`ear-to-listen-podcasts/youtube-catalog.json`): what each one is and where in the
+/// bucket its files go, so files put there later — by hand or by the listener's own
+/// tools — land where sync picks them up. See docs/design/youtube-catalog.md.
 ///
-/// Written only when it changed, after edits go quiet (`AutoBackup`). The job's own
-/// progress lives in a file of its own beside this one; this app never reads or writes it.
+/// Written only when it changed, after edits go quiet (`AutoBackup`). Anything else the
+/// listener keeps beside it is theirs; this app never reads or writes it.
 enum YouTubeCatalog {
     static let fileName = "youtube-catalog.json"
     private static let shippedHashKey = "youtube.catalog.hash"
@@ -23,6 +24,9 @@ enum YouTubeCatalog {
         /// `<root>/<Speaker>/<Album>/<Title> [<videoID>].vtt`. Other languages go beside it
         /// as `… [<videoID>].<lang>.vtt`.
         var transcriptPath: String
+        /// Where an audio file for the episode goes, if there is one; the episode then plays
+        /// it like any other. Any audio extension works — the `[<videoID>]` is the match.
+        var audioPath: String
     }
 
     struct Document: Codable {
@@ -41,7 +45,8 @@ enum YouTubeCatalog {
             return Entry(
                 episodeID: track.id, videoID: videoID, url: "https://www.youtube.com/watch?v=\(videoID)",
                 title: track.title, speaker: filed.speaker, album: filed.album,
-                transcriptPath: folder + safe(track.title) + " [\(videoID)].vtt"
+                transcriptPath: folder + safe(track.title) + " [\(videoID)].vtt",
+                audioPath: folder + safe(track.title) + " [\(videoID)].mp3"
             )
         }
         .sorted { $0.videoID < $1.videoID }
