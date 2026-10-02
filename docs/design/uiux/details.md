@@ -1,61 +1,41 @@
 # Episode details & edit
 
-`Sources/Screens/Player/EpisodeDetailsPane.swift` — grouped cards under the
-transport, so "who/what" never blurs into "which file". The EPISODE card *is*
-the editor: every field is live, shows even when empty, and commits when it
-loses focus.
-
-One label column, values against it. Labels left and values right put a hand's
-width of nothing between `Size` and `24.1 MB`, and a card of short values read
-as two unrelated lists rather than rows:
+`Sources/Screens/Player/EpisodeDetailsPane.swift` — under the transport. Only what's
+read while listening is out by default: one line of facts, the summary, the terms, the
+listener's impressions. Title, speaker and album are already under the cover; changing
+anything is **Edit** (the sheet below). The rarely looked-up rest folds away.
 
 ```
-✗  Size                          24.1 MB      ✓  Size        24.1 MB
-   Format                            MP3         Format      MP3
+ ABOUT                         ✨ Read with AI   Edit   ← ✨ greyed until transcribed;
+ 2024 · 42 min · Chinese                                  the reason in a caption line
+ SUMMARY                                   Edit  ✨    ← EpisodeSummaryView, 3 lines
+ Two sentences about what this episode is…                until More
+ ( More )
+ ( melatonin 9 ) ( cortisol 5 ) ( Stanford 2 ) ( ＋ ) → ← one row, scrolls sideways;
+                                                         tap → term page, hold → Delete
+ More details ›                                        ← folded by default
+ MY IMPRESSIONS
+ ┌──────────────────────────────────────────────┐
+ │ What you made of it                          │      ← 1…8 lines, saves on leave
+ └──────────────────────────────────────────────┘
 ```
 
+Unfolded in place — nothing covers the page:
+
 ```
- ┌ EPISODE ───────────────────────────────────┐
- │ ▢  Sleep Toolkit — Part 2                  │ ← tap ▢ = photo picker
- │ 64 (long-press ▢ → Remove Artwork !)       │
- │ Speaker    Andrew Huberman              ›  │ ← › pushes that page
- │ Album      Season 3                     ›  │
- │ Show       Huberman Lab                 ›  │
- │ Year       2026 · from album               │ ← the album's year as the
- │ Track no.  4                               │   placeholder; type to override
- │ 🌐 Language: English ▾                     │ ← Inherit (speaker) first
- │ Duration   41 min                          │
- │ Size       24.1 MB                         │
- │ File       s3://slmx-archives2/bible-aud…  │ ← tap opens it up, whole path
- │ Also at    files://Podcasts/ep-004.mp3     │   wrapped over as many lines
- │            ( 📁 Show in storage )          │   as it takes
- │ Playlists  ( Listen Later ) ( Bible ) ( ＋ )│ ← ＋ opens Add to Playlist
- │ Topics     ( Sleep ) ( Focus ) ( ＋ )       │ ← the album's, not this one's
- │ ───────────────────────────────────────    │
- │ SUMMARY                          Edit  ✨  │ ← Edit only once expanded
- │ Two sentences about what this episode is…  │   ✨ greyed out until there
- │ • [2:05] Light in the morning.             │   is a transcript
- │ • [12:14] Caffeine has a half-life…        │
- │ ( More )                                   │ ← 3 lines until asked
- └────────────────────────────────────────────┘
- ┌ TERMS ─────────────────────────────────────┐  (only when analysed)
- │ ( melatonin 9 ) ( cortisol 5 ) ( Stanford 2 )│ ← tap → that term's page
- └────────────────────────────────────────────┘
- │ ───────────────────────────────────────    │
- │ ✨ Suggest with AI            ⟳            │
- │ Only 40% of this episode is transcribed…   │ ← blocked reason in place
- └────────────────────────────────────────────┘
- ┌ MY IMPRESSIONS ────────────────────────────┐
- │ What you made of it                        │ ← 2…8 lines, grows
- └────────────────────────────────────────────┘
- ┌ BOOKMARKS AND NOTES ───────────────────────┐
- │ 12:14  "…pipe in personal data"         ✎  │ ← the marks, and what was
- └────────────────────────────────────────────┘   typed against them
- ┌ ABOUT THE SHOW ────────────────────────────┐  (only if a summary exists)
+ More details ⌄
+ ┌──────────────────────────────────────────────┐
+ │ Size       24.1 MB                           │
+ │ File       s3://slmx-archives2/bible-aud…    │ ← tap opens the whole path
+ │ Also at    files://Podcasts/ep-004.mp3       │
+ │ Playlists  ( Listen Later ) ( Bible ) ( ＋ )  │
+ │ Artwork    Photos · Draw with AI · Remove    │
+ └──────────────────────────────────────────────┘
 ```
 
-A row with no value hides itself rather than printing a dash, so a
-thin-metadata episode shows a short card, not a column of blanks.
+Gone from here: the title, speaker and album rows (shown under the cover), language and
+year (Edit), and topics (they belong to the album, edited on its page). Episodes have no
+number; order is by filename (`EpisodeOrder`).
 
 ## Where the file is — one row per copy
 
@@ -105,7 +85,7 @@ long-press on any row (`Edit Details`).
  │        ▢ artwork (tap to pick)             │
  ├ EPISODE ───────────────────────────────────┤
  │ Title · Speaker · Album · Show · Year ·    │
- │ Track no. · Spoken language ▾              │
+ │ Spoken language ▾                          │
  ├ MY IMPRESSIONS ─────────────────────────────┤
  ├ ✨ Suggest with AI                      ⟳  │
  │ Reads this episode's transcript — the whole│

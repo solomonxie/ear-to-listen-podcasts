@@ -145,18 +145,17 @@ speaker, you don't rename them.
 
 ## Numbers come off a wheel, not a keypad
 
-`UnfoldingWheel`. A year and a track number are picked from a short, ordered,
+`UnfoldingWheel`. A year is picked from a short, ordered,
 known range. A keypad covers half the screen, offers every number including the
 wrong ones, and needs a Done to dismiss.
 
 ```
- Year            2026  ›        Year            2026  ⌄
- Track no.        —    ›   →    ┌────────────────────────┐
+ Year            2026  ›   →    Year            2026  ⌄
+                                ┌────────────────────────┐
                                 │         2027           │
                                 │      ▸  2026  ◂        │
                                 │         2025           │
                                 └────────────────────────┘
-                                Track no.        —    ›
 ```
 
 A continuous control **commits as it moves** — no Done, the row updates under
