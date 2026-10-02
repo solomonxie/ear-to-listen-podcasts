@@ -15,8 +15,6 @@ extension Notification.Name {
     static let bookmarksDidChange = Notification.Name("bookmarksDidChange")
     /// A moment was just marked, from any button — what `MarkFlash` answers.
     static let momentMarked = Notification.Name("momentMarked")
-    /// The mini bar's Top, pressed over Home.
-    static let homeScrollToTop = Notification.Name("homeScrollToTop")
 
     /// Posted once by `SyncEngine.sync(providerRecord:)` when a listing pass has queued
     /// its files. It's the wake-up as well as the refresh: `SyncQueueManager` both

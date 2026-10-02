@@ -27,6 +27,7 @@ struct ContentView: View {
                     MiniPlayerBar(
                         showingNowPlaying: $engine.isPresentingPlayer,
                         onShowBookmarks: { open(at: .notes) },
+                        onTop: { open(at: .top) },
                         onFollow: { open(at: .following) }
                     )
                 }

@@ -19,36 +19,27 @@ struct HomeView: View {
     /// in-memory one rather than holding it up.
     @State private var transcriptMatches: [TranscriptSearch.Match] = []
 
-    private static let topAnchor = "home.top"
-
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                // Lazy, not eager: a search that matches a few hundred episodes used to build
-                // and lay out every row before the first one appeared on screen.
-                LazyVStack(alignment: .leading, spacing: 28) {
-                    if !query.isEmpty {
-                        searchResults
-                    } else {
-                        homeShelves
-                        NavigationLink(value: HomeRoute.settings) {
-                            Label("Settings", systemImage: "gearshape")
-                                .font(.subheadline.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal)
+        ScrollView {
+            // Lazy, not eager: a search that matches a few hundred episodes used to build
+            // and lay out every row before the first one appeared on screen.
+            LazyVStack(alignment: .leading, spacing: 28) {
+                if !query.isEmpty {
+                    searchResults
+                } else {
+                    homeShelves
+                    NavigationLink(value: HomeRoute.settings) {
+                        Label("Settings", systemImage: "gearshape")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                     }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
                 }
-                .padding(.vertical)
-                .id(Self.topAnchor)
             }
-            // The mini bar's Top, pressed over Home.
-            .onReceive(NotificationCenter.default.publisher(for: .homeScrollToTop)) { _ in
-                withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-            }
+            .padding(.vertical)
         }
         .background(Color.appBackground.ignoresSafeArea())
         // Registered once for the whole stack, so a page pushed from a pushed page —
