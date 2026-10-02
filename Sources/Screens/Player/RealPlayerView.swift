@@ -236,6 +236,7 @@ struct RealPlayerView: View {
 
                 NotesPane(
                     bookmarks: bookmarks,
+                    youTubeID: { _ in track.youTubeID },
                     highlighted: highlightedBookmark,
                     onAdd: { addBookmark(to: track, proxy: proxy) },
                     onPlay: { engine.seek(to: $0.position) },
@@ -275,7 +276,34 @@ struct RealPlayerView: View {
         .scrollDismissesKeyboard(.interactively)
     }
 
-    private func artwork(for track: Track) -> some View {
+    @ViewBuilder private func artwork(for track: Track) -> some View {
+        if let videoID = track.youTubeID {
+            video(videoID)
+        } else {
+            cover(for: track)
+        }
+    }
+
+    /// The video where the cover would be, 16:9 and nearly full width. It scrolls away
+    /// with the page like the cover does — reading the transcript doesn't need it in view,
+    /// and it keeps playing out of sight.
+    private func video(_ videoID: String) -> some View {
+        VStack(spacing: 8) {
+            YouTubePlayerView(embed: engine.youTube)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            Link(destination: YouTubeVideo.watchURL(id: videoID, at: engine.currentTime)) {
+                Label("Open in YouTube at \(Scrubber.formatted(engine.currentTime))", systemImage: "arrow.up.forward.app")
+                    .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity)
+        .id(Self.topAnchor)
+    }
+
+    private func cover(for track: Track) -> some View {
         // Square and whole, the way every music player shows a cover: a 220pt band cropped
         // the top and bottom off pictures that are square to begin with, and nothing is
         // drawn over it — the title and speaker have their own line underneath.

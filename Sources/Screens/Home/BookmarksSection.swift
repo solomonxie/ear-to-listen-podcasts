@@ -248,6 +248,11 @@ private struct BookmarkGroupRow: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            if let youTubeID = group.track.youTubeID {
+                Link(destination: YouTubeVideo.watchURL(id: youTubeID, at: bookmark.position)) {
+                    Label("Open in YouTube at \(Scrubber.formatted(bookmark.position))", systemImage: "arrow.up.forward.app")
+                }
+            }
             Button("Delete", systemImage: "trash", role: .destructive) {
                 try? BookmarkStore(dbQueue: DatabaseManager.shared.dbQueue).delete(id: bookmark.id)
                 NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)

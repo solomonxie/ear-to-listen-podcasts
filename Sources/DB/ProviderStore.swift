@@ -28,12 +28,19 @@ struct ProviderStore {
         ChangeLog.record("sources", key: id, old: old.map { ["type": $0.type, "label": $0.label] }, in: dbQueue)
     }
 
+    /// Storage the listener connected. Never the YouTube row: it's there only so YouTube
+    /// episodes have something to belong to, and there's nothing in it to sync, list,
+    /// stream or back up.
     func all() throws -> [ProviderRecord] {
-        try dbQueue.read { db in try ProviderRecord.fetchAll(db) }
+        try dbQueue.read { db in try Self.connected.fetchAll(db) }
     }
 
     func active() throws -> [ProviderRecord] {
-        try dbQueue.read { db in try ProviderRecord.filter(Column("isActive") == true).fetchAll(db) }
+        try dbQueue.read { db in try Self.connected.filter(Column("isActive") == true).fetchAll(db) }
+    }
+
+    private static var connected: QueryInterfaceRequest<ProviderRecord> {
+        ProviderRecord.filter(Column("type") != YouTubeVideo.providerType)
     }
 
     func updateSyncFrequency(id: String, minutes: Int?) throws {
