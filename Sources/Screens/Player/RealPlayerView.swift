@@ -17,6 +17,8 @@ struct RealPlayerView: View {
     /// left end sits inside the strip the back swipe watches — and a seek started there
     /// used to slide the whole player off instead of moving the playhead.
     @State private var seekBarArea: CGRect = .zero
+    /// The same, for the bottom bar's seek line.
+    @State private var barSeekArea: CGRect = .zero
     @State private var artist: Artist?
     /// Whether the transcript is following playback. Off until asked for: the page opens
     /// at the transport, and text that scrolls itself the moment you arrive takes the
@@ -86,7 +88,6 @@ struct RealPlayerView: View {
                                     isFollowingTranscript = false
                                 }
                             )
-                            .overlay(alignment: .bottom) { floatingControls(proxy) }
                             // The transcript is the long part — forty minutes of speech
                             // is hundreds of lines, and the system indicator gives it a
                             // few points of travel.
@@ -204,7 +205,9 @@ struct RealPlayerView: View {
         // Stood down the moment anything is pushed: a pushed page has the system's own
         // back swipe, and a page that can't be swiped back from is a page with no way out
         // for anyone who doesn't look for the ‹.
-        .swipeToGoBack(canBegin: { path.isEmpty && !seekBarArea.contains($0) }, perform: close)
+        .swipeToGoBack(
+            canBegin: { path.isEmpty && !seekBarArea.contains($0) && !barSeekArea.contains($0) }, perform: close
+        )
     }
 
     /// Split out of `body` purely so the type-checker can cope — it timed out once the
@@ -615,41 +618,6 @@ struct RealPlayerView: View {
         }
     }
 
-    /// Back to top, and follow the line being spoken. Marking lives on the docked bar below.
-    @ViewBuilder
-    private func floatingControls(_ proxy: ScrollViewProxy) -> some View {
-        // Gone while a line is open for correction: this row is an overlay, so it sits *on*
-        // the text, and the field is the one piece of text that must not be sat on.
-        if isTransportOffscreen, !isEditingLine {
-            HStack(spacing: 10) {
-                floatingButton("Top", systemImage: "arrow.up", isOn: false) {
-                    isFollowingTranscript = false
-                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                }
-                if !transcript.lines.isEmpty {
-                    // One label, one icon — colour alone says whether it's on.
-                    floatingButton("Follow", systemImage: "location.fill", isOn: isFollowingTranscript) {
-                        if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
-                    }
-                }
-            }
-            .padding(.bottom, 12)
-            .transition(.opacity)
-        }
-    }
-
-    private func floatingButton(
-        _ title: String,
-        systemImage: String,
-        isOn: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage).floatingPill(isOn: isOn)
-        }
-        .buttonStyle(.plain)
-    }
-
     /// Docked, so play/pause and position are reachable from anywhere on a page that is
     /// now arbitrarily long. Reading forty minutes of transcript must never mean scrolling
     /// back to the top to stop playback — tapping the bar is the way back up.
@@ -695,18 +663,14 @@ struct RealPlayerView: View {
                     path.removeAll()
                     notesRequests += 1
                 },
-                onTapBar: { path.removeAll() }
+                onTapBar: { path.removeAll() },
+                onSeek: { engine.seek(to: $0) }
             )
         }
     }
 
     private func bottomBar(_ proxy: ScrollViewProxy) -> some View {
         VStack(spacing: 0) {
-            ProgressView(value: engine.duration > 0 ? min(engine.currentTime / engine.duration, 1) : 0)
-                .progressViewStyle(.linear)
-                .tint(.accentColor)
-                .scaleEffect(x: 1, y: 0.6, anchor: .center)
-
             NowPlayingBarContent(
                 track: engine.currentTrack,
                 currentTime: engine.currentTime,
@@ -725,7 +689,16 @@ struct RealPlayerView: View {
                 onTapBar: {
                     isFollowingTranscript = false
                     withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
-                }
+                },
+                onSeek: { engine.seek(to: $0) },
+                seekArea: $barSeekArea,
+                onTop: {
+                    isFollowingTranscript = false
+                    withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(Self.topAnchor, anchor: .top) }
+                },
+                follow: transcript.lines.isEmpty ? nil : (isFollowingTranscript, {
+                    if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) }
+                })
             )
         }
     }
@@ -737,6 +710,77 @@ struct RealPlayerView: View {
 /// Controls only — rewind, play/pause, mark — centred, with play in the middle where the
 /// thumb finds it without looking. What's playing is named in the player's top bar, not
 /// repeated here. Tapping anywhere else on the bar does the page's `onTapBar`.
+/// The bar's progress line, and a way to move it: drag along it to go anywhere in the
+/// episode. Thin at rest; it thickens and shows the time under the finger while dragged.
+/// A plain tap on the bar still opens the episode — the drag needs a few points of
+/// movement before it takes over.
+private struct BarSeekLine: View {
+    let currentTime: TimeInterval
+    let duration: TimeInterval
+    let area: Binding<CGRect>?
+    let onSeek: (TimeInterval) -> Void
+
+    @State private var isDragging = false
+    @State private var dragTime: TimeInterval = 0
+
+    private var progress: Double {
+        guard duration > 0 else { return 0 }
+        return min(max((isDragging ? dragTime : currentTime) / duration, 0), 1)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(.quaternary)
+                Rectangle().fill(Color.accentColor).frame(width: geo.size.width * progress)
+            }
+            .frame(height: isDragging ? 6 : 2)
+            .animation(.easeOut(duration: 0.12), value: isDragging)
+            .frame(maxHeight: .infinity, alignment: .top)
+            // The whole strip catches the finger, not just the hairline.
+            .contentShape(Rectangle())
+            .gesture(drag(width: geo.size.width))
+            .overlay(alignment: .top) {
+                if isDragging {
+                    Text("\(SeekBar.formatted(dragTime)) / \(SeekBar.formatted(duration))")
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(.thinMaterial, in: Capsule())
+                        .offset(y: -34)
+                        .allowsHitTesting(false)
+                }
+            }
+            .onChange(of: geo.frame(in: .global), initial: true) { area?.wrappedValue = $1 }
+        }
+        .frame(height: 18)
+        .accessibilityElement()
+        .accessibilityLabel("Position")
+        .accessibilityValue("\(SeekBar.formatted(currentTime)) of \(SeekBar.formatted(duration))")
+    }
+
+    private func drag(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                if !isDragging {
+                    isDragging = true
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                }
+                dragTime = time(atX: value.location.x, width: width)
+            }
+            .onEnded { value in
+                dragTime = time(atX: value.location.x, width: width)
+                isDragging = false
+                onSeek(dragTime)
+            }
+    }
+
+    private func time(atX x: CGFloat, width: CGFloat) -> TimeInterval {
+        guard width > 0, duration > 0 else { return 0 }
+        return min(max(x / width, 0), 1) * duration
+    }
+}
+
 struct NowPlayingBarContent: View {
     let track: Track?
     let currentTime: TimeInterval
@@ -749,40 +793,43 @@ struct NowPlayingBarContent: View {
     /// Long press on the bookmark: go to the marks rather than make one.
     let onShowBookmarks: () -> Void
     let onTapBar: () -> Void
+    let onSeek: (TimeInterval) -> Void
+    /// Where the bar's seek line is, for a back swipe to stand off.
+    var seekArea: Binding<CGRect>? = nil
+    /// The episode page's own two, at the ends of the bar: back to the top of the page,
+    /// and the transcript following playback. Absent anywhere else.
+    var onTop: (() -> Void)? = nil
+    var follow: (isOn: Bool, toggle: () -> Void)? = nil
 
     @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 34
     @State private var marksMade = 0
-    private static let buttonSize = CGSize(width: 76, height: 62)
+    private static let buttonHeight: CGFloat = 62
     private static let homeIndicatorOverlap: CGFloat = 14
 
     var body: some View {
         if track != nil {
             VStack(spacing: 0) {
-                ProgressView(value: duration > 0 ? min(currentTime / duration, 1) : 0)
-                    .progressViewStyle(.linear)
-                    .tint(.accentColor)
-                    .frame(height: 1.5)
+                BarSeekLine(currentTime: currentTime, duration: duration, area: seekArea, onSeek: onSeek)
 
-                ZStack {
-                    HStack {
-                        Text(SeekBar.formatted(currentTime))
-                        Spacer()
-                        Text(SeekBar.formatted(duration))
+                // No times beside them: the line above says where it is, and while it's
+                // being dragged it says so in numbers. Each button takes an equal share of
+                // the width, so they sit as far apart as the bar allows.
+                HStack(spacing: 0) {
+                    if let onTop {
+                        barButton("arrow.up", size: min(glyphSize - 4, 28), label: "Top of the page", action: onTop)
                     }
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-
-                    // Big and close together: the three targets touch, so a thumb that's a
-                    // little off still lands on one, and none sits out of reach.
-                    HStack(spacing: 8) {
-                        barButton("gobackward.10", size: min(glyphSize + 2, 40), label: "Back ten seconds", action: onSkipBack)
-                        barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 24, 60),
-                                  label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
-                        bookmarkButton
+                    barButton("gobackward.10", size: min(glyphSize + 2, 40), label: "Back ten seconds", action: onSkipBack)
+                    barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 24, 60),
+                              label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
+                    bookmarkButton
+                    if let follow {
+                        barButton(follow.isOn ? "location.fill" : "location", size: min(glyphSize - 4, 28),
+                                  label: follow.isOn ? "Stop following" : "Follow the transcript", action: follow.toggle)
+                            .foregroundStyle(follow.isOn ? Color.accentColor : Color.primary)
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 4)
+                .padding(.top, -4)
                 // Down into part of the home indicator's strip, which otherwise left a
                 // band of empty bar under the buttons. The indicator itself stays clear.
                 .padding(.bottom, -Self.homeIndicatorOverlap)
@@ -802,7 +849,7 @@ struct NowPlayingBarContent: View {
             .overlay(alignment: .topTrailing) {
                 MarkCountBadge(count: bookmarkCount, offset: CGSize(width: 12, height: -6))
             }
-            .frame(width: Self.buttonSize.width, height: Self.buttonSize.height)
+            .frame(maxWidth: .infinity, minHeight: Self.buttonHeight)
             .contentShape(Rectangle())
             .onTapGesture {
                 onBookmark()
@@ -826,7 +873,7 @@ struct NowPlayingBarContent: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: size))
-                .frame(width: Self.buttonSize.width, height: Self.buttonSize.height)
+                .frame(maxWidth: .infinity, minHeight: Self.buttonHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1047,32 +1094,6 @@ enum PlayerRoute: Hashable {
     /// The bucket browser, opened at the folder this episode sits in. `highlight` is the
     /// file to scroll to and mark once it's there.
     case browse(providerID: String, folder: String?, highlight: String?)
-}
-
-/// The chrome every control in the floating row wears.
-///
-/// Shared rather than written out at each call site: the row's two labelled pills and its
-/// one glyph have to read as one set of controls, and the first version of the bookmark
-/// carried its own copy of the padding and the capsule — which is a drift waiting to
-/// happen the next time any of it is adjusted.
-private extension View {
-    func floatingPill(isOn: Bool) -> some View {
-        // On is solid accent, not a tint: over transcript text a see-through blue read
-        // as neither on nor off.
-        font(.footnote.weight(.semibold))
-            .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(HierarchicalShapeStyle.primary))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(
-                isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Material.ultraThin),
-                in: Capsule()
-            )
-            .overlay(
-                Capsule().stroke(
-                    isOn ? AnyShapeStyle(Color.clear) : AnyShapeStyle(HierarchicalShapeStyle.quaternary)
-                )
-            )
-    }
 }
 
 /// How many marks this episode has, on the shoulder of the button that makes them.
