@@ -362,6 +362,13 @@ final class PlaybackEngine: ObservableObject {
     /// Beats the resume position for this one load, which is the whole point of having
     /// marked the spot.
     func open(track: Track, queue: [Track], startingAt position: TimeInterval) {
+        play(track: track, queue: queue, startingAt: position)
+        isPresentingPlayer = true
+    }
+
+    /// The same, without bringing up the phone's player — for CarPlay, where the phone is
+    /// in a pocket.
+    func play(track: Track, queue: [Track], startingAt position: TimeInterval) {
         if currentTrack?.id == track.id {
             seek(to: position)
             resume()
@@ -369,7 +376,6 @@ final class PlaybackEngine: ObservableObject {
             pendingStart = position
             play(track: track, queue: queue)
         }
-        isPresentingPlayer = true
     }
 
     func seek(to time: TimeInterval) {
@@ -447,12 +453,19 @@ final class PlaybackEngine: ObservableObject {
             Task { @MainActor in self?.pause() }
             return .success
         }
-        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.skipToNext() }
+        // ±10s rather than previous/next episode, on the lock screen, AirPods and CarPlay
+        // alike: in a long spoken episode, replaying a sentence is the common move.
+        // Changing episode is what Up Next is for.
+        commandCenter.nextTrackCommand.isEnabled = false
+        commandCenter.previousTrackCommand.isEnabled = false
+        commandCenter.skipBackwardCommand.preferredIntervals = [10]
+        commandCenter.skipForwardCommand.preferredIntervals = [10]
+        commandCenter.skipBackwardCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.skip(by: -10) }
             return .success
         }
-        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.skipToPrevious() }
+        commandCenter.skipForwardCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.skip(by: 10) }
             return .success
         }
     }
