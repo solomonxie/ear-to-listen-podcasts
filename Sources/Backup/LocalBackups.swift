@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// The copies that never leave the phone — the tier that answers a different failure from
 /// iCloud and the bucket. Those two are for a phone that's gone; this one is for data
@@ -37,34 +36,25 @@ enum LocalBackups {
     private static let lastRunKey = "backup.local.lastAt"
     private static let lastMarkKey = "backup.local.mark"
 
-    /// The whole tier-1 pass, on app-background. At most once a day and only if something
-    /// was written since the last one: copying megabytes per keystroke to guard against a
+    /// The whole tier-1 pass is owed: at most once a day, and only if something was
+    /// written since the last one. Copying megabytes per keystroke to guard against a
     /// once-a-year event is the wrong trade, and the log already covers what falls between.
-    /// The day's copy, off the main thread, with the time iOS allows an app that has just
-    /// been put away. A whole-library archive is seconds of work on a big library.
-    @MainActor
-    static func runInBackground() {
-        let assertion = BackgroundAssertion(name: "local-backup")
-        Task.detached(priority: .utility) {
-            runIfDue { try BackupService().currentArchive() }
-            await assertion.end()
-        }
+    /// When it runs is `AutoBackup`'s call.
+    static var isDue: Bool {
+        guard !AppMode.isDemo else { return false }
+        let defaults = UserDefaults.standard
+        guard ChangeLog.mark != defaults.integer(forKey: lastMarkKey) else { return false }
+        let lastAt = defaults.object(forKey: lastRunKey) as? Date
+        return lastAt.map { !Calendar.current.isDateInToday($0) } ?? true
     }
 
-    static func runIfDue(archive: () throws -> Data) {
-        guard !AppMode.isDemo else { return }
-        let defaults = UserDefaults.standard
-        let lastAt = defaults.object(forKey: lastRunKey) as? Date
-        guard ChangeLog.mark != defaults.integer(forKey: lastMarkKey) else { return }
-        guard lastAt.map({ !Calendar.current.isDateInToday($0) }) ?? true else { return }
-
-        if let archive = try? archive() {
-            write(archive, named: BackupArchiveName.current())
-        }
+    static func save(_ archive: Data, mark: Int) {
+        write(archive, named: BackupArchiveName.current())
         copyDatabase(named: BackupArchiveName.base() + ".sqlite")
         prune()
+        let defaults = UserDefaults.standard
         defaults.set(Date(), forKey: lastRunKey)
-        defaults.set(ChangeLog.mark, forKey: lastMarkKey)
+        defaults.set(mark, forKey: lastMarkKey)
     }
 
     /// The copy taken before something rewrites many rows at once — an import, a restore.
@@ -147,20 +137,5 @@ enum LocalBackups {
         let stem = (name as NSString).deletingPathExtension
         guard !name.hasSuffix(".jsonl") else { return false }
         return BackupArchiveName.ours(stem + ".zip")
-    }
-}
-
-@MainActor
-private final class BackgroundAssertion {
-    private var id = UIBackgroundTaskIdentifier.invalid
-
-    init(name: String) {
-        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in self?.end() }
-    }
-
-    func end() {
-        guard id != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(id)
-        id = .invalid
     }
 }

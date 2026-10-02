@@ -51,6 +51,7 @@ enum ChangeLog {
         let entry = Entry(at: Date(), table: table, key: key, old: json(old), new: json(new))
         UserDefaults.standard.set(mark + 1, forKey: markKey)
         writes.async { append(entry) }
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .backedUpDataDidChange, object: nil) }
     }
 
     /// The log as it stands, newest file last, for the caller that ships it somewhere.
