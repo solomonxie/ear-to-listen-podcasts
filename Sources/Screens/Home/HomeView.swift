@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var isNamingPlaylist = false
     @State private var newPlaylistName = ""
     @State private var editingBookmark: Bookmark?
+    @State private var isAddingYouTube = false
     @State private var results = LibrarySearch.Results()
     /// Kept apart from `results`: this half is a database scan, so it lands after the
     /// in-memory one rather than holding it up.
@@ -45,6 +46,18 @@ struct HomeView: View {
         // a term reached from the Terms list — routes the same way.
         .navigationDestination(for: HomeRoute.self) { destination($0) }
         .navigationTitle("Good listening")
+        .toolbar {
+            // YouTube doesn't reach the China storefront, so neither does this.
+            if !AppStorefront.isChina {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { isAddingYouTube = true } label: {
+                        Image(systemName: "play.rectangle.on.rectangle")
+                    }
+                    .accessibilityLabel("Add YouTube video")
+                }
+            }
+        }
+        .sheet(isPresented: $isAddingYouTube) { AddYouTubeEpisodeView() }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
         // Debounced: `.task(id:)` cancels the previous run on the next keystroke, so
         // holding a key down searches once at the end rather than once per character.

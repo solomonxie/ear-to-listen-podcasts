@@ -386,6 +386,22 @@ final class TranscriptRunner: ObservableObject {
     /// Puts back what the last pass replaced, and writes that back out. Available only
     /// until the next pass or a change of episode, because the copy it restores from is
     /// only held that long.
+    /// A transcript pasted in — how a YouTube episode gets one, since there's no audio
+    /// here to transcribe. Replaces what's there, which stays one Reject away. Returns
+    /// how many lines it read; nothing changes when that's none.
+    @discardableResult
+    func importPasted(_ text: String) -> Int {
+        guard let track else { return 0 }
+        let pasted = PastedTranscript.parse(text)
+        guard !pasted.isEmpty else { return 0 }
+        replacedSegments = segments.isEmpty ? nil : segments
+        try? transcriptStore.save(trackID: track.id, segments: pasted, engine: PastedTranscript.engine)
+        segments = pasted
+        lastError = nil
+        canRejectLastPass = replacedSegments != nil
+        return pasted.count
+    }
+
     func rejectLastPass() {
         guard let track, let previous = replacedSegments else { return }
         replacedSegments = nil

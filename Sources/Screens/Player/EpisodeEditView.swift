@@ -24,6 +24,8 @@ struct EpisodeEditView: View {
     @State private var isSuggesting = false
     @State private var suggestionError: String?
     @State private var readiness: EpisodeMetadataSuggester.Readiness = .noTranscript
+    @State private var length: String
+    @State private var isConfirmingDelete = false
 
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -39,6 +41,7 @@ struct EpisodeEditView: View {
         _notes = State(initialValue: track.notes ?? "")
         _artworkFileName = State(initialValue: track.artworkFileName)
         _language = State(initialValue: track.language)
+        _length = State(initialValue: track.durationMs.map { Scrubber.formatted(TimeInterval($0) / 1000) } ?? "")
     }
 
     /// What this episode would transcribe in without an answer of its own — its album's
@@ -132,12 +135,28 @@ struct EpisodeEditView: View {
                     Text("Reads this episode's transcript — the whole of it, which is why it waits for transcribing to finish. Fills the fields in above; nothing is saved until you tap Save.")
                 }
 
-                Section("File") {
-                    Text(track.filePath)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                if let videoID = track.youTubeID {
+                    Section("Video") {
+                        Link(destination: YouTubeVideo.watchURL(id: videoID)) {
+                            Text(YouTubeVideo.watchURL(id: videoID).absoluteString).font(.footnote)
+                        }
+                        TextField("Length, e.g. 1:02:30", text: $length)
+                            .keyboardType(.numbersAndPunctuation)
+                        Button("Delete Episode", role: .destructive) { isConfirmingDelete = true }
+                    }
+                } else {
+                    Section("File") {
+                        Text(track.filePath)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
                 }
+            }
+            .confirmationDialog("Delete this episode?", isPresented: $isConfirmingDelete) {
+                Button("Delete", role: .destructive) { deleteEpisode() }
+            } message: {
+                Text("Its marks, notes and transcript go with it. The video on YouTube isn't touched.")
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Episode")
@@ -227,6 +246,9 @@ struct EpisodeEditView: View {
         updated.notes = trimmed(notes)
         updated.artworkFileName = artworkFileName
         updated.metadataEditedAt = Date()
+        if track.youTubeID != nil {
+            updated.durationMs = AddYouTubeEpisodeView.seconds(in: length).map { Int($0 * 1000) } ?? track.durationMs
+        }
         try? trackStore.saveEdit(updated, artistName: artist?.name, albumName: album?.name)
 
         if artworkFileName != track.artworkFileName {
@@ -235,6 +257,16 @@ struct EpisodeEditView: View {
         // Home and the player hold their own copies of these rows, so they need telling —
         // otherwise the edit only lands after some unrelated refresh.
         NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+        dismiss()
+    }
+
+    private func deleteEpisode() {
+        if PlaybackEngine.shared.currentTrack?.id == track.id { PlaybackEngine.shared.unload() }
+        try? trackStore.delete(id: track.id)
+        ImageFileStore.artwork.remove(track.artworkFileName)
+        discardIfUncommitted(artworkFileName)
+        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+        NotificationCenter.default.post(name: .bookmarksDidChange, object: nil)
         dismiss()
     }
 
