@@ -116,24 +116,26 @@ final class YouTubeCatalogTests: XCTestCase {
             [track("e1", video: "dQw4w9WgXcQ", title: "Grace / Truth")],
             speakers: ["s1": "Tim Keller"], albums: ["a1": "Sermons"], root: "audio/"
         )
-        XCTAssertEqual(entries.first?.transcriptPath, "audio/Tim Keller/Sermons/Grace - Truth [dQw4w9WgXcQ].vtt")
+        XCTAssertEqual(entries.first?.transcriptPath, "audio/tim-keller/sermons/dQw4w9WgXcQ-grace-truth.vtt")
         XCTAssertEqual(entries.first?.url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-        XCTAssertEqual(entries.first?.audioPath, "audio/Tim Keller/Sermons/Grace - Truth [dQw4w9WgXcQ].mp3")
+        XCTAssertEqual(entries.first?.audioPath, "audio/tim-keller/sermons/dQw4w9WgXcQ-grace-truth.mp3")
     }
 
     func testUnfiledEpisodesUseTheDefaultAlbum() {
         let entries = YouTubeCatalog.entries(
             [track("e1", video: "dQw4w9WgXcQ", title: "T", artist: nil, album: nil)], speakers: [:], albums: [:], root: nil
         )
-        XCTAssertEqual(entries.first?.transcriptPath, "YouTube/YouTube's YouTube Podcasts/T [dQw4w9WgXcQ].vtt")
+        XCTAssertEqual(entries.first?.transcriptPath, "youtube/youtube-s-youtube-podcasts/dQw4w9WgXcQ-t.vtt")
     }
 
     func testTranscriptsAreFoundByTheVideoIDInTheirName() {
-        let listing = ["a/b/T [dQw4w9WgXcQ].zh-Hans.vtt", "a/b/T [dQw4w9WgXcQ].vtt", "a/b/ep1.vtt", "x/[jNQXAC9IVRw].srt"]
-            .map { CloudFile(id: $0, name: ($0 as NSString).lastPathComponent, path: $0) }
+        let listing = [
+            "a/b/dQw4w9WgXcQ-old-title.zh-Hans.vtt", "a/b/dQw4w9WgXcQ-renamed.vtt", "a/b/episode-01-intro.vtt",
+            "x/jNQXAC9IVRw.srt", "a/b/dQw4w9WgXcQ-renamed.mp3",
+        ].map { CloudFile(id: $0, name: ($0 as NSString).lastPathComponent, path: $0) }
         let found = YouTubeTranscripts.byVideoID(in: listing)
-        XCTAssertEqual(found["dQw4w9WgXcQ"], ["a/b/T [dQw4w9WgXcQ].vtt", "a/b/T [dQw4w9WgXcQ].zh-Hans.vtt"])
-        XCTAssertEqual(found["jNQXAC9IVRw"], ["x/[jNQXAC9IVRw].srt"])
+        XCTAssertEqual(found["dQw4w9WgXcQ"], ["a/b/dQw4w9WgXcQ-renamed.vtt", "a/b/dQw4w9WgXcQ-old-title.zh-Hans.vtt"])
+        XCTAssertEqual(found["jNQXAC9IVRw"], ["x/jNQXAC9IVRw.srt"])
         XCTAssertEqual(found.count, 2)
     }
 }
@@ -154,21 +156,29 @@ final class YouTubeAudioFileTests: XCTestCase {
     }
 
     func testTheIDIsReadFromTheFileName() {
-        XCTAssertEqual(YouTubeVideo.id(inFileName: "a/b/Grace [dQw4w9WgXcQ].mp3"), "dQw4w9WgXcQ")
-        XCTAssertNil(YouTubeVideo.id(inFileName: "a/[dQw4w9WgXcQ]/ep1.mp3"))
-        XCTAssertNil(YouTubeVideo.id(inFileName: "a/b/ep [short].mp3"))
+        XCTAssertEqual(YouTubeVideo.id(inFileName: "a/b/dQw4w9WgXcQ-grace.mp3"), "dQw4w9WgXcQ")
+        XCTAssertEqual(YouTubeVideo.id(inFileName: "a/b/dQw4w9WgXcQ.m4a"), "dQw4w9WgXcQ")
+        XCTAssertNil(YouTubeVideo.id(inFileName: "a/dQw4w9WgXcQ/ep1.mp3"))
+        XCTAssertNil(YouTubeVideo.id(inFileName: "a/b/episode-01-intro.mp3"), "a normal name isn't an ID")
+        XCTAssertNil(YouTubeVideo.id(inFileName: "a/b/my podcast!-ep.mp3"))
+    }
+
+    func testSlugsAreSafeAndKeepEveryScript() {
+        XCTAssertEqual(YouTubeVideo.slug("  Grace & Truth: Part 2! "), "grace-truth-part-2")
+        XCTAssertEqual(YouTubeVideo.slug("恩典与真理 (上)"), "恩典与真理-上")
+        XCTAssertEqual(YouTubeVideo.slug("..."), "")
     }
 
     func testAnAudioFilePlaysInsteadOfTheVideoAndTheVideoComesBackWhenItGoes() throws {
         let dbQueue = try DatabaseQueue()
         let store = try setUp(dbQueue)
         try store.attach(
-            TrackFile(trackID: "e1", providerID: "p1", filePath: "a/Grace [dQw4w9WgXcQ].mp3", sizeBytes: 1_000),
+            TrackFile(trackID: "e1", providerID: "p1", filePath: "a/dQw4w9WgXcQ-grace.mp3", sizeBytes: 1_000),
             toYouTubeEpisode: "e1"
         )
         var episode = try XCTUnwrap(store.find(id: "e1"))
         XCTAssertFalse(episode.isVideoOnly)
-        XCTAssertEqual(episode.filePath, "a/Grace [dQw4w9WgXcQ].mp3")
+        XCTAssertEqual(episode.filePath, "a/dQw4w9WgXcQ-grace.mp3")
         XCTAssertEqual(episode.youTubeID, "dQw4w9WgXcQ")
         XCTAssertEqual(try store.youTubeEpisodes().map(\.id), ["e1"])
 
