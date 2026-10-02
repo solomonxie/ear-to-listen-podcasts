@@ -1,0 +1,22 @@
+import Foundation
+
+/// Links shared into the app from another one, waiting for the app to open. The share
+/// extension can't reach the library's database, so it leaves them here — in the App
+/// Group both can read — and `YouTubeEpisodes.addShared` makes them into episodes.
+enum ShareInbox {
+    static let appGroup = "group.com.example.eartolisten"
+    private static let key = "share.inbox"
+
+    private static var defaults: UserDefaults? { UserDefaults(suiteName: appGroup) }
+
+    static func add(_ link: String) {
+        guard let defaults else { return }
+        defaults.set((defaults.stringArray(forKey: key) ?? []) + [link], forKey: key)
+    }
+
+    static func takeAll() -> [String] {
+        guard let defaults, let links = defaults.stringArray(forKey: key), !links.isEmpty else { return [] }
+        defaults.removeObject(forKey: key)
+        return links
+    }
+}
