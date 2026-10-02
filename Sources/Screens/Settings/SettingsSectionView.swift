@@ -303,6 +303,22 @@ struct SettingsSectionView: View {
             }
             .padding(.horizontal)
 
+            // Not on the China storefront, which YouTube doesn't reach.
+            if !AppStorefront.isChina {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeading(
+                        title: "YOUTUBE",
+                        info: "Every YouTube video in the library, and where its transcript and audio files go in your bucket — the same list as the bucket's youtube-catalog.json."
+                    )
+                    NavigationLink {
+                        YouTubeCatalogView()
+                    } label: {
+                        Label("YouTube Catalog", systemImage: "list.bullet.rectangle")
+                    }
+                }
+                .padding(.horizontal)
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
                     title: "SCREEN",

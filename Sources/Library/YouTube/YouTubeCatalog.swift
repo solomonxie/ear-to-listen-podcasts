@@ -58,29 +58,66 @@ enum YouTubeCatalog {
         YouTubeVideo.slug(name).nilIfEmpty ?? "untitled"
     }
 
-    /// Uploads the catalog if it differs from the last one shipped. One query, one PUT at
-    /// most; nothing when no YouTube episode has ever been added.
-    static func publishIfChanged(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) async {
-        guard let provider = BackupService(dbQueue: dbQueue).remoteProviderForAppData() else { return }
+    /// The catalog as it stands, and how it stands against the copy in the bucket.
+    struct State: Sendable {
+        var videos: [Entry]
+        /// The catalog's key in the bucket; nil with no bucket connected.
+        var key: String?
+        var isUploaded: Bool
+        var uploadedAt: Date?
+    }
+
+    private static let shippedAtKey = "youtube.catalog.uploadedAt"
+
+    static func state(dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) -> State {
+        let provider = BackupService(dbQueue: dbQueue).remoteProviderForAppData()
+        let videos = current(root: provider?.rootFolder, dbQueue: dbQueue)
+        return State(
+            videos: videos,
+            key: provider.map { ($0.rootFolder ?? "") + "ear-to-listen-podcasts/" + fileName },
+            isUploaded: hash(of: videos) == UserDefaults.standard.string(forKey: shippedHashKey),
+            uploadedAt: UserDefaults.standard.object(forKey: shippedAtKey) as? Date
+        )
+    }
+
+    private static func current(root: String?, dbQueue: DatabaseQueue) -> [Entry] {
         let tracks = (try? TrackStore(dbQueue: dbQueue).youTubeEpisodes()) ?? []
         let library = LibraryStore(dbQueue: dbQueue)
         let speakers = Dictionary(((try? library.artists()) ?? []).map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
         let albums = Dictionary(((try? library.albums()) ?? []).map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        let videos = entries(tracks, speakers: speakers, albums: albums, root: provider.rootFolder)
+        return entries(tracks, speakers: speakers, albums: albums, root: root)
+    }
 
+    private static var encoder: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        guard let body = try? encoder.encode(videos) else { return }
-        let hash = SHA256.hash(data: body).map { String(format: "%02x", $0) }.joined()
+        return encoder
+    }
+
+    private static func hash(of videos: [Entry]) -> String? {
+        guard let body = try? encoder.encode(videos) else { return nil }
+        return SHA256.hash(data: body).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Uploads the catalog if it differs from the last one shipped. One query, one PUT at
+    /// most; nothing when no YouTube episode has ever been added. `force` uploads anyway.
+    @discardableResult
+    static func publishIfChanged(force: Bool = false, dbQueue: DatabaseQueue = DatabaseManager.shared.dbQueue) async -> Bool {
+        guard let provider = BackupService(dbQueue: dbQueue).remoteProviderForAppData() else { return false }
+        let videos = current(root: provider.rootFolder, dbQueue: dbQueue)
+        guard let hash = hash(of: videos) else { return false }
         let shipped = UserDefaults.standard.string(forKey: shippedHashKey)
-        guard hash != shipped, !(videos.isEmpty && shipped == nil) else { return }
-        guard let data = try? encoder.encode(Document(updatedAt: Date(), videos: videos)) else { return }
+        guard force || (hash != shipped && !(videos.isEmpty && shipped == nil)) else { return false }
+        guard let data = try? encoder.encode(Document(updatedAt: Date(), videos: videos)) else { return false }
         do {
             try await provider.uploadAppData(data, named: fileName, contentType: "application/json")
             UserDefaults.standard.set(hash, forKey: shippedHashKey)
+            UserDefaults.standard.set(Date(), forKey: shippedAtKey)
+            return true
         } catch {
             // Tried again after the next change, or on leaving the app.
+            return false
         }
     }
 }
