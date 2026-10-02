@@ -172,7 +172,7 @@ final class YouTubeEmbed: NSObject {
         function post(m){window.webkit.messageHandlers.yt.postMessage(m)}
         function onYouTubeIframeAPIReady(){
           player=new YT.Player('p',{videoId:'\(id)',
-            playerVars:{playsinline:1,start:\(start),rel:0,origin:'\(origin)'},
+            playerVars:{playsinline:1,start:\(start),rel:0,controls:0,fs:0,iv_load_policy:3,disablekb:1,origin:'\(origin)'},
             events:{
               onReady:function(){post({e:'ready',d:player.getDuration()})},
               onStateChange:function(ev){post({e:'state',s:ev.data,d:player.getDuration()})},
