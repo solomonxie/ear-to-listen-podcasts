@@ -48,6 +48,9 @@ struct HomeView: View {
         .navigationTitle("Good listening")
         .sheet(item: $addingYouTubeLink) { AddYouTubeEpisodeView(link: $0.link) }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
+        .onSubmit(of: .search) {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
         // Debounced: `.task(id:)` cancels the previous run on the next keystroke, so
         // holding a key down searches once at the end rather than once per character.
         .task(id: query) {
