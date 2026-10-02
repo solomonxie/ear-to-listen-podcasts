@@ -44,6 +44,9 @@ enum YouTubeEpisodes {
             durationMs: durationMs, updatedAt: Date()
         )
         track.youTubeVideoID = videoID
+        // Counted as just played, so a new video is at the top of Continue Listening and
+        // the history — where it's found again — rather than only in its album.
+        track.lastPlayedAt = Date()
         track.notes = notes
         track.artworkFileName = artworkFileName
         track.metadataEditedAt = Date()
