@@ -19,6 +19,7 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var favoriteTracks: [Track] = []
     @Published private(set) var listenLaterTracks: [Track] = []
     @Published private(set) var listenedCount = 0
+    @Published private(set) var youTubeCount = 0
     /// Everything played, most recent first — Home's Listen History. From `tracks`, which
     /// is already loaded, rather than another query.
     @Published private(set) var history: [Track] = []
@@ -60,6 +61,7 @@ final class HomeLibraryViewModel: ObservableObject {
         favoriteTracks = snapshot.favoriteTracks
         listenLaterTracks = snapshot.listenLaterTracks
         listenedCount = snapshot.listenedCount
+        youTubeCount = snapshot.youTubeCount
         history = snapshot.history
         downloadedTracks = snapshot.downloadedTracks
         bookmarkGroups = snapshot.bookmarkGroups
@@ -97,6 +99,7 @@ final class HomeLibraryViewModel: ObservableObject {
         var favoriteTracks: [Track] = []
         var listenLaterTracks: [Track] = []
         var listenedCount = 0
+        var youTubeCount = 0
         var history: [Track] = []
         var searchIndex = LibrarySearch.Index()
         var bookmarkGroups: [BookmarkGroup] = []
@@ -120,6 +123,7 @@ final class HomeLibraryViewModel: ObservableObject {
                 s.favoriteTracks = (try? trackStore.favorites()) ?? []
                 s.listenLaterTracks = (try? trackStore.listenLater()) ?? []
                 s.listenedCount = s.tracks.lazy.filter { $0.listenedAt != nil && !$0.isLost }.count
+                s.youTubeCount = s.tracks.lazy.filter { $0.youTubeID != nil }.count
                 s.history = s.tracks.filter { $0.lastPlayedAt != nil && !$0.isLost }
                     .sorted { ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast) }
                     .prefix(HomeLibraryViewModel.historyLimit).map { $0 }
@@ -176,6 +180,7 @@ final class HomeLibraryViewModel: ObservableObject {
         case .favorites: return favoriteTracks.count
         case .listened: return listenedCount
         case .downloaded: return downloadedTracks.count
+        case .youTube: return youTubeCount
         }
     }
 
