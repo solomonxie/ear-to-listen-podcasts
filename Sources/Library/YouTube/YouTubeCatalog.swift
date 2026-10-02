@@ -20,12 +20,13 @@ enum YouTubeCatalog {
         var title: String
         var speaker: String
         var album: String
-        /// Whole bucket key, the way every other file in the bucket is named:
-        /// `<root>/<Speaker>/<Album>/<Title> [<videoID>].vtt`. Other languages go beside it
-        /// as `… [<videoID>].<lang>.vtt`.
+        /// Whole bucket key: `<root>/<speaker>/<album>/<videoID>-<title>.vtt`, every part
+        /// slugged (`YouTubeVideo.slug`). Other languages go beside it as
+        /// `<videoID>-<title>.<lang>.vtt`.
         var transcriptPath: String
         /// Where an audio file for the episode goes, if there is one; the episode then plays
-        /// it like any other. Any audio extension works — the `[<videoID>]` is the match.
+        /// it like any other. Any audio extension works, and any name after the ID — the
+        /// ID at the start is the whole match.
         var audioPath: String
     }
 
@@ -41,22 +42,20 @@ enum YouTubeCatalog {
             let filed = YouTubeEpisodes.filing(
                 speaker: track.artistID.flatMap { speakers[$0] }, album: track.albumID.flatMap { albums[$0] }
             )
-            let folder = (root ?? "") + safe(filed.speaker) + "/" + safe(filed.album) + "/"
+            let folder = (root ?? "") + segment(filed.speaker) + "/" + segment(filed.album) + "/"
+            let title = YouTubeVideo.slug(track.title)
+            let stem = folder + videoID + (title.isEmpty ? "" : "-" + title)
             return Entry(
                 episodeID: track.id, videoID: videoID, url: "https://www.youtube.com/watch?v=\(videoID)",
                 title: track.title, speaker: filed.speaker, album: filed.album,
-                transcriptPath: folder + safe(track.title) + " [\(videoID)].vtt",
-                audioPath: folder + safe(track.title) + " [\(videoID)].mp3"
+                transcriptPath: stem + ".vtt", audioPath: stem + ".mp3"
             )
         }
         .sorted { $0.videoID < $1.videoID }
     }
 
-    /// A name as one path segment: no slashes, nothing a file system refuses, not endless.
-    static func safe(_ name: String) -> String {
-        let cleaned = name.map { "/\\:*?\"<>|".contains($0) || $0.isNewline ? "-" : $0 }
-        let trimmed = String(cleaned).trimmingCharacters(in: .whitespaces)
-        return String(trimmed.prefix(120)).nilIfEmpty ?? "Untitled"
+    private static func segment(_ name: String) -> String {
+        YouTubeVideo.slug(name).nilIfEmpty ?? "untitled"
     }
 
     /// Uploads the catalog if it differs from the last one shipped. One query, one PUT at
