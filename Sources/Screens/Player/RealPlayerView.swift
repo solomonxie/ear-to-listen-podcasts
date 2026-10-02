@@ -752,6 +752,8 @@ struct NowPlayingBarContent: View {
 
     @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 34
     @State private var marksMade = 0
+    private static let buttonSize = CGSize(width: 76, height: 62)
+    private static let homeIndicatorOverlap: CGFloat = 14
 
     var body: some View {
         if track != nil {
@@ -770,17 +772,20 @@ struct NowPlayingBarContent: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
 
-                    // Sized to fill the bar's fixed 52pt, so they grow without the bar growing.
-                    HStack(spacing: 36) {
-                        barButton("gobackward.10", size: min(glyphSize - 4, 34), label: "Back ten seconds", action: onSkipBack)
-                        barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 12, 48),
+                    // Big and close together: the three targets touch, so a thumb that's a
+                    // little off still lands on one, and none sits out of reach.
+                    HStack(spacing: 8) {
+                        barButton("gobackward.10", size: min(glyphSize + 2, 40), label: "Back ten seconds", action: onSkipBack)
+                        barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 24, 60),
                                   label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
                         bookmarkButton
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 6)
-                .padding(.bottom, 2)
+                .padding(.top, 4)
+                // Down into part of the home indicator's strip, which otherwise left a
+                // band of empty bar under the buttons. The indicator itself stays clear.
+                .padding(.bottom, -Self.homeIndicatorOverlap)
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onTapBar)
             }
@@ -792,12 +797,12 @@ struct NowPlayingBarContent: View {
     /// (`MarkFlash`), the glyph bounces, and the count rolls up.
     private var bookmarkButton: some View {
         Image(systemName: bookmarkCount > 0 ? "bookmark.fill" : "bookmark")
-            .font(.system(size: min(glyphSize - 6, 30)))
+            .font(.system(size: min(glyphSize + 2, 38)))
             .symbolEffect(.bounce, value: marksMade)
             .overlay(alignment: .topTrailing) {
                 MarkCountBadge(count: bookmarkCount, offset: CGSize(width: 12, height: -6))
             }
-            .frame(width: 64, height: 52)
+            .frame(width: Self.buttonSize.width, height: Self.buttonSize.height)
             .contentShape(Rectangle())
             .onTapGesture {
                 onBookmark()
@@ -821,7 +826,7 @@ struct NowPlayingBarContent: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: size))
-                .frame(width: 64, height: 52)
+                .frame(width: Self.buttonSize.width, height: Self.buttonSize.height)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
