@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Lyric-style transcript: the line being spoken is the only bright one, it scrolls
 /// itself, tapping a line plays from there and reads along, and holding a line down
@@ -59,8 +60,9 @@ struct TranscriptPane: View {
     /// Whether the upload warning is up. Never skipped: the files it writes over are the
     /// listener's own, and may be ones they wrote.
     @State private var isConfirmingUpload = false
-    @State private var isConfirmingPaste = false
-    @State private var pasteError: String?
+    @State private var isPickingFile = false
+    @State private var pickedFile: URL?
+    @State private var loadError: String?
     @State private var searchQuery = ""
     @State private var hits: [TranscriptPhraseSearch.Hit] = []
     @FocusState private var isTypingSearch: Bool
@@ -68,8 +70,8 @@ struct TranscriptPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             controls
-            if let pasteError {
-                Text(pasteError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
+            if let loadError {
+                Text(loadError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
             }
             if let status {
                 Text(status).sectionRowSecondary().padding(.horizontal)
@@ -95,13 +97,20 @@ struct TranscriptPane: View {
                 selection = []
             }
         }
-        .confirmationDialog("Replace this transcript?", isPresented: $isConfirmingPaste) {
-            Button("Replace", role: .destructive) { paste() }
+        .fileImporter(isPresented: $isPickingFile, allowedContentTypes: Self.transcriptTypes) { result in
+            guard case .success(let url) = result else { return }
+            if transcript.lines.isEmpty { load(url) } else { pickedFile = url }
+        }
+        .confirmationDialog(
+            "Replace this transcript?",
+            isPresented: Binding(get: { pickedFile != nil }, set: { if !$0 { pickedFile = nil } })
+        ) {
+            Button("Replace", role: .destructive) { if let pickedFile { load(pickedFile) } }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("What's on the clipboard takes its place. Reject brings this one back.")
+            Text("The file takes its place. Reject brings this one back.")
         }
-        .onChange(of: transcript.track?.id) { _, _ in pasteError = nil }
+        .onChange(of: transcript.track?.id) { _, _ in loadError = nil }
         .sheet(isPresented: $showingEdits) {
             TranscriptEditsView(edits: transcript.edits)
         }
@@ -174,8 +183,8 @@ struct TranscriptPane: View {
 
             HStack(spacing: 10) {
                 if isYouTube {
-                    TranscriptControlButton(title: "Paste", systemImage: "doc.on.clipboard", isOn: false) {
-                        if transcript.lines.isEmpty { paste() } else { isConfirmingPaste = true }
+                    TranscriptControlButton(title: "Load", systemImage: "doc.badge.plus", isOn: false) {
+                        isPickingFile = true
                     }
                     .disabled(!selection.isEmpty)
                 } else {
@@ -436,14 +445,18 @@ struct TranscriptPane: View {
 
     private var isYouTube: Bool { transcript.track?.youTubeID != nil }
 
-    private func paste() {
-        let read = transcript.importPasted(UIPasteboard.general.string ?? "")
-        pasteError = read > 0 ? nil : "No timed lines on the clipboard. Copy the transcript from YouTube first — timestamps included."
+    private static let transcriptTypes: [UTType] =
+        [.plainText, .text, .json] + ["vtt", "srt", "lrc"].compactMap { UTType(filenameExtension: $0) }
+
+    private func load(_ url: URL) {
+        pickedFile = nil
+        let read = transcript.importFile(url)
+        loadError = read > 0 ? nil : "Nothing in that file could be read as a transcript."
     }
 
     private var emptyStateDetail: LocalizedStringKey {
         if isYouTube {
-            return "On YouTube, open the video's description and tap Show transcript, then select and copy it all — timestamps included — and tap Paste. Subtitle files (.vtt, .srt) pasted as text work too."
+            return "Load a transcript file — .vtt, .srt, .lrc, .json, or a .txt with a timestamp on each line."
         }
         if transcript.isRunning {
             return "Working through the episode — \(percent) done. The whole transcript appears here at once when it's finished — and leaving the app doesn't lose what's already done."
