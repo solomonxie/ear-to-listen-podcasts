@@ -6,7 +6,7 @@ import SwiftUI
 struct AddYouTubeEpisodeView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var link = ""
+    @State private var link: String
     @State private var title = ""
     @State private var speaker = ""
     @State private var album = ""
@@ -21,6 +21,10 @@ struct AddYouTubeEpisodeView: View {
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
 
     private var videoID: String? { YouTubeVideo.id(from: link) }
+
+    init(link: String) {
+        _link = State(initialValue: link.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
 
     var body: some View {
         NavigationStack {
@@ -79,11 +83,6 @@ struct AddYouTubeEpisodeView: View {
                 }
             }
             .task(id: videoID) { await lookUp() }
-            .onAppear {
-                if link.isEmpty, let copied = UIPasteboard.general.string, YouTubeVideo.id(from: copied) != nil {
-                    link = copied
-                }
-            }
         }
     }
 

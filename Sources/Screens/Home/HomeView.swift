@@ -13,7 +13,7 @@ struct HomeView: View {
     @State private var isNamingPlaylist = false
     @State private var newPlaylistName = ""
     @State private var editingBookmark: Bookmark?
-    @State private var isAddingYouTube = false
+    @State private var addingYouTubeLink: YouTubeLink?
     @State private var results = LibrarySearch.Results()
     /// Kept apart from `results`: this half is a database scan, so it lands after the
     /// in-memory one rather than holding it up.
@@ -46,18 +46,7 @@ struct HomeView: View {
         // a term reached from the Terms list — routes the same way.
         .navigationDestination(for: HomeRoute.self) { destination($0) }
         .navigationTitle("Good listening")
-        .toolbar {
-            // YouTube doesn't reach the China storefront, so neither does this.
-            if !AppStorefront.isChina {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { isAddingYouTube = true } label: {
-                        Image(systemName: "play.rectangle.on.rectangle")
-                    }
-                    .accessibilityLabel("Add YouTube video")
-                }
-            }
-        }
-        .sheet(isPresented: $isAddingYouTube) { AddYouTubeEpisodeView() }
+        .sheet(item: $addingYouTubeLink) { AddYouTubeEpisodeView(link: $0.link) }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
         // Debounced: `.task(id:)` cancels the previous run on the next keystroke, so
         // holding a key down searches once at the end rather than once per character.
@@ -269,7 +258,15 @@ struct HomeView: View {
 
     @ViewBuilder
     private var searchResults: some View {
-        if results.isEmpty {
+        // A YouTube link pasted into search is a video to add, not words to look for.
+        // Not on the China storefront, which YouTube doesn't reach.
+        if !AppStorefront.isChina, YouTubeVideo.id(from: query) != nil {
+            Button { addingYouTubeLink = YouTubeLink(link: query) } label: {
+                resultRow(symbol: "play.rectangle.fill", color: .red, title: String(localized: "Add YouTube video"), subtitle: query)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal)
+        } else if results.isEmpty {
             ContentUnavailableView.search(text: query)
                 .padding(.top, 40)
         } else {
@@ -521,4 +518,9 @@ private struct ChipCard: View {
             .background(color.opacity(0.2), in: Capsule())
             .foregroundStyle(color)
     }
+}
+
+struct YouTubeLink: Identifiable {
+    let link: String
+    var id: String { link }
 }
