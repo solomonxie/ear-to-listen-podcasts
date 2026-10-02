@@ -156,13 +156,14 @@ struct EpisodeDetailsPane: View {
         }
     }
 
-    /// Year · length · language, whichever are known. Nil when none are.
+    /// Year · length · size · language, whichever are known. Nil when none are.
     private var facts: String? {
         let language = (track.language ?? album?.language ?? artist?.language)
             .map { TranscriptPane.languageName(Locale(identifier: $0)) }
         let parts = [
             (track.year ?? album?.year).map(String.init),
             track.durationMs.map(TrackRow.formattedDuration),
+            track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) },
             language,
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -195,7 +196,7 @@ struct EpisodeDetailsPane: View {
         }
     }
 
-    /// What's looked up now and then — the file, its size, the lists it's on, the
+    /// What's looked up now and then — the file, the lists it's on, the
     /// picture — folded away, unfolding in place when asked for.
     @ViewBuilder
     private var moreDetails: some View {
@@ -217,7 +218,6 @@ struct EpisodeDetailsPane: View {
 
         if showsMore {
             VStack(alignment: .leading, spacing: 4) {
-                DetailRow("Size", track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) })
                 // One row per copy: the same recording in two buckets is one episode with
                 // two addresses, not two episodes.
                 ForEach(Array(copies.enumerated()), id: \.element.id) { index, copy in
@@ -483,33 +483,6 @@ private enum DetailLayout {
     /// using one-handed while something plays — `.footnote` text with no padding gave a
     /// ~22pt row, which is a target you aim at rather than hit.
     static let rowHeight: CGFloat = 44
-}
-
-/// Skips itself when there's no value, so an episode with thin metadata shows a short
-/// card rather than a column of dashes. For anything editable see `EditableRow`.
-private struct DetailRow: View {
-    let label: String
-    let value: String?
-
-    init(_ label: String, _ value: String?) {
-        self.label = label
-        self.value = value
-    }
-
-    var body: some View {
-        if let value, !value.isEmpty {
-            HStack(spacing: 8) {
-                Text(label)
-                    .sectionRowSecondary()
-                    .frame(width: DetailLayout.labelWidth, alignment: .leading)
-                Text(value)
-                    .font(.subheadline)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(minHeight: DetailLayout.rowHeight)
-        }
-    }
 }
 
 /// Which lists this episode is on, and the way onto another one. Chips rather than a

@@ -7,7 +7,7 @@ anything is **Edit** (the sheet below). The rarely looked-up rest folds away.
 
 ```
  ABOUT                         ✨ Read with AI   Edit   ← ✨ greyed until transcribed;
- 2024 · 42 min · Chinese                                  the reason in a caption line
+ 2024 · 42 min · 24.1 MB · Chinese                          the reason in a caption line
  More details ›                                        ← folded by default
  SUMMARY                                   Edit  ✨    ← EpisodeSummaryView, 3 lines
  Two sentences about what this episode is…                until More
@@ -25,7 +25,6 @@ Unfolded in place — nothing covers the page:
 ```
  More details ⌄
  ┌──────────────────────────────────────────────┐
- │ Size       24.1 MB                           │
  │ File       s3://slmx-archives2/bible-aud…    │ ← tap opens the whole path
  │ Also at    files://Podcasts/ep-004.mp3       │
  │ Playlists  ( Listen Later ) ( Bible ) ( ＋ )  │
