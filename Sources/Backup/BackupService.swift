@@ -264,8 +264,13 @@ struct BackupService {
                 awaiting += 1
                 continue
             }
-            let artist = try entry.artistName.map { try libraryStore.upsertArtist(name: $0) }
-            let album = try entry.albumName.map { try libraryStore.upsertAlbum(name: $0, artistID: artist?.id) }
+            var names = (speaker: entry.artistName, album: entry.albumName)
+            if entry.providerID == YouTubeVideo.providerID {
+                let filed = YouTubeEpisodes.filing(speaker: names.speaker, album: names.album)
+                names = (filed.speaker, filed.album)
+            }
+            let artist = try names.speaker.map { try libraryStore.upsertArtist(name: $0) }
+            let album = try names.album.map { try libraryStore.upsertAlbum(name: $0, artistID: artist?.id) }
             track.title = entry.title
             track.artistID = artist?.id
             track.albumID = album?.id
