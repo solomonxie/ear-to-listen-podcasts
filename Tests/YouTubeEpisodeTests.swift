@@ -101,3 +101,34 @@ final class YouTubeFilingTests: XCTestCase {
         XCTAssertEqual(YouTubeEpisodes.filing(speaker: "A", album: "Sermons").album, "Sermons")
     }
 }
+
+final class YouTubeCatalogTests: XCTestCase {
+    private func track(_ id: String, video: String, title: String, artist: String? = "s1", album: String? = "a1") -> Track {
+        Track(id: id, providerID: YouTubeVideo.providerID, artistID: artist, albumID: album, filePath: video, title: title, updatedAt: Date())
+    }
+
+    func testEntriesPutTheTranscriptUnderSpeakerAndAlbum() {
+        let entries = YouTubeCatalog.entries(
+            [track("e1", video: "dQw4w9WgXcQ", title: "Grace / Truth")],
+            speakers: ["s1": "Tim Keller"], albums: ["a1": "Sermons"], root: "audio/"
+        )
+        XCTAssertEqual(entries.first?.transcriptPath, "audio/Tim Keller/Sermons/Grace - Truth [dQw4w9WgXcQ].vtt")
+        XCTAssertEqual(entries.first?.url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    }
+
+    func testUnfiledEpisodesUseTheDefaultAlbum() {
+        let entries = YouTubeCatalog.entries(
+            [track("e1", video: "dQw4w9WgXcQ", title: "T", artist: nil, album: nil)], speakers: [:], albums: [:], root: nil
+        )
+        XCTAssertEqual(entries.first?.transcriptPath, "YouTube/YouTube's YouTube Podcasts/T [dQw4w9WgXcQ].vtt")
+    }
+
+    func testTranscriptsAreFoundByTheVideoIDInTheirName() {
+        let listing = ["a/b/T [dQw4w9WgXcQ].zh-Hans.vtt", "a/b/T [dQw4w9WgXcQ].vtt", "a/b/ep1.vtt", "x/[jNQXAC9IVRw].srt"]
+            .map { CloudFile(id: $0, name: ($0 as NSString).lastPathComponent, path: $0) }
+        let found = YouTubeTranscripts.byVideoID(in: listing)
+        XCTAssertEqual(found["dQw4w9WgXcQ"], ["a/b/T [dQw4w9WgXcQ].vtt", "a/b/T [dQw4w9WgXcQ].zh-Hans.vtt"])
+        XCTAssertEqual(found["jNQXAC9IVRw"], ["x/[jNQXAC9IVRw].srt"])
+        XCTAssertEqual(found.count, 2)
+    }
+}

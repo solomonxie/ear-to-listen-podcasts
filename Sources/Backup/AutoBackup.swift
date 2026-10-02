@@ -194,6 +194,8 @@ final class AutoBackup: ObservableObject {
 
     private func backUpIfDue() async {
         guard !isBackingUp else { return }
+        // Not a backup and not daily: the batch job reading it wants new videos soon.
+        await YouTubeCatalog.publishIfChanged()
         await backUp(
             toPhone: LocalBackups.isDue,
             toBucket: isEnabled && isDue(lastBackupAt, markKey: Self.bucketMarkKey),

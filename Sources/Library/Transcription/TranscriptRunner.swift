@@ -66,7 +66,7 @@ final class TranscriptRunner: ObservableObject {
     /// recognizer, so it's clear nothing was spent making them. A language-tagged file
     /// records its language too — `sidecar:zh` — which is how the page knows which of an
     /// episode's transcript files is the one on screen.
-    static let sidecarEngine = "sidecar"
+    nonisolated static let sidecarEngine = "sidecar"
 
     static func sidecarEngine(language: String?) -> String {
         language.map { "\(sidecarEngine):\($0)" } ?? sidecarEngine
