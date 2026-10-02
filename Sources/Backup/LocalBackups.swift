@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// The copies that never leave the phone — the tier that answers a different failure from
 /// iCloud and the bucket. Those two are for a phone that's gone; this one is for data
@@ -39,6 +40,17 @@ enum LocalBackups {
     /// The whole tier-1 pass, on app-background. At most once a day and only if something
     /// was written since the last one: copying megabytes per keystroke to guard against a
     /// once-a-year event is the wrong trade, and the log already covers what falls between.
+    /// The day's copy, off the main thread, with the time iOS allows an app that has just
+    /// been put away. A whole-library archive is seconds of work on a big library.
+    @MainActor
+    static func runInBackground() {
+        let assertion = BackgroundAssertion(name: "local-backup")
+        Task.detached(priority: .utility) {
+            runIfDue { try BackupService().currentArchive() }
+            await assertion.end()
+        }
+    }
+
     static func runIfDue(archive: () throws -> Data) {
         guard !AppMode.isDemo else { return }
         let defaults = UserDefaults.standard
@@ -135,5 +147,20 @@ enum LocalBackups {
         let stem = (name as NSString).deletingPathExtension
         guard !name.hasSuffix(".jsonl") else { return false }
         return BackupArchiveName.ours(stem + ".zip")
+    }
+}
+
+@MainActor
+private final class BackgroundAssertion {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init(name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in self?.end() }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

@@ -88,22 +88,30 @@ struct BackupService {
         // Same rule for episodes: only what someone did by hand travels, since a re-sync
         // re-derives everything else from the files themselves. Edited details, a heart,
         // and marked moments all count as by hand.
+        //
+        // One query per table, then matched in memory: asking per episode was two
+        // queries times every episode in the library, seconds of work on a big one.
+        let bookmarksByTrack = Dictionary(grouping: try bookmarkStore.all(), by: \.trackID)
+            .mapValues { $0.sorted { $0.positionMs < $1.positionMs } }
+        let termsByTrack = try termStore.mentionsByTrack()
+        let artistNames = Dictionary(try libraryStore.artists().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        let albumNames = Dictionary(try libraryStore.albums().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
         let episodes = try trackStore.all(includingLost: true).compactMap { track -> LibrarySnapshot.EpisodeEntry? in
-            let bookmarks = (try? bookmarkStore.all(forTrack: track.id)) ?? []
-            let terms = (try? termStore.terms(forTrack: track.id)) ?? []
+            let bookmarks = bookmarksByTrack[track.id] ?? []
+            let terms = termsByTrack[track.id] ?? [:]
             guard track.metadataEditedAt != nil || track.isFavorite || track.listenedAt != nil || !bookmarks.isEmpty
                     || track.summary != nil || !terms.isEmpty else { return nil }
             return LibrarySnapshot.EpisodeEntry(
                 providerID: track.providerID,
                 filePath: track.filePath,
                 title: track.title,
-                artistName: (track.artistID.flatMap { try? libraryStore.artist(id: $0) } ?? nil)?.name,
-                albumName: (track.albumID.flatMap { try? libraryStore.album(id: $0) } ?? nil)?.name,
+                artistName: track.artistID.flatMap { artistNames[$0] },
+                albumName: track.albumID.flatMap { albumNames[$0] },
                 year: track.year,
                 trackNumber: track.trackNumber,
                 notes: track.notes,
                 summary: track.summary,
-                terms: Dictionary(uniqueKeysWithValues: terms.map { ($0.name, $0.mentions) }),
+                terms: terms,
                 artworkFileName: track.artworkFileName,
                 isFavorite: track.isFavorite,
                 listenedAt: track.listenedAt,
