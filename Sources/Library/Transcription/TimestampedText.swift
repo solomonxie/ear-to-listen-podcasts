@@ -1,11 +1,12 @@
 import Foundation
 
-/// Text copied from YouTube's "Show transcript" panel, or a pasted subtitle file.
+/// Plain text with timestamps — what YouTube's "Show transcript" panel gives when
+/// copied and saved. Subtitle formats are passed through to `TranscriptFile`.
 ///
 /// The panel copies as a timestamp line, then the words, then the next timestamp —
 /// sometimes with the timestamp and words on one line, sometimes with a spoken-out
 /// duration ("1 minute, 5 seconds") between them for screen readers.
-enum PastedTranscript {
+enum TimestampedText {
     static func parse(_ text: String) -> [TranscriptSegment] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("WEBVTT") { return TranscriptFile.parse(trimmed, extension: "vtt") }
@@ -19,7 +20,7 @@ enum PastedTranscript {
         var words: [String] = []
         func flush() {
             if let start, !words.isEmpty {
-                segments.append(TranscriptSegment(start: start, text: words.joined(separator: " "), engine: engine))
+                segments.append(TranscriptSegment(start: start, text: words.joined(separator: " ")))
             }
             words = []
         }
@@ -38,7 +39,6 @@ enum PastedTranscript {
         return TranscriptSegment.normalized(segments)
     }
 
-    static let engine = "pasted"
 
     /// `1:05`, `01:02:03`, optionally followed by the words on the same line.
     private static func leadingTimestamp(_ line: String) -> (Double, String)? {

@@ -38,9 +38,9 @@ final class YouTubeVideoTests: XCTestCase {
     }
 }
 
-final class PastedTranscriptTests: XCTestCase {
+final class TimestampedTextTests: XCTestCase {
     func testTimestampOnItsOwnLineThenWords() {
-        let segments = PastedTranscript.parse("""
+        let segments = TimestampedText.parse("""
             0:00
             welcome back everyone
             0:04
@@ -56,21 +56,32 @@ final class PastedTranscriptTests: XCTestCase {
     }
 
     func testTimestampAndWordsOnOneLine() {
-        let segments = PastedTranscript.parse("0:01 hello\n0:05 world")
+        let segments = TimestampedText.parse("0:01 hello\n0:05 world")
         XCTAssertEqual(segments.map(\.start), [1, 5])
         XCTAssertEqual(segments.map(\.text), ["hello", "world"])
     }
 
     func testTextBeforeTheFirstTimestampIsDropped() {
-        XCTAssertEqual(PastedTranscript.parse("Transcript\n0:10\nhi").map(\.text), ["hi"])
+        XCTAssertEqual(TimestampedText.parse("Transcript\n0:10\nhi").map(\.text), ["hi"])
     }
 
     func testSubtitleFilesStillParse() {
         let srt = "1\n00:00:01,000 --> 00:00:03,000\nhello\n"
-        XCTAssertEqual(PastedTranscript.parse(srt).first?.text, "hello")
+        XCTAssertEqual(TimestampedText.parse(srt).first?.text, "hello")
     }
 
     func testNothingTimedIsNothing() {
-        XCTAssertTrue(PastedTranscript.parse("just some words").isEmpty)
+        XCTAssertTrue(TimestampedText.parse("just some words").isEmpty)
+    }
+
+    func testSavedYouTubeTranscriptAsTxtKeepsItsTimes() {
+        let segments = TranscriptRunner.segments(in: "0:00\nhi\n0:07\nthere", extension: "txt", duration: 600)
+        XCTAssertEqual(segments.map(\.start), [0, 7])
+    }
+
+    func testUntimedTxtIsSpreadAcrossTheEpisode() {
+        let segments = TranscriptRunner.segments(in: "One. Two.", extension: "txt", duration: 100)
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments.last?.end, 100)
     }
 }
