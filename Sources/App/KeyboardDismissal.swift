@@ -91,3 +91,23 @@ struct KeyboardDismissTap: UIViewRepresentable {
         ) -> Bool { true }
     }
 }
+
+/// Search fields' return key reads Done and always works. UIKit greys Search out on an
+/// empty field, so with nothing typed there was no key that put the keyboard away.
+/// Pressing it submits, and a submitted search field gives up the keyboard.
+enum SearchReturnKey {
+    @MainActor
+    static func useDone() {
+        NotificationCenter.default.addObserver(
+            forName: UITextField.textDidBeginEditingNotification, object: nil, queue: .main
+        ) { note in
+            let field = note.object as? UISearchTextField
+            MainActor.assumeIsolated {
+                guard let field else { return }
+                field.returnKeyType = .done
+                field.enablesReturnKeyAutomatically = false
+                field.reloadInputViews()
+            }
+        }
+    }
+}
