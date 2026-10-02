@@ -6,16 +6,20 @@ import StoreKit
 ///
 /// Release reads StoreKit's answer, cached from the last `refresh()`; before the first
 /// one lands, the device region stands in. Debug builds act as the storefront picked at
-/// install time (`make ios STORE=CHN`), which the Settings picker can override.
+/// install time (`make ios STOREFRONT=CHN`), or a launch argument's. Nothing on screen
+/// changes it, in any build.
 enum AppStorefront {
     static let chinaCode = "CHN"
     private static let lastKnownKey = "storefront.lastKnown"
-    /// Debug only. Also settable as a launch argument: `-storefrontOverride CHN`.
-    static let overrideKey = "storefrontOverride"
+    /// Debug only, as a launch argument: `-storefrontOverride CHN`.
+    private static let overrideArgument = "-storefrontOverride"
 
     static var countryCode: String? {
         #if DEBUG
-        if let forced = UserDefaults.standard.string(forKey: overrideKey)?.nilIfEmpty { return forced }
+        let arguments = ProcessInfo.processInfo.arguments
+        if let flag = arguments.firstIndex(of: overrideArgument), flag + 1 < arguments.count {
+            return arguments[flag + 1]
+        }
         if let installed = (Bundle.main.object(forInfoDictionaryKey: "EarStorefront") as? String)?.nilIfEmpty {
             return installed
         }

@@ -242,9 +242,6 @@ struct SettingsSectionView: View {
                 } label: {
                     Label("Add AI Key", systemImage: "plus.circle")
                 }
-                #if DEBUG
-                StorefrontOverrideRow { viewModel.load() }
-                #endif
             }
             .padding(.horizontal)
             .sheet(isPresented: $showingAddAiKey) {
