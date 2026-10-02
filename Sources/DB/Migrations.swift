@@ -629,6 +629,44 @@ enum Migrations {
             )
         }
 
+        // Every YouTube episode in exactly one album under its speaker — see
+        // `YouTubeEpisodes.filing`. Files the ones added before that was the rule.
+        migrator.registerMigration("v38_youtube_albums") { db in
+            let rows = try Row.fetchAll(
+                db, sql: "SELECT id, artistID FROM tracks WHERE providerID = ? AND albumID IS NULL",
+                arguments: [YouTubeVideo.providerID]
+            )
+            func artist(named name: String) throws -> String {
+                if let id = try String.fetchOne(db, sql: "SELECT id FROM artists WHERE name = ?", arguments: [name]) { return id }
+                let id = UUID().uuidString
+                try db.execute(sql: "INSERT INTO artists (id, name) VALUES (?, ?)", arguments: [id, name])
+                return id
+            }
+            for row in rows {
+                let trackID: String = row["id"]
+                let artistID = try (row["artistID"] as String?) ?? artist(named: YouTubeEpisodes.fallbackSpeaker)
+                let speaker = try String.fetchOne(db, sql: "SELECT name FROM artists WHERE id = ?", arguments: [artistID])
+                    ?? YouTubeEpisodes.fallbackSpeaker
+                let albumName = YouTubeEpisodes.defaultAlbumName(for: speaker)
+                var albumID = try String.fetchOne(
+                    db, sql: "SELECT id FROM albums WHERE artistID = ? AND name = ?", arguments: [artistID, albumName]
+                )
+                if albumID == nil {
+                    albumID = UUID().uuidString
+                    try db.execute(
+                        sql: "INSERT INTO albums (id, artistID, name) VALUES (?, ?, ?)", arguments: [albumID, artistID, albumName]
+                    )
+                }
+                try db.execute(
+                    sql: "UPDATE tracks SET artistID = ?, albumID = ? WHERE id = ?", arguments: [artistID, albumID, trackID]
+                )
+                try db.execute(
+                    sql: "UPDATE trackSearchIndex SET artist = ?, album = ? WHERE trackID = ?",
+                    arguments: [speaker, albumName, trackID]
+                )
+            }
+        }
+
         return migrator
     }
 }
