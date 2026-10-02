@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject private var engine = PlaybackEngine.shared
+    @State private var playerOpensAtNotes = false
 
     var body: some View {
         // One place shows the player, so tapping an episode behaves the same wherever you
@@ -23,17 +24,23 @@ struct ContentView: View {
                 // Hidden behind the player, where it would be a second copy of the same
                 // controls sitting on top of the real ones.
                 if !engine.isPresentingPlayer {
-                    MiniPlayerBar(showingNowPlaying: $engine.isPresentingPlayer)
+                    MiniPlayerBar(showingNowPlaying: $engine.isPresentingPlayer) {
+                        playerOpensAtNotes = true
+                        engine.isPresentingPlayer = true
+                    }
                 }
             }
 
             if engine.isPresentingPlayer {
-                RealPlayerView()
+                RealPlayerView(opensAtNotes: playerOpensAtNotes)
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
         }
         .animation(.easeInOut(duration: 0.28), value: engine.isPresentingPlayer)
+        .onChange(of: engine.isPresentingPlayer) { _, isShowing in
+            if !isShowing { playerOpensAtNotes = false }
+        }
         // Attached once, at the root: it works on the window, so every page, sheet and
         // full-screen cover in the app gets it.
         .dismissesKeyboardOnBackgroundTap()
