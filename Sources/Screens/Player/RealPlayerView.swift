@@ -540,14 +540,27 @@ struct RealPlayerView: View {
         .padding(.horizontal)
     }
 
+    /// The glyph changes on the tap, not after the library has reloaded: that round trip
+    /// waited out a debounce and then queued behind Home's whole-library refresh on the
+    /// one database connection — seconds before a checkmark went green.
     private func toggleListened(_ track: Track) {
-        try? trackStore.setListened(ids: [track.id], listened: track.listenedAt == nil)
-        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+        let listened = track.listenedAt == nil
+        engine.showEdit(of: track.id) { $0.listenedAt = listened ? Date() : nil }
+        let store = trackStore
+        Task.detached(priority: .userInitiated) {
+            try? store.setListened(ids: [track.id], listened: listened)
+            await MainActor.run { NotificationCenter.default.post(name: .libraryDidChange, object: nil) }
+        }
     }
 
     private func toggleFavorite(_ track: Track) {
-        try? trackStore.setFavorite(id: track.id, isFavorite: !track.isFavorite)
-        NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+        let isFavorite = !track.isFavorite
+        engine.showEdit(of: track.id) { $0.isFavorite = isFavorite }
+        let store = trackStore
+        Task.detached(priority: .userInitiated) {
+            try? store.setFavorite(id: track.id, isFavorite: isFavorite)
+            await MainActor.run { NotificationCenter.default.post(name: .libraryDidChange, object: nil) }
+        }
     }
 
     /// Marks and stays put. Nothing is asked for at the moment of marking — a dialog over
