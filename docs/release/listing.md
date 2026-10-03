@@ -223,10 +223,10 @@ App Preview video: skip for 1.0.
 | App Review → Attachment | none |
 | Version Release | **Manually release this version** |
 
-Promotional Text (166/170):
+Promotional Text (147/170):
 
 ```
-Your own podcasts, off your own cloud storage. Transcribed on the phone, searchable by what was said. Free, no account, no subscription, no server of ours in between.
+Your own podcasts, off your own cloud storage. Transcribed on the phone, searchable by what was said. No account, and no server of ours in between.
 ```
 
 Description:
@@ -412,7 +412,7 @@ it on the `1.0` page.
 Promotional Text:
 
 ```
-播放你自己的播客，来自你自己的云存储。在手机上转写，按“说过的话”搜索。完全免费，无需账号，无订阅，中间没有我们的服务器。
+播放你自己的播客，来自你自己的云存储。在手机上转写，按“说过的话”搜索。无需账号，中间没有我们的服务器。
 ```
 
 Description:
