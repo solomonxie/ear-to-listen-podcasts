@@ -162,38 +162,14 @@ Fallback, Xcode GUI: `open EarToListen.xcodeproj` → destination **Any iOS Devi
 
 App Store Connect's **iPhone 6.9" Display** slot is the only required one for an
 iPhone-only app: exactly `1320 × 2868` (or `1290 × 2796`). Everything smaller is scaled
-from it automatically. The legacy **6.5"** slot takes `1284 × 2778` — optional, generated
-anyway.
+from it automatically.
 
-Placeholders ready to upload now, converted from `docs/screenshots/`:
+Captured 2026-10-03 (simulator, bundled demo library, JPEG q80), 7 shots in upload order:
 
-- `docs/release/screenshots/6.9/*.jpg` — 1320 × 2868
-- `docs/release/screenshots/6.5/*.jpg` — 1284 × 2778
+- `docs/release/screenshots/` — English: home, terms, album, speaker, playlist, player, settings
+- `docs/release/screenshots/zh-Hans/` — 简体中文, same order; upload to the 简体中文 localization
 
-They are upscaled from an older, narrower capture and look soft. They will pass review,
-but recapture before you care about the listing:
-
-1. Load a library worth looking at — a real bucket with real shows, artwork filled in,
-   a couple of transcripts done, a few saved moments. Avoid anything personal.
-2. `CONFIG=Release scripts/install-ios-device.sh` (Release, so no debug overlay).
-3. Status bar: full battery, Wi-Fi, no notification badges. Side button + Volume Up per
-   shot.
-4. Shots, named in upload order:
-   1. `1-home.png` — **Home**, shelves filled: Continue Listening, Albums, Speakers
-   2. `2-browse.png` — **Browse**, by year / topic / terms
-   3. `3-player.png` — **Now Playing**, artwork and the seek bar
-   4. `4-transcript.png` — **Transcript**, following along, one line highlighted
-   5. `5-search.png` — **Search**, a query with a spoken-word hit showing its line
-   6. `6-sources.png` — **Sources**, a bucket connected and syncing
-   7. `7-backup.png` — **Settings**, iCloud Drive backup on
-5. AirDrop to the Mac, e.g. `~/Desktop/shots/`, then:
-
-```sh
-scripts/store-screenshots.sh ~/Desktop/shots
-```
-
-Output overwrites `docs/release/screenshots/{6.9,6.5}/`. Drag the `6.9` folder's files into
-the 6.9" slot in that order. Up to 10 per slot; 3 is the minimum.
+Recapture (simulator, needs `SCREENSHOTS` build and demo mode): not part of `make` — see git history of `Sources/App/ScreenshotDriver.swift`.
 
 App Preview video: skip for 1.0.
 
@@ -407,7 +383,7 @@ it on the `1.0` page.
 | Subtitle | `你自己云上的播客` |
 | Privacy Policy URL | same |
 | Keywords | `播客,有声书,音频,播放器,离线,转写,字幕,搜索,隐私,对象存储,自建,网盘` |
-| Screenshots | reuse the English ones (App Store Connect falls back automatically) |
+| Screenshots | upload `docs/release/screenshots/zh-Hans/*.jpg` |
 
 Promotional Text:
 

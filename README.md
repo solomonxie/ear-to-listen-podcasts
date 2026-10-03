@@ -133,6 +133,6 @@ English + Simplified Chinese from the start, via a String Catalog
 
 | Home | Browse by speaker, year & topic |
 |:---:|:---:|
-| <img src="docs/screenshots/home-page.png" alt="Home" width="200"> | <img src="docs/screenshots/sections.png" alt="Browse by speaker, year and topic" width="200"> |
+| <img src="docs/release/screenshots/01-home.jpg" alt="Home" width="200"> | <img src="docs/release/screenshots/02-terms.jpg" alt="Browse by speaker, year and topic" width="200"> |
 | **Sources & Settings** | **Now Playing** |
-| <img src="docs/screenshots/settings.png" alt="Sources and Settings" width="200"> | <img src="docs/screenshots/player.png" alt="Now Playing" width="200"> |
+| <img src="docs/release/screenshots/07-settings.jpg" alt="Sources and Settings" width="200"> | <img src="docs/release/screenshots/06-player.jpg" alt="Now Playing" width="200"> |
