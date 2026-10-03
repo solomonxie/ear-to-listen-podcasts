@@ -3,6 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject private var engine = PlaybackEngine.shared
     @State private var playerLanding: PlayerLanding?
+    #if SCREENSHOTS
+    @State private var path = NavigationPath()
+    #endif
 
     var body: some View {
         // One place shows the player, so tapping an episode behaves the same wherever you
@@ -17,9 +20,7 @@ struct ContentView: View {
         //
         // Its own `NavigationStack` is fine here — it is beside Home's, not inside it.
         ZStack {
-            NavigationStack {
-                HomeView()
-            }
+            homeStack
             .dockedBottomBar {
                 // Hidden behind the player, where it would be a second copy of the same
                 // controls sitting on top of the real ones.
@@ -48,7 +49,18 @@ struct ContentView: View {
         // Attached once, at the root: it works on the window, so every page, sheet and
         // full-screen cover in the app gets it.
         .dismissesKeyboardOnBackgroundTap()
+        #if SCREENSHOTS
+        .task { await ScreenshotDriver.run(path: $path) { open(at: $0 ?? .top) } }
+        #endif
         .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder private var homeStack: some View {
+        #if SCREENSHOTS
+        NavigationStack(path: $path) { HomeView() }
+        #else
+        NavigationStack { HomeView() }
+        #endif
     }
 
     private func open(at landing: PlayerLanding) {
