@@ -6,7 +6,7 @@ Bundle ID `com.example.eartolisten` · iOS 17+ · iPhone only, portrait · Free.
   ready to paste
 - [`privacy-policy.md`](privacy-policy.md) — the policy; its GitHub URL is the Privacy
   Policy URL in the listing
-- `screenshots/6.9` (required slot), `screenshots/6.5` (legacy) — upload-ready, from
+- `screenshots/` — upload-ready, from
   `scripts/store-screenshots.sh`
 
 ```sh
