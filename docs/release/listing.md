@@ -268,7 +268,7 @@ BACKUP YOU CAN SEE
 • Export or import by hand at any time — you can walk away with your data
 
 OPTIONAL AI, YOUR OWN KEY
-Add a key from Anthropic, Google, Groq, Mistral, DeepSeek, Qwen, Kimi, GLM or Doubao — or point it at any compatible server — and it will draft better titles and show names during a sync, summarise an episode, or sort out a whole album in one pass — every suggestion shown to you before it lands. Keys live in the Keychain on this device, are never included in backups, and are never sent to us. Add more than one and they fall back to each other on a rate limit. Skip all of it and the app works the same.
+Add a key from DeepSeek, Qwen, Kimi, GLM or Doubao — or point it at any compatible server — and it will draft better titles and show names during a sync, summarise an episode, or sort out a whole album in one pass — every suggestion shown to you before it lands. Keys live in the Keychain on this device, are never included in backups, and are never sent to us. Add more than one and they fall back to each other on a rate limit. Skip all of it and the app works the same.
 
 Free. No ads, no analytics, no tracking, no in-app purchases.
 
@@ -300,7 +300,7 @@ It is read-only and holds a few short public-domain recordings. Tap "Sync Now" o
 A folder on the phone works as a source too (Sources → Add Local Folder) if you prefer to supply your own audio via the Files app.
 
 Optional features a reviewer may want to skip:
-- AI suggestions (Settings → AI Keys): requires the reviewer's own API key from a provider such as Anthropic or DeepSeek. Off by default; the rest of the app works without it.
+- AI suggestions (Settings → AI Keys): requires the reviewer's own API key from a provider such as DeepSeek. Off by default; the rest of the app works without it.
 - iCloud Drive backup (Settings → Sync & Backup): optional; the app is fully functional without it.
 
 China mainland: the app reads the App Store storefront (StoreKit Storefront.current). On the China storefront it offers only AI providers licensed in mainland China (DeepSeek, Qwen, Kimi, GLM, Doubao) and a user-supplied custom server; ChatGPT/OpenAI and every other unlicensed provider, and cloud transcription through them, are not offered or shown, and no metadata in any localization refers to them. A screen recording of the China build's AI settings is attached.
