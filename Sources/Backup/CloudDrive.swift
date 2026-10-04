@@ -35,12 +35,12 @@ enum CloudDriveError: Error, LocalizedError {
 /// becoming a pile. Ten days back is far enough that a mistake noticed the following week
 /// still has a copy from before it.
 enum CloudDrive {
-    static let containerID = "iCloud.com.example.eartolisten"
+    static let containerID = AppIdentity.info("ICloudContainerIdentifier") ?? "iCloud.\(AppIdentity.bundleID)"
 
     /// The container this app used under its old name. Still listed in the entitlements
     /// and still read, so a library backed up before the rename comes back by itself —
     /// renaming an app must not strand the copies it already took.
-    static let legacyContainerID = "iCloud.com.example.byopo"
+    static let legacyContainerID = "iCloud.\(AppIdentity.bundleIDPrefix).byopo"
 
     /// What every build before monthly archives wrote, read so those copies still restore.
     static let legacyBackupFileName = "byo-podcasts-backup.zip"

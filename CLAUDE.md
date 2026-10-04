@@ -16,7 +16,7 @@ xcrun devicectl device install app --device <device-udid> \
 ```
 
 `xcrun devicectl list devices` finds the UDID. `make ios` does all of the above, picking
-the paired device and reading `DEVELOPMENT_TEAM` from `.env.local`. Shipping a build:
+the paired device and reading `DEVELOPMENT_TEAM` from `Config/Local.xcconfig` (or `.env.local`). Shipping a build:
 `make release`; `make help` for the rest, and `docs/release/` for the store listing.
 
 Simulator builds are fine for *compiling and running tests* — just don't install

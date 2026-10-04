@@ -4,10 +4,12 @@ import Foundation
 /// extension can't reach the library's database, so it leaves them here — in the App
 /// Group both can read — and `YouTubeEpisodes.addShared` makes them into episodes.
 enum ShareInbox {
-    static let appGroup = "group.com.example.eartolisten"
+    /// `AppGroupIdentifier` is written into both the app's and the extension's Info.plist
+    /// from the same build setting, so the two resolve the same group.
+    static let appGroup = Bundle.main.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String
     private static let key = "share.inbox"
 
-    private static var defaults: UserDefaults? { UserDefaults(suiteName: appGroup) }
+    private static var defaults: UserDefaults? { appGroup.flatMap(UserDefaults.init(suiteName:)) }
 
     static func add(_ link: String) {
         guard let defaults else { return }

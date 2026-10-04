@@ -105,15 +105,16 @@ xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
 
 ## Release
 
-Signing is automatic against `DEVELOPMENT_TEAM` — kept out of git, read from the
-environment or a gitignored `.env.local`. Simulator builds don't need one. iCloud backup
-needs the `iCloud.com.example.eartolisten` container entitlement
+Signing is automatic against `DEVELOPMENT_TEAM`, and the bundle id is `APP_BUNDLE_ID` —
+both kept out of git in `Config/Local.xcconfig` (copy `Config/Local.xcconfig.example`;
+`Config/Signing.xcconfig` holds the tracked placeholders). Simulator builds don't need a
+team. iCloud backup needs the `iCloud.<your bundle id>` container entitlement
 (`Sources/App/EarToListen.entitlements`), which needs a paid developer account; a
 free-team build still builds and runs, and the iCloud row in Settings reports itself
 unavailable instead of pretending.
 
 ```sh
-echo 'DEVELOPMENT_TEAM=YOURTEAMID' > .env.local
+cp Config/Local.xcconfig.example Config/Local.xcconfig   # then fill in team + bundle id
 make ios          # onto the paired iPhone
 make release      # test → archive → .ipa → App Store Connect
 make help         # everything else, and the upload credentials it wants

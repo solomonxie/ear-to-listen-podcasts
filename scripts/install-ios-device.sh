@@ -5,12 +5,14 @@ set -e
 cd "$(dirname "$0")/.."
 
 [ -f .env.local ] && . ./.env.local
+# Team id lives in Config/Local.xcconfig (gitignored) too; .env.local still wins when set.
+[ -n "$DEVELOPMENT_TEAM" ] || DEVELOPMENT_TEAM=$(sed -n 's/^DEVELOPMENT_TEAM *= *//p' Config/Local.xcconfig 2>/dev/null)
 
 UDID=${1:-$(xcrun devicectl list devices 2>/dev/null | grep physical \
   | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}|[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' \
   | head -1)}
 : "${UDID:?no paired iPhone found — plug one in and trust this Mac}"
-: "${DEVELOPMENT_TEAM:?set DEVELOPMENT_TEAM (Apple Developer Team ID) in the environment or .env.local}"
+: "${DEVELOPMENT_TEAM:?set DEVELOPMENT_TEAM (Apple Developer Team ID) in Config/Local.xcconfig, .env.local or the environment}"
 
 CONFIG=${CONFIG:-Debug}
 # Storefront the build pretends to be in (Debug only; Release asks StoreKit). CHN hides

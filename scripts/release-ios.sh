@@ -22,8 +22,10 @@ set -e
 cd "$(dirname "$0")/.."
 
 [ -f .env.local ] && . ./.env.local
+# Team id lives in Config/Local.xcconfig (gitignored) too; .env.local still wins when set.
+[ -n "$DEVELOPMENT_TEAM" ] || DEVELOPMENT_TEAM=$(sed -n 's/^DEVELOPMENT_TEAM *= *//p' Config/Local.xcconfig 2>/dev/null)
 
-: "${DEVELOPMENT_TEAM:?set DEVELOPMENT_TEAM (Apple Developer Team ID) in the environment or .env.local}"
+: "${DEVELOPMENT_TEAM:?set DEVELOPMENT_TEAM (Apple Developer Team ID) in Config/Local.xcconfig, .env.local or the environment}"
 
 SCHEME=EarToListen
 BUILD=${1:-$(date +%Y%m%d%H%M)}
