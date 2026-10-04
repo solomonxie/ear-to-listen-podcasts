@@ -1,0 +1,6 @@
+// Copy to Config/Local.xcconfig (gitignored) and fill in your own values.
+// Apple Developer Team ID — developer.apple.com > Account > Membership details.
+DEVELOPMENT_TEAM = YOURTEAMID
+// Bundle id of the app. The share extension is $(APP_BUNDLE_ID).share, the app group
+// group.$(APP_BUNDLE_ID), the iCloud container iCloud.$(APP_BUNDLE_ID).
+APP_BUNDLE_ID = com.example.eartolisten

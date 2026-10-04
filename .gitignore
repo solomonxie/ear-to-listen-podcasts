@@ -26,3 +26,6 @@ Extensions/Share/Info.plist
 .env*.local
 .env.demo
 __pycache__/
+
+# Real signing values (team id, bundle id) — see Config/Local.xcconfig.example
+Config/Local.xcconfig

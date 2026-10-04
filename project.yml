@@ -69,19 +69,30 @@ targets:
         # Makes the app's iCloud folder show up in Files under its own name, so a backup
         # kept there can actually be got at. A container that syncs but stays hidden is
         # worse than a local file.
+        # A dictionary key, which Xcode's $(...) expansion skips — hence the bare
+        # APP_BUNDLE_ID: INFOPLIST_PREPROCESS below runs the C preprocessor over this plist
+        # with that one macro defined, so every bare APP_BUNDLE_ID in it becomes the real id.
         NSUbiquitousContainers:
-          iCloud.com.example.eartolisten:
+          iCloud.APP_BUNDLE_ID:
             NSUbiquitousContainerIsDocumentScopePublic: true
             NSUbiquitousContainerName: Ear to Listen
             NSUbiquitousContainerSupportedFolderLevels: Any
         # Storefront a Debug build acts as, from `make ios STORE=…`. Release ignores it.
         EarStorefront: $(EAR_STOREFRONT)
+        # Read back at runtime (`AppIdentity`, `ShareInbox`) so no id is spelled out in code.
+        AppGroupIdentifier: group.APP_BUNDLE_ID
+        ICloudContainerIdentifier: iCloud.APP_BUNDLE_ID
         NSSpeechRecognitionUsageDescription: >-
           Transcribes episodes on this device so you can read and correct them.
           Audio stays on your phone.
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.eartolisten
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        INFOPLIST_PREPROCESS: YES
+        INFOPLIST_PREPROCESSOR_DEFINITIONS: APP_BUNDLE_ID=$(APP_BUNDLE_ID)
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         EAR_STOREFRONT: ""
@@ -98,11 +109,8 @@ targets:
         APP_ENTITLEMENTS: Sources/App/EarToListen.entitlements
         CODE_SIGN_ENTITLEMENTS: $(APP_ENTITLEMENTS)
         CODE_SIGN_STYLE: Automatic
-        # The team that owns the bundle id and the iCloud container. Written here rather
-        # than read from the environment: a regenerate without the variable set produced a
-        # project that builds for the simulator and fails to sign for a device, which is a
-        # confusing way to find out. Fork this repo and it's the one line to change.
-        DEVELOPMENT_TEAM: REPLACE_WITH_YOUR_TEAM_ID
+        # DEVELOPMENT_TEAM and APP_BUNDLE_ID come from Config/Signing.xcconfig, which
+        # includes the gitignored Config/Local.xcconfig holding the real values.
     postBuildScripts:
       # .env.demo into non-Release builds only — see DemoData/README.md.
       - name: Demo credentials
@@ -130,16 +138,22 @@ targets:
             NSExtensionActivationRule:
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
               NSExtensionActivationSupportsText: true
+        # Same key, same value as the app: the one group both sides open.
+        AppGroupIdentifier: group.APP_BUNDLE_ID
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.eartolisten.share
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).share
+        INFOPLIST_PREPROCESS: YES
+        INFOPLIST_PREPROCESSOR_DEFINITIONS: APP_BUNDLE_ID=$(APP_BUNDLE_ID)
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_ENTITLEMENTS: Extensions/Share/Share.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: REPLACE_WITH_YOUR_TEAM_ID
 
   EarToListenTests:
     type: bundle.unit-test
@@ -148,8 +162,12 @@ targets:
       - path: Tests
     dependencies:
       - target: EarToListen
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     settings:
       base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).tests
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
 

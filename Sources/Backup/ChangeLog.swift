@@ -28,7 +28,7 @@ enum ChangeLog {
     /// it against the mark they last shipped to decide whether a day's upload is owed.
     /// A byte count would do the same until a prune deleted a file and it went backwards.
     private static let markKey = "backup.changeLog.mark"
-    private static let writes = DispatchQueue(label: "com.example.eartolisten.changelog")
+    private static let writes = DispatchQueue(label: AppIdentity.bundleID + ".changelog")
 
     struct Entry: Codable {
         var at: Date
