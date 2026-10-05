@@ -551,7 +551,7 @@ private struct FileLocation: Identifiable, Sendable {
 
 /// The file's whole address, which is the one value on this card that routinely doesn't
 /// fit. A bucket, a couple of folders and an episode name is easily sixty characters, and
-/// a path truncated to `s3://slmx-archives2/bible-au…` has lost the part that identifies
+/// a path truncated to `s3://archives2/bible-au…` has lost the part that identifies
 /// it — the end.
 ///
 /// **Tapping it opens it up rather than going anywhere.** Reading the path is the common

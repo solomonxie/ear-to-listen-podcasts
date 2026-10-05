@@ -25,7 +25,7 @@ Unfolded in place — nothing covers the page:
 ```
  More details ⌄
  ┌──────────────────────────────────────────────┐
- │ File       s3://slmx-archives2/bible-aud…    │ ← tap opens the whole path
+ │ File       s3://archives2/bible-aud…    │ ← tap opens the whole path
  │ Also at    files://Podcasts/ep-004.mp3       │
  │ Playlists  ( Listen Later ) ( Bible ) ( ＋ )  │
  │ Artwork    Photos · Draw with AI · Remove    │
@@ -51,7 +51,7 @@ the rest read `Also at`. A copy the last sync didn't list says so on the row
 rather than leaving it to be discovered by tapping it.
 
 **Tapping the path opens it, it doesn't leave the page.** A bucket, two folders and
-an episode name is easily sixty characters, and `s3://slmx-archives2/bible-au…` has
+an episode name is easily sixty characters, and `s3://archives2/bible-au…` has
 lost the half that identifies it. So the row expands in place and the path wraps
 over as many lines as it needs, breaking mid-name — a path is one long word, and
 there is no polite place to break it. The bucket browser is then a labelled row

@@ -7,8 +7,8 @@
                                                    Folder on this device…
  Sync only fetches metadata — episodes download when you listen.
  ┌───────────────────────────────────────────────┐
- │ S3  slmx-archives2                         ›  │ long-press → Delete !
- │ 44 s3://slmx-archives2/bible-audio/           │ ← tells two connections to
+ │ S3  archives2                         ›  │ long-press → Delete !
+ │ 44 s3://archives2/bible-audio/           │ ← tells two connections to
  │    Active · synced 9 hours ago                │   the same bucket apart
    ↑ the tile says which cloud: S3 · COS · OSS · Azure · GCS · FILES, since
      five backends look identical in a list and the path only names the bucket
@@ -49,7 +49,7 @@ App-data hint, all four readings:
 One screen, pushing itself per subfolder. Every level is identical.
 
 ```
- ‹ Back        slmx-archives2                  ⋯
+ ‹ Back        archives2                  ⋯
  📁 bible-audio                             ›     → push, deeper prefix
  📁 2026                                    ›
  〰 ep-004.mp3                    24.1 MB   ⓘ     audio = primary text
@@ -137,8 +137,8 @@ credential is a pasted JSON key rather than a pair of fields.
  ┌─────────────────────────────────────────────┐    are filled
  │ Cloud                      Amazon S3   ›    │  ← UnfoldingPicker: options
  ├ FILL FROM AN EXISTING CONNECTION ───────────┤    open in the row itself
- │ slmx-archives2                              │  (only connections to the
- │ s3://slmx-archives2/bible-audio/            │   same cloud)
+ │ archives2                              │  (only connections to the
+ │ s3://archives2/bible-audio/            │   same cloud)
  ├ Amazon S3 (paste info to add) ──────────────┤  ← the "(…)" is the button
  │ Bucket name                                 │
  │ Folder path (e.g. podcasts/)                │
