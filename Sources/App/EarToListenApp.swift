@@ -43,6 +43,7 @@ struct EarToListenApp: App {
             // Auto-sync only runs in the foreground — no background-refresh entitlement.
             if newPhase == .active {
                 SyncScheduler.shared.start()
+                LibraryMaintenance.runOnce()
                 ScreenAwake.apply()
                 Task { await YouTubeEpisodes.openShared() }
                 AutoBackup.shared.refreshCloudDriveStatus()

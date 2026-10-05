@@ -49,11 +49,15 @@ final class CloudBackupTests: XCTestCase {
 
         let restored = try service.apply(snapshot)
         XCTAssertEqual(restored.playlistsImported, 1)
-        XCTAssertEqual(restored.tracksUnmatched, 1)
-        XCTAssertEqual(restored.awaitingSync, 2) // the playlist track and its transcript
-        XCTAssertTrue(try PlaylistStore(dbQueue: dbQueue).tracks(inPlaylist: "pl1").isEmpty)
+        // Every episode travels and is rebuilt from the archive, so nothing waits on a
+        // sync: the playlist and transcript land on the stand-in at once, and the real
+        // file later takes over that same row.
+        XCTAssertEqual(restored.tracksUnmatched, 0)
+        XCTAssertEqual(restored.awaitingSync, 0)
+        XCTAssertEqual(try PlaylistStore(dbQueue: dbQueue).tracks(inPlaylist: "pl1").count, 1)
 
-        let synced = try makeTrack(filePath: "shows/ep1.mp3", dbQueue: dbQueue)
+        try makeTrack(filePath: "shows/ep1.mp3", dbQueue: dbQueue)
+        let synced = try XCTUnwrap(try TrackStore(dbQueue: dbQueue).find(providerID: "p1", filePath: "shows/ep1.mp3"))
         let reapplied = try service.apply(snapshot, scope: .needsSyncedTracks)
 
         XCTAssertEqual(reapplied.awaitingSync, 0)

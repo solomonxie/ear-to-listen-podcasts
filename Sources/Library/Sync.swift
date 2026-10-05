@@ -62,7 +62,7 @@ struct SyncResult {
     var summary: String {
         var text: String
         if queued > 0 {
-            text = "Queued \(queued) of \(totalFiles) files — importing in the background."
+            text = "Added \(queued) of \(totalFiles) files — reading their tags in the background."
             if lost > 0 { text += " \(lost) missing." }
         } else if lost > 0 {
             text = "Nothing new. \(lost) no longer in the bucket."
@@ -117,6 +117,19 @@ struct SyncEngine {
         let provider = try ProviderManager.shared.provider(for: record)
         // A folder on this device is readable with the radios off.
         guard provider.isOnDevice || NetworkMonitor.shared.isConnected else { throw SyncEngineError.offline }
+        let listingJob = try? jobStore.startListing(providerID: record.id, label: record.label)
+        NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
+        var summary: String?
+        defer {
+            if let id = listingJob?.id {
+                if let summary {
+                    try? jobStore.finishListing(id: id, summary: summary)
+                } else {
+                    try? jobStore.markFailed(id: id, error: "The listing didn't finish.")
+                }
+                NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
+            }
+        }
         // Listed whole, filtered after: the non-audio entries are what say which
         // episodes have a transcript sitting beside them.
         let listing = try await provider.listFiles(inFolder: nil)
@@ -129,34 +142,44 @@ struct SyncEngine {
         // remotely is what was listed, not how far the import got, and this pass can now
         // stop early (paused, or the queue filled up). Building it as it went would mark
         // everything past the stopping point as lost.
-        let seenPaths = Set(files.map(\.path))
+        // Neglected episodes are left exactly as they are: not re-checked, not re-queued,
+        // and not marked lost for being absent.
+        let neglected = (try? trackStore.neglectedPaths(providerID: record.id)) ?? []
+        let seenPaths = Set(files.map(\.path)).union(neglected)
         var queued = 0
         var stoppedAtQueueLimit = false
-        for file in files {
-            // Pausing mid-pass stops it where it stands rather than letting the rest of a
-            // long listing run to completion.
-            if SyncQueuePolicy.isPaused { break }
-            // Asked of the copies, not of the episodes: a file this bucket holds may be
-            // the second copy of an episode that plays from another bucket, and that is
-            // still a file this pass already knows.
-            let known = (try? trackFileStore.find(providerID: record.id, filePath: file.path)) ?? nil
-            guard known == nil || known!.isLost || hasChanged(known!, file) else { continue }
-            // Already waiting or being worked — leave it where it is in the queue.
-            if (try? jobStore.hasUnfinished(providerID: record.id, filePath: file.path)) == true { continue }
 
+        // Scan: every file the library hasn't seen becomes an entry right now, from the
+        // listing alone, in one write. Tags are read afterwards (`enrich`), so the whole
+        // bucket is visible after one listing no matter how big it is — and the work
+        // that's left is recorded on the entries, so it survives the app quitting.
+        // Known copies are read once, not asked per file.
+        let knownCopies = (try? trackFileStore.byPath(providerID: record.id)) ?? [:]
+        var fresh: [CloudFile] = []
+        for file in files {
+            if SyncQueuePolicy.isPaused { break }
+            if neglected.contains(file.path) { continue }
+            guard let known = knownCopies[file.path] else {
+                // Named for a YouTube episode: attaching to it is the import path's job.
+                if YouTubeVideo.id(inFileName: file.path) == nil {
+                    fresh.append(file)
+                    continue
+                }
+                if let job = try? enqueueImport(file, record: record, sidecars: sidecars) { queued += job }
+                continue
+            }
+            guard known.isLost || hasChanged(known, file) else { continue }
+            if (try? jobStore.hasUnfinished(providerID: record.id, filePath: file.path)) == true { continue }
             do {
-                _ = try jobStore.enqueue(
-                    providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
-                    contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt,
-                    transcriptPath: sidecars[file.path]?.first, transcriptPaths: sidecars[file.path]
-                )
-                queued += 1
+                queued += try enqueueImport(file, record: record, sidecars: sidecars)
             } catch {
-                // The queue ceiling. Stop here instead of hammering it with every remaining
-                // file — the drain tops up from this point once it's made room.
                 stoppedAtQueueLimit = true
                 break
             }
+        }
+        if !fresh.isEmpty, !SyncQueuePolicy.isPaused {
+            queued += (try? trackStore.registerListed(fresh, providerID: record.id, sidecars: sidecars)) ?? 0
+            NotificationCenter.default.post(name: .libraryDidChange, object: nil)
         }
 
         // A transcript added to the bucket later doesn't change the audio, so it never
@@ -168,12 +191,13 @@ struct SyncEngine {
         await YouTubeTranscripts.adopt(listing, provider: provider, dbQueue: dbQueue)
 
         let lost = try trackStore.markLost(providerID: record.id, keepingPaths: seenPaths)
-        try providerStore.updateLastSynced(id: record.id, at: Date())
+        if !stoppedAtQueueLimit { try providerStore.updateLastSynced(id: record.id, at: Date()) }
 
         // Once, not per file: this is the hop out of here into the main-actor queue
         // manager, and it both refreshes the list and wakes the drain loop.
         NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
 
+        summary = "Listed \(record.label): \(files.count) files · \(queued) new"
         return SyncResult(
             queued: queued, lost: lost, totalFiles: files.count, stoppedAtQueueLimit: stoppedAtQueueLimit
         )
@@ -186,6 +210,21 @@ struct SyncEngine {
     func perform(_ job: SyncJob, providerRecord record: ProviderRecord) async {
         do {
             let provider = try ProviderManager.shared.provider(for: record)
+            if job.kind == .readTags {
+                try? jobStore.markStage(id: job.id, .readingTags)
+                NotificationCenter.default.post(name: .syncQueueDidChange, object: nil)
+                guard let trackID = job.trackID, let track = try trackStore.find(id: trackID), track.needsTags else {
+                    try? jobStore.markDone(id: job.id)
+                    return
+                }
+                if let failure = await enrich(track, provider: provider) {
+                    try? jobStore.markFailed(id: job.id, error: failure)
+                } else {
+                    try? jobStore.markDone(id: job.id)
+                    NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+                }
+                return
+            }
             // An upload job has to put the file there before there's anything to import.
             // Same row, same retry: a failed upload is a failed job, not a lost episode.
             if job.uploadBookmark != nil {
@@ -260,6 +299,18 @@ struct SyncEngine {
             return false
         }
 
+        // Same ETag and byte count as an episode that lost its audio: it's that episode,
+        // known from the listing alone — no tags read, nothing downloaded.
+        let fresh = TrackFile(
+            trackID: "", providerID: record.id, filePath: file.path, sizeBytes: file.sizeBytes,
+            contentHash: file.contentHash, transcriptPath: transcriptPath, transcriptPaths: transcriptPaths,
+            remoteModifiedAt: file.modifiedAt
+        )
+        if try trackStore.relinkLostEpisode(to: fresh) {
+            NotificationCenter.default.post(name: .libraryDidChange, object: nil)
+            return false
+        }
+
         stage(.readingTags)
         let metadata = await extractMetadata(provider: provider, fileID: file.path)
         stage(.askingAI)
@@ -301,6 +352,40 @@ struct SyncEngine {
     /// sync. Prefers the provider's content fingerprint (no download needed) since same-path,
     /// same-size overwrites are otherwise invisible; falls back to the remote modified date,
     /// then to size, for providers/files that don't supply a hash.
+    private func enqueueImport(_ file: CloudFile, record: ProviderRecord, sidecars: [String: [String]]) throws -> Int {
+        _ = try jobStore.enqueue(
+            providerID: record.id, filePath: file.path, displayName: file.name, sizeBytes: file.sizeBytes,
+            contentHash: file.contentHash, remoteModifiedAt: file.modifiedAt,
+            transcriptPath: sidecars[file.path]?.first, transcriptPaths: sidecars[file.path]
+        )
+        return 1
+    }
+
+    /// The tag half of a sync: reads what the file says about itself and fills in the entry
+    /// the scan made. Returns why it couldn't, or nil on success — an entry that can't be
+    /// read keeps waiting for a later pass rather than being marked done.
+    func enrich(_ track: Track, provider: CloudProvider) async -> String? {
+        guard let url = try? await provider.streamURL(forFileID: track.filePath) else {
+            return "couldn't get a link to the file"
+        }
+        let metadata = await extractMetadata(url: url)
+        guard metadata.durationMs != nil else { return "couldn't read the file's length" }
+        let guess = await contentAnalyzer?.analyze(
+            filePath: track.filePath, title: metadata.title, artist: metadata.artist, album: metadata.album
+        )
+        do {
+            try trackStore.applyTags(
+                id: track.id,
+                title: guess?.title ?? metadata.title,
+                durationMs: metadata.durationMs, year: metadata.year,
+                artistName: guess?.artist ?? metadata.artist, albumName: guess?.album ?? metadata.album
+            )
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     private func hasChanged(_ known: TrackFile, _ file: CloudFile) -> Bool {
         if let newHash = file.contentHash {
             return newHash != known.contentHash
@@ -315,6 +400,10 @@ struct SyncEngine {
         guard let url = try? await provider.streamURL(forFileID: fileID) else {
             return (nil, nil, nil, nil, nil)
         }
+        return await extractMetadata(url: url)
+    }
+
+    private func extractMetadata(url: URL) async -> (title: String?, artist: String?, album: String?, durationMs: Int?, year: Int?) {
         let asset = AVURLAsset(url: url)
         guard let commonMetadata = try? await asset.load(.commonMetadata) else {
             return (nil, nil, nil, nil, nil)

@@ -8,7 +8,7 @@ import Foundation
 /// searchable. Each one is findable on its own page, and invisible as a group — there is
 /// no screen that answers "what still needs a look?".
 ///
-/// This is that question, as four plain checks. It marks; it doesn't mend — every reason
+/// This is that question, as plain checks. It marks; it doesn't mend — every reason
 /// here already has a way to put it right by hand, and the one-tap version is not built
 /// yet.
 enum FlaggedEpisodes {
@@ -22,6 +22,9 @@ enum FlaggedEpisodes {
         /// Titled after its own file, which is what happens when no tag, no AI pass and
         /// nobody has given it a name.
         case filenameTitle
+        /// Every copy of the audio is gone. The row stays until someone deletes it, or the
+        /// same recording turns up in a bucket again.
+        case noAudio
 
         var id: String { rawValue }
     }
@@ -37,7 +40,25 @@ enum FlaggedEpisodes {
         func count(_ reason: Reason) -> Int { counts[reason] ?? 0 }
     }
 
+    static func label(_ reason: Reason) -> String {
+        switch reason {
+        case .noTranscript: return "Not transcribed"
+        case .unplaced: return "No speaker or collection"
+        case .filenameTitle: return "Titled after its file"
+        case .noAudio: return "Audio missing"
+        }
+    }
+
+    struct Item: Identifiable, Sendable {
+        var track: Track
+        var reasons: Set<Reason>
+        var id: String { track.id }
+    }
+
     static func reasons(for track: Track, hasTranscript: Bool) -> Set<Reason> {
+        // Nothing else can be filled in for an episode with nothing left to play.
+        // A transcript can still be listened to, spoken — see `VoiceTrack`.
+        if track.isLost { return hasTranscript ? [] : [.noAudio] }
         var reasons: Set<Reason> = []
         if !hasTranscript { reasons.insert(.noTranscript) }
         if track.artistID == nil || track.albumID == nil { reasons.insert(.unplaced) }

@@ -28,9 +28,9 @@ struct ProviderStore {
         ChangeLog.record("sources", key: id, old: old.map { ["type": $0.type, "label": $0.label] }, in: dbQueue)
     }
 
-    /// Storage the listener connected. Never the YouTube row: it's there only so YouTube
-    /// episodes have something to belong to, and there's nothing in it to sync, list,
-    /// stream or back up.
+    /// Storage the listener connected. Never the YouTube or orphaned-episodes rows: those
+    /// are there only so their episodes have something to belong to, and there's nothing
+    /// in either to sync, list, stream or back up.
     func all() throws -> [ProviderRecord] {
         try dbQueue.read { db in try Self.connected.fetchAll(db) }
     }
@@ -40,7 +40,9 @@ struct ProviderStore {
     }
 
     private static var connected: QueryInterfaceRequest<ProviderRecord> {
-        ProviderRecord.filter(Column("type") != YouTubeVideo.providerType)
+        ProviderRecord.filter(
+            Column("type") != YouTubeVideo.providerType && Column("type") != OrphanedEpisodes.providerType
+        )
     }
 
     func updateSyncFrequency(id: String, minutes: Int?) throws {

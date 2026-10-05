@@ -26,4 +26,6 @@ struct Album: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendabl
     var metadataEditedAt: Date? = nil
     /// Only ever set by the repo-only sample seeder (`DemoData/`); nothing shipped writes it.
     var isDemo: Bool = false
+    /// See `Track.neglectedAt`.
+    var neglectedAt: Date? = nil
 }

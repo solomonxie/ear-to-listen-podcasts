@@ -180,6 +180,17 @@ final class PlaybackEngine: ObservableObject {
         if track.isVideoOnly, let id = track.youTubeID { return loadYouTube(id, track: track) }
         youTube.stop()
         stopVirtualClock()
+        if let voice = VoiceTrack.playableURL(for: track) {
+            return start(url: voice, track: track)
+        }
+        if track.isLost || track.originalDeletedAt != nil {
+            // Gone from the bucket, but a copy played earlier may still be on the phone.
+            if let cached = await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) {
+                return start(url: cached, track: track)
+            }
+            lastError = "No audio left for this episode. Make its voice track from the episode page to listen to its transcript."
+            return
+        }
         do {
             guard let record = try providerStore.all().first(where: { $0.id == track.providerID }) else {
                 lastError = "No storage provider configured for this track."
@@ -192,20 +203,34 @@ final class PlaybackEngine: ObservableObject {
                 return
             }
             let url = try await resolvedStreamURL(track: track, provider: provider)
-            let item = AVPlayerItem(url: url)
-            observeStatus(of: item, track: track)
-            observeEnd(of: item, track: track)
-            player.removeAllItems()
-            player.insert(item, after: nil)
-            seekToStart(of: track)
-            activateAudioSession()
-            player.play()
-            isPlaying = true
-            lastError = nil
-            updateNowPlayingInfo(track: track)
+            start(url: url, track: track)
         } catch {
             lastError = "Playback failed: \(error.localizedDescription)"
         }
+    }
+
+    private func start(url: URL, track: Track) {
+        let item = AVPlayerItem(url: url)
+        observeStatus(of: item, track: track)
+        observeEnd(of: item, track: track)
+        player.removeAllItems()
+        player.insert(item, after: nil)
+        seekToStart(of: track)
+        activateAudioSession()
+        player.play()
+        isPlaying = true
+        lastError = nil
+        updateNowPlayingInfo(track: track)
+    }
+
+    /// Switches the playing episode between its original and its voice track, staying at
+    /// the same moment — the voice track follows the transcript's timestamps.
+    func reloadCurrent(with track: Track) {
+        guard currentTrack?.id == track.id else { return }
+        currentTrack = track
+        pendingStart = currentTime
+        hasRetriedCurrentTrack = false
+        Task { await loadAndPlay(track: track) }
     }
 
     /// Where this load should begin: the moment something asked for, otherwise wherever

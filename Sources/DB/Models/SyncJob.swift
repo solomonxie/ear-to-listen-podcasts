@@ -14,9 +14,11 @@ enum SyncJobStage: String, Codable {
     case readingTags
     case askingAI
     case saving
+    case listing
 
     var displayName: String {
         switch self {
+        case .listing: return "Listing files"
         case .queued: return "Waiting"
         case .uploading: return "Uploading"
         case .readingTags: return "Reading tags"
@@ -24,6 +26,14 @@ enum SyncJobStage: String, Codable {
         case .saving: return "Saving to library"
         }
     }
+}
+
+/// What a job does. An import makes the entry; a tag read fills in one the scan made; a
+/// listing is the scan of a whole bucket, shown as a row while it runs.
+enum SyncJobKind: String, Codable {
+    case importFile = "import"
+    case readTags
+    case listing
 }
 
 /// One file queued to be imported (or refreshed) from a provider — the unit of work
@@ -54,4 +64,7 @@ struct SyncJob: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var errorMessage: String?
     var createdAt: Date
     var updatedAt: Date
+    var kind: SyncJobKind = .importFile
+    /// The entry a tag read fills in.
+    var trackID: String? = nil
 }

@@ -86,16 +86,15 @@ final class SyncEngineTests: XCTestCase {
 
         XCTAssertEqual(result.queued, 1)
         XCTAssertEqual(result.totalFiles, 1)
-        XCTAssertEqual(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).map(\.filePath), ["episode1.mp3"])
-        XCTAssertTrue(
-            try TrackStore(dbQueue: dbQueue).all().isEmpty,
-            "the listing pass queues; importing is the drain loop's job"
-        )
+        XCTAssertTrue(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).isEmpty)
+        let entries = try TrackStore(dbQueue: dbQueue).all()
+        XCTAssertEqual(entries.map(\.filePath), ["episode1.mp3"], "the scan makes the entry from the listing alone")
+        XCTAssertTrue(entries.allSatisfy(\.needsTags), "tags are read afterwards, in the background")
     }
 
     /// The other half of the pass above — and the one that still covers
     /// `importFileIfNeeded` end to end, now that `sync` no longer calls it.
-    func testDrainingTheQueueImportsWhatTheSyncPassQueued() async throws {
+    func testTheScanLeavesEntriesTitledAfterTheirFileUntilTagsAreRead() async throws {
         let dbQueue = try makeDatabase()
         let providerID = UUID().uuidString
         Self.fakeFileLists[providerID] = [
@@ -106,12 +105,9 @@ final class SyncEngineTests: XCTestCase {
         let engine = try makeEngine(providerID: providerID, dbQueue: dbQueue)
         _ = try await engine.sync(providerRecord: record)
 
-        try await drainQueue(engine, record, dbQueue: dbQueue)
-
         let tracks = try TrackStore(dbQueue: dbQueue).all()
-        XCTAssertEqual(tracks.map(\.filePath), ["episode1.mp3"])
         XCTAssertEqual(tracks.first?.title, "episode1")
-        XCTAssertEqual(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).first?.status, .done)
+        XCTAssertEqual(try TrackStore(dbQueue: dbQueue).needsTagsCount(), 1)
     }
 
     func testSyncIsIdempotentForUnchangedFiles() async throws {

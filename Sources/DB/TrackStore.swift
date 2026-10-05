@@ -30,6 +30,7 @@ struct TrackStore {
                 row.lastPlayedAt = existing.lastPlayedAt
                 row.isFavorite = existing.isFavorite
                 row.listenLater = existing.listenLater
+                row.neglectedAt = existing.neglectedAt
             } else if atSamePath == nil, try Track.fetchOne(db, key: track.id) == nil,
                       let twin = try sameRecording(as: row, in: db) {
                 // A file the library has never seen, and the same recording as one it
@@ -37,8 +38,18 @@ struct TrackStore {
                 // onto a row that already exists must never be answered by filing it
                 // under some other episode.
                 try Self.link(row, toTrack: twin.id, in: db)
+                // The episode had no copy left anywhere — history and notes stayed on
+                // the row, waiting. This is that copy: play from it again.
+                if twin.isLost, var revived = try Track.fetchOne(db, key: twin.id),
+                   let copy = try TrackFile
+                       .filter(Column("providerID") == row.providerID && Column("filePath") == row.filePath)
+                       .fetchOne(db) {
+                    Self.point(&revived, at: copy)
+                    try revived.save(db)
+                }
                 return
             }
+            if row.neglectedAt == nil, try Self.parentIsNeglected(row, in: db) { row.neglectedAt = Date() }
             try row.save(db)
             try Self.link(row, toTrack: row.id, in: db)
             try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [row.id])
@@ -49,12 +60,190 @@ struct TrackStore {
         }
     }
 
+    private static func parentIsNeglected(_ track: Track, in db: Database) throws -> Bool {
+        if let id = track.albumID, try Album.fetchOne(db, key: id)?.neglectedAt != nil { return true }
+        if let id = track.artistID, try Artist.fetchOne(db, key: id)?.neglectedAt != nil { return true }
+        return false
+    }
+
     /// An episode already here that is this same recording under a different name or in a
     /// different bucket. Deliberately not the episode itself: the caller has already
     /// missed on (providerID, filePath), so anything this finds is a second copy.
     private func sameRecording(as track: Track, in db: Database) throws -> Track? {
-        guard let fingerprint = track.fingerprint else { return nil }
-        return try Track.filter(Column("fingerprint") == fingerprint && Column("id") != track.id).fetchOne(db)
+        if let fingerprint = track.fingerprint,
+           let match = try Track.filter(Column("fingerprint") == fingerprint && Column("id") != track.id).fetchOne(db) {
+            return match
+        }
+        // Same provider hash and byte count, straight off the listing — no duration needed,
+        // so a new bucket's file is recognized before anything is downloaded. Lost rows
+        // only: between live copies the fingerprint stays the rule.
+        if let parked = try Track.filter(
+            Column("providerID") == OrphanedEpisodes.providerID
+                && Column("filePath") == OrphanedEpisodes.path(originalProviderID: track.providerID, originalFilePath: track.filePath)
+        ).fetchOne(db) { return parked }
+        guard let hash = track.contentHash, !hash.isEmpty, let size = track.sizeBytes, size > 0 else { return nil }
+        return try Track.filter(
+            Column("contentHash") == hash && Column("sizeBytes") == size
+                && Column("isLost") == true && Column("id") != track.id
+        ).fetchOne(db)
+    }
+
+    /// An episode with no audio whose provider hash and byte count match this file: the file
+    /// becomes the episode's copy and it plays again. False when nothing matches.
+    func relinkLostEpisode(to file: TrackFile) throws -> Bool {
+        try dbQueue.write { db in try Self.relink(file, in: db) }
+    }
+
+    private static func relink(_ file: TrackFile, in db: Database) throws -> Bool {
+        // A restore parked it under this very bucket and path; or the same ETag and size.
+        var parked = try Track.filter(
+            Column("providerID") == OrphanedEpisodes.providerID
+                && Column("filePath") == OrphanedEpisodes.path(originalProviderID: file.providerID, originalFilePath: file.filePath)
+        ).fetchOne(db)
+        if parked == nil, let hash = file.contentHash, !hash.isEmpty, let size = file.sizeBytes, size > 0 {
+            parked = try Track.filter(
+                Column("contentHash") == hash && Column("sizeBytes") == size && Column("isLost") == true
+            ).fetchOne(db)
+        }
+        guard var lost = parked else { return false }
+        var copy = file
+        copy.trackID = lost.id
+        try copy.save(db)
+        point(&lost, at: copy)
+        lost.fingerprint = FileFingerprint.of(lost)
+        try lost.save(db)
+        return true
+    }
+
+    /// The scan half of a sync: one entry per listed file, from the listing alone — name,
+    /// size, ETag, nothing read from the file — all in one transaction. Tags follow in
+    /// the background (`needingTags`). A file that is a lost episode coming back re-links
+    /// instead. Returns how many were new.
+    @discardableResult
+    func registerListed(_ files: [CloudFile], providerID: String, sidecars: [String: [String]]) throws -> Int {
+        try dbQueue.write { db in
+            var added = 0
+            var existing = Set(try String.fetchAll(
+                db, sql: "SELECT filePath FROM trackFiles WHERE providerID = ?", arguments: [providerID]
+            ))
+            for file in files where existing.insert(file.path).inserted {
+                let paths = sidecars[file.path]
+                let copy = TrackFile(
+                    trackID: "", providerID: providerID, filePath: file.path, sizeBytes: file.sizeBytes,
+                    contentHash: file.contentHash, transcriptPath: paths?.first, transcriptPaths: paths,
+                    remoteModifiedAt: file.modifiedAt
+                )
+                if try Self.relink(copy, in: db) { continue }
+                let stem = ((file.path as NSString).lastPathComponent as NSString).deletingPathExtension
+                let track = Track(
+                    id: UUID().uuidString, providerID: providerID, filePath: file.path, title: stem,
+                    sizeBytes: file.sizeBytes, contentHash: file.contentHash, transcriptPath: paths?.first,
+                    transcriptPaths: paths, remoteModifiedAt: file.modifiedAt, updatedAt: Date(), needsTags: true
+                )
+                try track.insert(db)
+                try Self.link(track, toTrack: track.id, in: db)
+                try db.execute(
+                    sql: "INSERT INTO trackSearchIndex(trackID, title, artist, album) VALUES (?, ?, '', '')",
+                    arguments: [track.id, track.title]
+                )
+                added += 1
+            }
+            return added
+        }
+    }
+
+    /// Entries still waiting for their tags, not counting `excluding` (ones that failed
+    /// this pass). Lost entries have nothing to read from.
+    func needingTags(limit: Int, excluding: Set<String>) throws -> [Track] {
+        try dbQueue.read { db in
+            let rows = try Track.filter(Column("needsTags") == true && Column("isLost") == false)
+                .limit(limit + excluding.count).fetchAll(db)
+            return Array(rows.filter { !excluding.contains($0.id) }.prefix(limit))
+        }
+    }
+
+    func needsTagsCount() throws -> Int {
+        try dbQueue.read { db in
+            try Track.filter(Column("needsTags") == true && Column("isLost") == false).fetchCount(db)
+        }
+    }
+
+    func setPrefersVoice(id: String, _ prefersVoice: Bool) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE tracks SET prefersVoice = ? WHERE id = ?", arguments: [prefersVoice, id])
+        }
+    }
+
+    /// After its file was deleted from the bucket by the listener: no copies left to sync,
+    /// and the voice track plays from now on.
+    func markOriginalDeleted(id: String) throws {
+        try dbQueue.write { db in
+            try TrackFile.filter(Column("trackID") == id).deleteAll(db)
+            try db.execute(
+                sql: "UPDATE tracks SET originalDeletedAt = ?, prefersVoice = 1, isLost = 0 WHERE id = ?",
+                arguments: [Date(), id]
+            )
+        }
+    }
+
+    /// Asks for these entries' tags to be read again (`SourceRefresh`).
+    func markNeedsTags(ids: [String]) throws {
+        guard !ids.isEmpty else { return }
+        try dbQueue.write { db in
+            for id in ids { try db.execute(sql: "UPDATE tracks SET needsTags = 1 WHERE id = ?", arguments: [id]) }
+            try db.execute(sql: """
+                DELETE FROM syncJobs WHERE kind = 'readTags' AND status IN ('failed', 'done') AND trackID IN (\(ids.map { _ in "?" }.joined(separator: ",")))
+                """, arguments: StatementArguments(ids))
+        }
+    }
+
+    /// Clears the flag for entries that can't be read (lost, or their source is gone).
+    func clearNeedsTags(ids: [String]) throws {
+        try dbQueue.write { db in
+            for id in ids { try db.execute(sql: "UPDATE tracks SET needsTags = 0 WHERE id = ?", arguments: [id]) }
+        }
+    }
+
+    /// The tag half: what was read from the file, applied to its entry. A title someone
+    /// has since edited by hand is left alone.
+    func applyTags(
+        id: String, title: String?, durationMs: Int?, year: Int?, artistName: String?, albumName: String?
+    ) throws {
+        try dbQueue.write { db in
+            guard var track = try Track.fetchOne(db, key: id) else { return }
+            let artist = try artistName.map { name -> Artist in
+                if let found = try Artist.filter(Column("name") == name).fetchOne(db) { return found }
+                let created = Artist(id: UUID().uuidString, name: name)
+                try created.insert(db)
+                return created
+            }
+            let album = try albumName.map { name -> Album in
+                if let found = try Album.filter(Column("name") == name && Column("artistID") == artist?.id).fetchOne(db) {
+                    return found
+                }
+                var created = Album(id: UUID().uuidString, artistID: artist?.id, name: name)
+                created.neglectedAt = artist?.neglectedAt
+                try created.insert(db)
+                return created
+            }
+            if track.metadataEditedAt == nil, let title, !title.isEmpty { track.title = title }
+            track.durationMs = durationMs ?? track.durationMs
+            track.year = year ?? track.year
+            track.artistID = track.artistID ?? artist?.id
+            track.albumID = track.albumID ?? album?.id
+            track.fingerprint = FileFingerprint.of(track)
+            track.needsTags = false
+            if track.neglectedAt == nil, try Self.parentIsNeglected(track, in: db) { track.neglectedAt = Date() }
+            track.updatedAt = Date()
+            try track.update(db)
+            try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [id])
+            try db.execute(
+                sql: "INSERT INTO trackSearchIndex(trackID, title, artist, album) VALUES (?, ?, ?, ?)",
+                arguments: [id, track.title, artist?.name ?? "", album?.name ?? ""]
+            )
+            // Now that its length is known, it may turn out to be an episode already here.
+            try TrackMerge.foldArrival(id, in: db)
+        }
     }
 
     /// Records where a file is, under the episode it belongs to. Written for every import,
@@ -87,6 +276,12 @@ struct TrackStore {
     /// Disconnecting a source takes its files with it — but an episode that also lives in
     /// a source still connected isn't gone, it just lives in one fewer place. Those move
     /// onto a copy that's left rather than being deleted along with everything else.
+    ///
+    /// An episode with no copy left anywhere is marked lost, not deleted: the history and
+    /// notes on its row are the listener's, not the sync's, and the only thing this source
+    /// going away actually costs is the ability to play it. If the same recording turns up
+    /// in another bucket later, `upsert`'s fingerprint match finds this row and plays from
+    /// there again.
     func deleteAll(forProvider providerID: String) throws {
         try dbQueue.write { db in
             let affected = try TrackFile.filter(Column("providerID") == providerID).fetchAll(db)
@@ -96,7 +291,7 @@ struct TrackStore {
                 guard var track = try Track.fetchOne(db, key: trackID) else { continue }
                 let remaining = try TrackFile.filter(Column("trackID") == trackID).fetchAll(db)
                 guard let moved = remaining.first(where: { !$0.isLost }) ?? remaining.first else {
-                    try Self.forget(trackID, in: db)
+                    try Self.markOrphaned(&track, in: db)
                     continue
                 }
                 guard track.providerID == providerID else { continue }
@@ -106,11 +301,22 @@ struct TrackStore {
 
             // Rows from before an episode knew where all its copies were, and anything a
             // failed import left pointing at this source.
-            let orphans = try String.fetchAll(
-                db, sql: "SELECT id FROM tracks WHERE providerID = ?", arguments: [providerID]
-            )
-            for id in orphans { try Self.forget(id, in: db) }
+            let orphans = try Track.filter(Column("providerID") == providerID).fetchAll(db)
+            for var track in orphans { try Self.markOrphaned(&track, in: db) }
         }
+    }
+
+    /// No copy left anywhere: still a row, still lost, so the listener's marks on it are
+    /// never cascade-deleted along with a bucket. Repointed at the standing "orphaned"
+    /// provider row rather than left on the one about to be deleted — `tracks.providerID`
+    /// cascades on that row's deletion, and this is what keeps the cascade from reaching it.
+    private static func markOrphaned(_ track: inout Track, in db: Database) throws {
+        guard track.providerID != OrphanedEpisodes.providerID else { return }
+        track.filePath = OrphanedEpisodes.path(originalProviderID: track.providerID, originalFilePath: track.filePath)
+        track.providerID = OrphanedEpisodes.providerID
+        track.isLost = true
+        track.updatedAt = Date()
+        try track.save(db)
     }
 
     private static func forget(_ trackID: String, in db: Database) throws {
@@ -152,8 +358,10 @@ struct TrackStore {
         track.updatedAt = Date()
     }
 
+    private static var shown: SQLSpecificExpressible { Column("neglectedAt") == nil }
+
     func all() throws -> [Track] {
-        try dbQueue.read { db in try Track.fetchAll(db) }
+        try dbQueue.read { db in try Track.filter(Self.shown).fetchAll(db) }
     }
 
     func find(id: String) throws -> Track? {
@@ -211,7 +419,7 @@ struct TrackStore {
 
     func favorites() throws -> [Track] {
         try dbQueue.read { db in
-            try Track.filter(Column("isFavorite") == true && Column("isLost") == false)
+            try Track.filter(Column("isFavorite") == true && Column("isLost") == false && Self.shown)
                 .order(Column("title"))
                 .fetchAll(db)
         }
@@ -220,7 +428,7 @@ struct TrackStore {
     /// Newest first: a queue you added to is read from the end you last added at.
     func listenLater() throws -> [Track] {
         try dbQueue.read { db in
-            try Track.filter(Column("listenLater") == true && Column("isLost") == false)
+            try Track.filter(Column("listenLater") == true && Column("isLost") == false && Self.shown)
                 .order(Column("updatedAt").desc)
                 .fetchAll(db)
         }
@@ -247,7 +455,7 @@ struct TrackStore {
     /// Most recently finished first.
     func listened() throws -> [Track] {
         try dbQueue.read { db in
-            try Track.filter(Column("listenedAt") != nil && Column("isLost") == false)
+            try Track.filter(Column("listenedAt") != nil && Column("isLost") == false && Self.shown)
                 .order(Column("listenedAt").desc)
                 .fetchAll(db)
         }
@@ -299,7 +507,7 @@ struct TrackStore {
     func tracks(forProvider providerID: String) throws -> [Track] {
         try dbQueue.read { db in
             try Track
-                .filter(Column("providerID") == providerID && Column("isLost") == false)
+                .filter(Column("providerID") == providerID && Column("isLost") == false && Self.shown)
                 .order(Column("title"))
                 .fetchAll(db)
         }
@@ -307,20 +515,24 @@ struct TrackStore {
 
     /// Ordered in Swift rather than by `ORDER BY`: SQLite compares filenames byte by byte,
     /// which puts `ep-10` before `ep-9` — see `EpisodeOrder`.
-    func tracks(forAlbum albumID: String) throws -> [Track] {
+    ///
+    /// `includingLost` is for browsing, not playing: a play queue or CarPlay's list filling
+    /// itself with episodes that have nothing left to stream would just hand the player an
+    /// item it can only fail on. The album page is where a listener goes looking for an
+    /// episode's notes long after its bucket is gone, so that's the one place this is true.
+    func tracks(forAlbum albumID: String, includingLost: Bool = false) throws -> [Track] {
         try dbQueue.read { db in
             EpisodeOrder.ordered(
-                try Track
-                    .filter(Column("albumID") == albumID && Column("isLost") == false)
+                try Self.filtered(Track.filter(Column("albumID") == albumID), includingLost: includingLost)
                     .fetchAll(db)
             )
         }
     }
 
-    func tracks(forArtist artistID: String) throws -> [Track] {
+    /// See `tracks(forAlbum:includingLost:)`.
+    func tracks(forArtist artistID: String, includingLost: Bool = false) throws -> [Track] {
         try dbQueue.read { db in
-            try Track
-                .filter(Column("artistID") == artistID && Column("isLost") == false)
+            try Self.filtered(Track.filter(Column("artistID") == artistID), includingLost: includingLost)
                 .order(Column("title"))
                 .fetchAll(db)
         }
@@ -330,16 +542,22 @@ struct TrackStore {
     func tracks(forYear year: Int) throws -> [Track] {
         try dbQueue.read { db in
             try Track
-                .filter(Column("year") == year && Column("isLost") == false)
+                .filter(Column("year") == year && Column("isLost") == false && Self.shown)
                 .order(Column("title"))
                 .fetchAll(db)
         }
     }
 
+    private static func filtered(
+        _ query: QueryInterfaceRequest<Track>, includingLost: Bool
+    ) -> QueryInterfaceRequest<Track> {
+        (includingLost ? query : query.filter(Column("isLost") == false)).filter(shown)
+    }
+
     /// Every synced-and-present track, for shelves that browse the whole library at once.
     func all(includingLost: Bool = false) throws -> [Track] {
         try dbQueue.read { db in
-            let query = includingLost ? Track.all() : Track.filter(Column("isLost") == false)
+            let query = (includingLost ? Track.all() : Track.filter(Column("isLost") == false)).filter(Self.shown)
             return try query.order(Column("title")).fetchAll(db)
         }
     }
@@ -348,7 +566,7 @@ struct TrackStore {
     func years() throws -> [Int] {
         try dbQueue.read { db in
             try Int.fetchAll(db, sql: """
-                SELECT DISTINCT year FROM tracks WHERE year IS NOT NULL AND isLost = 0 ORDER BY year DESC
+                SELECT DISTINCT year FROM tracks WHERE year IS NOT NULL AND isLost = 0 AND neglectedAt IS NULL ORDER BY year DESC
                 """)
         }
     }
@@ -470,12 +688,21 @@ struct TrackStore {
         }
     }
 
+    /// The episodes behind the `flagged()` count, each with what's wrong.
+    func flaggedItems() throws -> [FlaggedEpisodes.Item] {
+        let transcribed = try TranscriptStore(dbQueue: dbQueue).transcribedTrackIDs()
+        let tracks = try dbQueue.read { db in try Track.filter(Self.shown).order(Column("title")).fetchAll(db) }
+        return tracks.compactMap { track in
+            let reasons = FlaggedEpisodes.reasons(for: track, hasTranscript: transcribed.contains(track.id))
+            return reasons.isEmpty ? nil : FlaggedEpisodes.Item(track: track, reasons: reasons)
+        }
+    }
+
     /// What the library still can't say about its episodes — see `FlaggedEpisodes`.
-    /// Lost episodes are left out: the file is gone, so nothing can be filled in for it.
     func flagged() throws -> FlaggedEpisodes.Summary {
         let transcribed = try TranscriptStore(dbQueue: dbQueue).transcribedTrackIDs()
         let tracks = try dbQueue.read { db in
-            try Track.filter(Column("isLost") == false).fetchAll(db)
+            try Track.filter(Self.shown).fetchAll(db)
         }
         return FlaggedEpisodes.summary(tracks: tracks, transcribed: transcribed)
     }
@@ -537,6 +764,67 @@ struct TrackStore {
         try dbQueue.write { db in try Self.forget(id, in: db) }
     }
 
+    /// Every row, hidden or lost — what a backup has to hold.
+    func everything() throws -> [Track] {
+        try dbQueue.read { db in try Track.fetchAll(db) }
+    }
+
+    /// Hidden episodes included — for deleting a whole album or speaker.
+    func trackIDs(albumID: String) throws -> [String] {
+        try dbQueue.read { db in try String.fetchAll(db, sql: "SELECT id FROM tracks WHERE albumID = ?", arguments: [albumID]) }
+    }
+
+    func trackIDs(artistID: String) throws -> [String] {
+        try dbQueue.read { db in try String.fetchAll(db, sql: "SELECT id FROM tracks WHERE artistID = ?", arguments: [artistID]) }
+    }
+
+    func setNeglected(ids: [String], neglected: Bool) throws {
+        guard !ids.isEmpty else { return }
+        let stamp: Date? = neglected ? Date() : nil
+        try dbQueue.write { db in
+            for var track in try Track.fetchAll(db, keys: ids) {
+                track.neglectedAt = stamp
+                try track.update(db)
+            }
+        }
+    }
+
+    /// Episodes hidden on their own — not just because their album or speaker is.
+    func neglectedEpisodes() throws -> [Track] {
+        try dbQueue.read { db in
+            try Track.fetchAll(db, sql: """
+                SELECT tracks.* FROM tracks
+                LEFT JOIN albums ON albums.id = tracks.albumID
+                LEFT JOIN artists ON artists.id = tracks.artistID
+                WHERE tracks.neglectedAt IS NOT NULL
+                  AND albums.neglectedAt IS NULL AND artists.neglectedAt IS NULL
+                ORDER BY tracks.title
+                """)
+        }
+    }
+
+    /// Paths this source's neglected episodes live at, so a sync can leave them alone.
+    func neglectedPaths(providerID: String) throws -> Set<String> {
+        try dbQueue.read { db in
+            Set(try String.fetchAll(db, sql: """
+                SELECT trackFiles.filePath FROM trackFiles
+                JOIN tracks ON tracks.id = trackFiles.trackID
+                WHERE trackFiles.providerID = ? AND tracks.neglectedAt IS NOT NULL
+                """, arguments: [providerID]))
+        }
+    }
+
+    /// Batch fix for the `noAudio` flag: removes every episode with no copy left, marks and
+    /// notes included.
+    @discardableResult
+    func deleteLost() throws -> Int {
+        try dbQueue.write { db in
+            let ids = try String.fetchAll(db, sql: "SELECT id FROM tracks WHERE isLost = 1 AND neglectedAt IS NULL")
+            for id in ids { try Self.forget(id, in: db) }
+            return ids.count
+        }
+    }
+
     /// Marks a track as just-started, without touching its stored resume position.
     func touchLastPlayed(id: String, playedAt: Date = Date()) throws {
         try dbQueue.write { db in
@@ -576,14 +864,14 @@ struct TrackStore {
 
     /// Every episode ever played — all that `SpeakerOrder` looks at.
     func played() throws -> [Track] {
-        try dbQueue.read { db in try Track.filter(Column("lastPlayedAt") != nil).fetchAll(db) }
+        try dbQueue.read { db in try Track.filter(Column("lastPlayedAt") != nil && Self.shown).fetchAll(db) }
     }
 
     /// Tracks with playback history, most recently played first.
     func recentlyPlayed(limit: Int = 20) throws -> [Track] {
         try dbQueue.read { db in
             try Track
-                .filter(Column("lastPlayedAt") != nil && Column("isLost") == false)
+                .filter(Column("lastPlayedAt") != nil && Column("isLost") == false && Self.shown)
                 .order(Column("lastPlayedAt").desc)
                 .limit(limit)
                 .fetchAll(db)
@@ -596,7 +884,7 @@ struct TrackStore {
             try Track.fetchAll(db, sql: """
                 SELECT tracks.* FROM tracks
                 JOIN trackSearchIndex ON trackSearchIndex.trackID = tracks.id
-                WHERE trackSearchIndex MATCH ?
+                WHERE trackSearchIndex MATCH ? AND tracks.neglectedAt IS NULL
                 ORDER BY rank
                 """, arguments: ["\(query)*"])
         }

@@ -20,14 +20,17 @@ struct LibraryStore {
             if let existing = try Album.filter(Column("name") == name && Column("artistID") == artistID).fetchOne(db) {
                 return existing
             }
-            let album = Album(id: UUID().uuidString, artistID: artistID, name: name)
+            var album = Album(id: UUID().uuidString, artistID: artistID, name: name)
+            if let artistID, let artist = try Artist.fetchOne(db, key: artistID), artist.neglectedAt != nil {
+                album.neglectedAt = artist.neglectedAt
+            }
             try album.insert(db)
             return album
         }
     }
 
     func artists() throws -> [Artist] {
-        try dbQueue.read { db in try Artist.order(Column("name")).fetchAll(db) }
+        try dbQueue.read { db in try Artist.filter(Column("neglectedAt") == nil).order(Column("name")).fetchAll(db) }
     }
 
     func artist(id: String) throws -> Artist? {
@@ -84,7 +87,7 @@ struct LibraryStore {
 
     func albums(forArtist artistID: String?) throws -> [Album] {
         try dbQueue.read { db in
-            try Album.filter(Column("artistID") == artistID).order(Column("name")).fetchAll(db)
+            try Album.filter(Column("artistID") == artistID && Column("neglectedAt") == nil).order(Column("name")).fetchAll(db)
         }
     }
 
@@ -98,7 +101,7 @@ struct LibraryStore {
     }
 
     func albums() throws -> [Album] {
-        try dbQueue.read { db in try Album.order(Column("name")).fetchAll(db) }
+        try dbQueue.read { db in try Album.filter(Column("neglectedAt") == nil).order(Column("name")).fetchAll(db) }
     }
 
     /// Corrects an album's speaker when the embedded/guessed metadata was wrong (e.g. a
@@ -165,6 +168,90 @@ struct LibraryStore {
             album.metadataEditedAt = Date()
             try album.update(db)
         }
+    }
+
+    /// Hides or restores a whole album: the row, and every episode in it.
+    func setAlbumNeglected(id: String, neglected: Bool) throws {
+        let stamp: Date? = neglected ? Date() : nil
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE albums SET neglectedAt = ? WHERE id = ?", arguments: [stamp, id])
+            try db.execute(sql: "UPDATE tracks SET neglectedAt = ? WHERE albumID = ?", arguments: [stamp, id])
+        }
+    }
+
+    /// Hides or restores a speaker, their albums and every episode of theirs.
+    func setArtistNeglected(id: String, neglected: Bool) throws {
+        let stamp: Date? = neglected ? Date() : nil
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE artists SET neglectedAt = ? WHERE id = ?", arguments: [stamp, id])
+            try db.execute(sql: "UPDATE albums SET neglectedAt = ? WHERE artistID = ?", arguments: [stamp, id])
+            try db.execute(sql: "UPDATE tracks SET neglectedAt = ? WHERE artistID = ?", arguments: [stamp, id])
+        }
+    }
+
+    /// Albums most recently played from or edited, newest first — one query, for Home.
+    func recentAlbums(limit: Int = 10) throws -> [Album] {
+        try dbQueue.read { db in
+            try Album.fetchAll(db, sql: """
+                SELECT albums.* FROM albums
+                LEFT JOIN (
+                    SELECT albumID, MAX(lastPlayedAt) AS played FROM tracks
+                    WHERE lastPlayedAt IS NOT NULL AND neglectedAt IS NULL GROUP BY albumID
+                ) recent ON recent.albumID = albums.id
+                WHERE albums.neglectedAt IS NULL
+                  AND (recent.played IS NOT NULL OR albums.metadataEditedAt IS NOT NULL)
+                ORDER BY MAX(COALESCE(recent.played, ''), COALESCE(albums.metadataEditedAt, '')) DESC
+                LIMIT ?
+                """, arguments: [limit])
+        }
+    }
+
+    func allArtists() throws -> [Artist] {
+        try dbQueue.read { db in try Artist.order(Column("name")).fetchAll(db) }
+    }
+
+    func allAlbums() throws -> [Album] {
+        try dbQueue.read { db in try Album.order(Column("name")).fetchAll(db) }
+    }
+
+    /// After a restore, which only carries neglect per episode: an album or speaker whose
+    /// every episode is neglected is neglected too.
+    func hideFullyNeglectedParents() throws {
+        try dbQueue.write { db in
+            for (table, column) in [("albums", "albumID"), ("artists", "artistID")] {
+                try db.execute(sql: """
+                    UPDATE \(table) SET neglectedAt = ? WHERE neglectedAt IS NULL
+                    AND EXISTS (SELECT 1 FROM tracks WHERE tracks.\(column) = \(table).id)
+                    AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.\(column) = \(table).id AND tracks.neglectedAt IS NULL)
+                    """, arguments: [Date()])
+            }
+        }
+    }
+
+    /// Neglected albums included — for deleting a speaker outright.
+    func allAlbums(forArtist artistID: String) throws -> [Album] {
+        try dbQueue.read { db in try Album.filter(Column("artistID") == artistID).fetchAll(db) }
+    }
+
+    func neglectedAlbums() throws -> [Album] {
+        try dbQueue.read { db in
+            try Album.fetchAll(db, sql: """
+                SELECT albums.* FROM albums LEFT JOIN artists ON artists.id = albums.artistID
+                WHERE albums.neglectedAt IS NOT NULL AND artists.neglectedAt IS NULL ORDER BY albums.name
+                """)
+        }
+    }
+
+    func neglectedArtists() throws -> [Artist] {
+        try dbQueue.read { db in try Artist.filter(Column("neglectedAt") != nil).order(Column("name")).fetchAll(db) }
+    }
+
+    func deleteAlbum(id: String) throws {
+        try dbQueue.write { db in _ = try Album.deleteOne(db, key: id) }
+    }
+
+    func deleteArtist(id: String) throws {
+        try dbQueue.write { db in _ = try Artist.deleteOne(db, key: id) }
     }
 
     func album(id: String) throws -> Album? {

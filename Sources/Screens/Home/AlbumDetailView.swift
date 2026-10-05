@@ -20,6 +20,9 @@ struct AlbumDetailView: View {
     @State private var downloadedCount = 0
     @State private var transcribedCount = 0
     @State private var showingAnalysis = false
+    @State private var removalChoice: RemovalChoice?
+    @State private var refreshMessage: String?
+    @Environment(\.dismiss) private var dismiss
     @State private var topicNames = ""
     @State private var suggestions = ProfileSuggestionState()
     @State private var isSuggesting = false
@@ -238,6 +241,18 @@ struct AlbumDetailView: View {
                         .disabled(tracks.isEmpty || tracks.allSatisfy { $0.listenedAt != nil })
                     Button("Mark All as Not Listened", systemImage: "circle") { setAllListened(false) }
                         .disabled(tracks.allSatisfy { $0.listenedAt == nil })
+                    Button("Refresh from Source", systemImage: "arrow.clockwise") {
+                        Task {
+                            let failures = await SourceRefresh().refresh(trackIDs: tracks.map(\.id))
+                            refreshMessage = failures.isEmpty
+                                ? "Latest ETags read for \(tracks.count) episodes — tags are being read again in the queue."
+                                : failures.prefix(5).joined(separator: "\n")
+                        }
+                    }
+                    .disabled(tracks.isEmpty)
+                    Divider()
+                    Button("Neglect Album…", systemImage: "eye.slash") { removalChoice = .neglect }
+                    Button("Delete Album and Files…", systemImage: "trash", role: .destructive) { removalChoice = .delete }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -245,6 +260,12 @@ struct AlbumDetailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
             bookmarks = (try? bookmarkStore.all(forTracks: tracks.map(\.id))) ?? []
+        }
+        .removalDialogs(.album(shown), choice: $removalChoice) { dismiss() }
+        .alert("Refresh from Source", isPresented: Binding(get: { refreshMessage != nil }, set: { if !$0 { refreshMessage = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(refreshMessage ?? "")
         }
         .navigationDestination(item: $openSpeaker) { SpeakerDetailView(speaker: $0) }
         .sheet(isPresented: $showingAnalysis) {
@@ -576,7 +597,7 @@ struct AlbumDetailView: View {
         let libraryStore = LibraryStore(dbQueue: dbQueue)
         let trackStore = TrackStore(dbQueue: dbQueue)
         let album = (try? libraryStore.album(id: albumID)) ?? nil
-        let tracks = (try? trackStore.tracks(forAlbum: albumID)) ?? []
+        let tracks = (try? trackStore.tracks(forAlbum: albumID, includingLost: true)) ?? []
         // One query for every transcript, not one per episode.
         let transcripts = (try? TranscriptStore(dbQueue: dbQueue).find(trackIDs: tracks.map(\.id))) ?? [:]
         let transcribed = tracks.filter {

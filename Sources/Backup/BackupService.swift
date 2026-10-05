@@ -85,23 +85,21 @@ struct BackupService {
                 photoFileName: artist.photoFileName
             )
         }
-        // Same rule for episodes: only what someone did by hand travels, since a re-sync
-        // re-derives everything else from the files themselves. Edited details, a heart,
-        // and marked moments all count as by hand.
+        // Every synced episode travels, not just one someone marked: a bucket that's gone
+        // by the time this comes back leaves nothing for a re-sync to rebuild it from, so
+        // the archive has to be able to stand in for it — see `BackupService.apply`.
         //
         // One query per table, then matched in memory: asking per episode was two
         // queries times every episode in the library, seconds of work on a big one.
         let bookmarksByTrack = Dictionary(grouping: try bookmarkStore.all(), by: \.trackID)
             .mapValues { $0.sorted { $0.positionMs < $1.positionMs } }
         let termsByTrack = try termStore.mentionsByTrack()
-        let artistNames = Dictionary(try libraryStore.artists().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        let albumNames = Dictionary(try libraryStore.albums().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        let allTracks = try trackStore.all(includingLost: true)
-        let episodes = allTracks.compactMap { track -> LibrarySnapshot.EpisodeEntry? in
+        let artistNames = Dictionary(try libraryStore.allArtists().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        let albumNames = Dictionary(try libraryStore.allAlbums().map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        let allTracks = try trackStore.everything()
+        let episodes = allTracks.map { track -> LibrarySnapshot.EpisodeEntry in
             let bookmarks = bookmarksByTrack[track.id] ?? []
             let terms = termsByTrack[track.id] ?? [:]
-            guard track.metadataEditedAt != nil || track.isFavorite || track.listenedAt != nil || !bookmarks.isEmpty
-                    || track.summary != nil || !terms.isEmpty else { return nil }
             return LibrarySnapshot.EpisodeEntry(
                 providerID: track.providerID,
                 filePath: track.filePath,
@@ -122,8 +120,11 @@ struct BackupService {
                     )
                 },
                 editedAt: track.metadataEditedAt,
-                durationMs: track.isVideoOnly ? track.durationMs : nil,
-                youTubeVideoID: track.youTubeVideoID
+                durationMs: track.durationMs,
+                sizeBytes: track.sizeBytes,
+                contentHash: track.contentHash,
+                youTubeVideoID: track.youTubeVideoID,
+                neglectedAt: track.neglectedAt
             )
         }
         return LibrarySnapshot(
@@ -231,36 +232,34 @@ struct BackupService {
     /// "N items need a sync first" and `PendingRestore` can come back for them.
     @discardableResult
     func apply(_ snapshot: LibrarySnapshot, scope: BackupApplyScope = .everything) throws -> BackupImportResult {
+        // Taken before the placeholders below are made: a bucket this device never had is
+        // exactly as gone as one it deleted, and its placeholder must not read as "still
+        // connected, just waiting to sync".
+        let knownProviderIDs = Set(try providerStore.all().map(\.id))
         if scope == .everything {
             try applyDeviceIndependentEntries(snapshot)
         }
 
-        let existingPlaylistIDs = Set(try playlistStore.all().map(\.id))
-        var matched = 0
-        var unmatched = 0
-        for entry in snapshot.playlists {
-            if !existingPlaylistIDs.contains(entry.id) {
-                // Re-applying after a sync never revives a playlist deleted since the
-                // restore — it only finishes filling the ones still there.
-                guard scope == .everything else { continue }
-                try playlistStore.create(Playlist(id: entry.id, name: entry.name, source: entry.source, createdAt: entry.createdAt))
-            }
-            for ref in entry.tracks {
-                guard let track = try track(named: ref.providerID, at: ref.filePath) else {
-                    unmatched += 1
-                    continue
-                }
-                try playlistStore.addTrack(track.id, toPlaylist: entry.id, at: ref.position)
-                matched += 1
-            }
-        }
         var awaiting = 0
 
-        // Episode edits need the file itself already synced — unlike a speaker, there's no
-        // sensible row to pre-seed from a path alone. What doesn't match yet is counted,
-        // not dropped: `PendingRestore` comes back for it after the next sync.
+        // An episode whose source is still connected needs the file itself synced first —
+        // unlike a speaker, there's no sensible row to pre-seed from a path alone, and a
+        // sync that's merely pending (a fresh install, say) will still produce the real
+        // row. What doesn't match yet in that case is counted, not dropped: `PendingRestore`
+        // comes back for it after the next sync.
+        //
+        // One whose source is already gone never gets that sync, so there's nothing left
+        // to wait for — it's fabricated straight from the archive instead, same as a
+        // YouTube episode always is. Unless the path is ambiguous among what's already
+        // here: that's the one case a guess is worse than waiting (see `track(named:)`),
+        // and fabricating a stand-in would just be a second, wrong guess at the same risk.
         for entry in snapshot.episodes {
-            guard var track = try track(named: entry.providerID, at: entry.filePath) ?? youTubeEpisode(entry) else {
+            var matched = try track(named: entry.providerID, at: entry.filePath) ?? youTubeEpisode(entry)
+            if matched == nil, !knownProviderIDs.contains(entry.providerID),
+               try trackStore.find(filePath: entry.filePath).count <= 1 {
+                matched = orphanedEpisode(entry)
+            }
+            guard var track = matched else {
                 awaiting += 1
                 continue
             }
@@ -282,11 +281,32 @@ struct BackupService {
             track.listenedAt = track.listenedAt ?? entry.listenedAt
             track.metadataEditedAt = entry.editedAt
             track.youTubeVideoID = entry.youTubeVideoID ?? track.youTubeVideoID
+            track.neglectedAt = track.neglectedAt ?? entry.neglectedAt
             try trackStore.upsert(track, artistName: artist?.name, albumName: album?.name)
             try restore(entry.bookmarks, on: track.id)
             if !entry.terms.isEmpty { try termStore.setTerms(entry.terms, forTrack: track.id) }
         }
 
+        // After the episodes, so a playlist can hold one this restore just rebuilt.
+        let existingPlaylistIDs = Set(try playlistStore.all().map(\.id))
+        var matched = 0
+        var unmatched = 0
+        for entry in snapshot.playlists {
+            if !existingPlaylistIDs.contains(entry.id) {
+                // Re-applying after a sync never revives a playlist deleted since the
+                // restore — it only finishes filling the ones still there.
+                guard scope == .everything else { continue }
+                try playlistStore.create(Playlist(id: entry.id, name: entry.name, source: entry.source, createdAt: entry.createdAt))
+            }
+            for ref in entry.tracks {
+                guard let track = try track(named: ref.providerID, at: ref.filePath) else {
+                    unmatched += 1
+                    continue
+                }
+                try playlistStore.addTrack(track.id, toPlaylist: entry.id, at: ref.position)
+                matched += 1
+            }
+        }
         // Like episode edits, a transcript needs its file already synced — there's no row
         // to hang it off otherwise. Merging rather than overwriting means a correction
         // made on this device outlives a restore of an older backup.
@@ -309,6 +329,8 @@ struct BackupService {
             })
         }
 
+        try libraryStore.hideFullyNeglectedParents()
+
         return BackupImportResult(
             playlistsImported: snapshot.playlists.count, tracksMatched: matched,
             tracksUnmatched: unmatched, editsAwaitingSync: awaiting
@@ -324,6 +346,26 @@ struct BackupService {
         )
     }
 
+    /// An episode whose bucket is already gone by the time this archive comes back —
+    /// there's no live row to attach to and no sync ever arrives to make one, so this
+    /// fabricates it directly, same as a YouTube episode always is. Parked on the standing
+    /// orphaned-episode source (`TrackStore.markOrphaned`'s own doing, if this device is
+    /// the one that deleted the bucket) and carrying `sizeBytes`/`durationMs`, so a sync
+    /// that finds the same recording somewhere else still re-links it by fingerprint.
+    private func orphanedEpisode(_ entry: LibrarySnapshot.EpisodeEntry) -> Track {
+        Track(
+            id: UUID().uuidString,
+            providerID: OrphanedEpisodes.providerID,
+            filePath: OrphanedEpisodes.path(originalProviderID: entry.providerID, originalFilePath: entry.filePath),
+            title: entry.title,
+            durationMs: entry.durationMs,
+            sizeBytes: entry.sizeBytes,
+            contentHash: entry.contentHash,
+            isLost: true,
+            updatedAt: Date()
+        )
+    }
+
     /// The episode an entry names. (providerID, filePath) is the pair every backup keys
     /// by, but the id half only survives if the source row itself did: reconnecting a
     /// bucket after a reinstall used to mint a new one, and every edit, favourite,
@@ -331,8 +373,17 @@ struct BackupService {
     /// happen. So a miss falls back to the path alone — which is what the listener would
     /// call the same episode — and only when it names exactly one here. Two sources
     /// holding the same path is the one case where guessing is worse than waiting.
+    ///
+    /// Checked before that fallback: an episode `orphanedEpisode` already fabricated once,
+    /// found again by the deterministic path it was parked under — otherwise re-applying
+    /// the same archive (`PendingRestore`, a second restore) would mint a duplicate every
+    /// time rather than finding the one that's already here.
     private func track(named providerID: String, at filePath: String) throws -> Track? {
         if let exact = try trackStore.find(providerID: providerID, filePath: filePath) { return exact }
+        if let orphaned = try trackStore.find(
+            providerID: OrphanedEpisodes.providerID,
+            filePath: OrphanedEpisodes.path(originalProviderID: providerID, originalFilePath: filePath)
+        ) { return orphaned }
         let byPath = try trackStore.find(filePath: filePath)
         return byPath.count == 1 ? byPath.first : nil
     }
@@ -355,13 +406,16 @@ struct BackupService {
     /// The half of a snapshot that stands on its own — sources, playlists and speaker
     /// edits — none of which needs an episode file to have synced first. Provider and
     /// import-source rows come back credential-less (settings stay in the Keychain, keyed
-    /// by id), so they need reconnecting in Settings after.
+    /// by id) and inactive regardless of what the snapshot says: `isActive` is what the
+    /// sync scheduler and the cloud-backup destination loop over, and a row with no
+    /// credentials in either would just fail on every pass until someone reconnects it
+    /// in Settings — which is the same place that turns it back on.
     private func applyDeviceIndependentEntries(_ snapshot: LibrarySnapshot) throws {
         let existingProviderIDs = Set(try providerStore.all().map(\.id))
         for entry in snapshot.providers where !existingProviderIDs.contains(entry.id) {
             try providerStore.upsert(ProviderRecord(
                 id: entry.id, type: entry.type, label: entry.label, configJSON: "",
-                isActive: entry.isActive, createdAt: entry.createdAt, syncFrequencyMinutes: entry.syncFrequencyMinutes
+                isActive: false, createdAt: entry.createdAt, syncFrequencyMinutes: entry.syncFrequencyMinutes
             ))
         }
 

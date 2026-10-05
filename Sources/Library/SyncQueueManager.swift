@@ -13,6 +13,8 @@ final class SyncQueueManager: ObservableObject {
     @Published private(set) var totalCount = 0
     @Published private(set) var activeCount = 0
     @Published private(set) var activeProviderIDs: Set<String> = []
+    /// Entries the scan made that are still waiting for their tags to be read.
+    @Published private(set) var tagsRemaining = 0
     @Published private(set) var providerLabels: [String: String] = [:]
     /// Mirrors `SyncQueuePolicy.isPaused` for SwiftUI's benefit — the policy itself is
     /// what background sync passes read, since they can't touch this main-actor object.
@@ -27,14 +29,9 @@ final class SyncQueueManager: ObservableObject {
     }
 
     private static let concurrencyKey = "syncQueue.concurrency"
-    private static let pageSize = 100
+    /// The list never grows past this: finished rows beyond it are deleted as new ones land.
+    private static let visibleLimit = 100
 
-    /// Grows only via `loadMore` — deliberately not reset by `refresh()`, which runs on
-    /// every single job transition and would otherwise keep collapsing the list back to
-    /// one page while the user is reading it.
-    private var visibleLimit = pageSize
-
-    var hasMore: Bool { totalCount > jobs.count }
 
     var isFull: Bool { activeCount >= SyncQueuePolicy.capacity }
     var capacity: Int { SyncQueuePolicy.capacity }
@@ -58,12 +55,14 @@ final class SyncQueueManager: ObservableObject {
         // up. This finishes work the user already asked for (adding a connection queues its
         // files); it never goes out and re-lists anything, so a "Manual" connection stays
         // manual.
+        let interrupted = (try? jobStore.takeOrphanedListings()) ?? []
         try? jobStore.requeueOrphanedRunning()
         refresh()
         startDraining()
+        resumeInterruptedListings(interrupted)
         NotificationCenter.default.addObserver(forName: .syncQueueDidChange, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                self?.refresh()
+                self?.refreshSoon()
                 // Anything that queues work posts this, so it's also the wake-up: whoever
                 // listed doesn't have to know whether the loop is running.
                 self?.startDraining()
@@ -71,23 +70,45 @@ final class SyncQueueManager: ObservableObject {
         }
     }
 
+    /// A bucket scan the app was closed in the middle of: nothing recorded how far it got,
+    /// so it's simply run again. The entries it already made are found, not duplicated.
+    private func resumeInterruptedListings(_ ids: Set<String>) {
+        guard !ids.isEmpty, !isPaused else { return }
+        Task {
+            for id in ids {
+                guard let record = try? providerStore.all().first(where: { $0.id == id }) else { continue }
+                _ = try? await sync(providerRecord: record)
+            }
+        }
+    }
+
+    private var refreshPending = false
+
+    /// The drain loop finishes a job every fraction of a second with eight running; redrawing
+    /// the queue (four reads on the main actor) after each one kept the whole UI busy.
+    private func refreshSoon() {
+        guard !refreshPending else { return }
+        refreshPending = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            refreshPending = false
+            refresh()
+        }
+    }
+
     func refresh() {
-        jobs = (try? jobStore.page(limit: visibleLimit)) ?? []
+        jobs = (try? jobStore.page(limit: Self.visibleLimit)) ?? []
         let counts = (try? jobStore.counts()) ?? SyncJobStore.Counts(total: 0, active: 0)
         totalCount = counts.total
         activeCount = counts.active
         activeProviderIDs = (try? jobStore.activeProviderIDs()) ?? []
+        tagsRemaining = (try? trackStore.needsTagsCount()) ?? 0
         // A "queue full" notice is only true while it is: once the drain loop has made
         // room, it's just a stale warning.
-        if !isFull, !isPaused { notice = nil }
+        if !isPaused { notice = nil }
         if let records = try? providerStore.all() {
             providerLabels = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.label) })
         }
-    }
-
-    func loadMore() {
-        visibleLimit += Self.pageSize
-        refresh()
     }
 
     /// Lists a connection and queues everything that needs fetching, then wakes the drain
@@ -136,19 +157,22 @@ final class SyncQueueManager: ObservableObject {
     func clearQueue() {
         notice = nil
         try? jobStore.clearQueue()
-        visibleLimit = Self.pageSize
         refresh()
     }
 
     /// Removes only completed jobs; pending/running ones stay in the list.
     func clearSynced() {
         try? jobStore.clearSynced()
-        visibleLimit = Self.pageSize
         refresh()
     }
 
     /// Re-queues a failed job and wakes the drain loop back up.
     func retry(_ job: SyncJob) {
+        if job.kind == .listing {
+            guard let record = try? providerStore.all().first(where: { $0.id == job.providerID }) else { return }
+            Task { _ = try? await sync(providerRecord: record) }
+            return
+        }
         try? jobStore.retry(id: job.id)
         refresh()
         startDraining()
@@ -173,7 +197,10 @@ final class SyncQueueManager: ObservableObject {
                 await drainPass()
                 didWork = true
             }
-            guard await topUp() else { break }
+            try? jobStore.fillTagReads()
+            if (try? jobStore.hasPending()) == true { continue }
+            if await topUp() { continue }
+            break
         }
         if didWork {
             // Once the batch has settled, not per file: telling titles apart needs to see
@@ -225,9 +252,9 @@ final class SyncQueueManager: ObservableObject {
             var running = 0
             // `dequeueNextPending` claims (marks `.running`) the job in the same transaction
             // it's fetched in, so this loop can't hand the same pending job to two tasks.
-            while !isPaused, running < concurrency, let job = try? jobStore.dequeueNextPending() {
+            while !isPaused, running < concurrency, let job = nextJob() {
                 running += 1
-                refresh()
+                refreshSoon()
                 group.addTask { await self.process(job) }
                 if running >= concurrency {
                     await group.next()
@@ -238,13 +265,22 @@ final class SyncQueueManager: ObservableObject {
         }
     }
 
+    /// The next job, topping the queue up with tag reads when it runs dry so the workers
+    /// never wait on a whole batch to finish first.
+    private func nextJob() -> SyncJob? {
+        if let job = try? jobStore.dequeueNextPending() { return job }
+        guard (try? jobStore.fillTagReads()) ?? 0 > 0 else { return nil }
+        return try? jobStore.dequeueNextPending()
+    }
+
     private func process(_ job: SyncJob) async {
         guard let record = try? providerStore.all().first(where: { $0.id == job.providerID }) else {
             try? jobStore.markFailed(id: job.id, error: "Provider not found.")
-            refresh()
+            refreshSoon()
             return
         }
         await syncEngine.perform(job, providerRecord: record)
-        refresh()
+        try? jobStore.pruneDone(keeping: Self.visibleLimit)
+        refreshSoon()
     }
 }

@@ -9,6 +9,8 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var recentTracks: [Track] = []
     @Published private(set) var downloadedTracks: [Track] = []
     @Published private(set) var albums: [Album] = []
+    /// The ten albums most recently played from or edited, newest first.
+    @Published private(set) var recentAlbums: [Album] = []
     @Published private(set) var artists: [Artist] = []
     @Published private(set) var topics: [Topic] = []
     /// Whatever the library talks about most, biggest first — Home's Terms chart.
@@ -52,6 +54,7 @@ final class HomeLibraryViewModel: ObservableObject {
         tracks = snapshot.tracks
         recentTracks = snapshot.recentTracks
         albums = snapshot.albums
+        recentAlbums = snapshot.recentAlbums
         artists = snapshot.artists
         topics = snapshot.topics
         terms = snapshot.terms
@@ -73,15 +76,17 @@ final class HomeLibraryViewModel: ObservableObject {
     /// that, the full refresh has them already.
     private func showFirstShelves() async {
         let trackStore = trackStore, libraryStore = libraryStore
-        let (recent, speakers) = await Task.detached(priority: .userInitiated) {
+        let (recent, albums, speakers) = await Task.detached(priority: .userInitiated) {
             let played = (try? trackStore.played()) ?? []
             return (
                 (try? trackStore.recentlyPlayed()) ?? [],
+                (try? libraryStore.recentAlbums()) ?? [],
                 SpeakerOrder.byLastActivity((try? libraryStore.artists()) ?? [], tracks: played)
             )
         }.value
         guard tracks.isEmpty else { return }
         recentTracks = recent
+        recentAlbums = albums
         artists = speakers
     }
 
@@ -90,6 +95,7 @@ final class HomeLibraryViewModel: ObservableObject {
         var recentTracks: [Track] = []
         var downloadedTracks: [Track] = []
         var albums: [Album] = []
+        var recentAlbums: [Album] = []
         var artists: [Artist] = []
         var topics: [Topic] = []
         var terms: [TermCount] = []
@@ -113,6 +119,7 @@ final class HomeLibraryViewModel: ObservableObject {
                 s.tracks = (try? trackStore.all()) ?? []
                 s.recentTracks = (try? trackStore.recentlyPlayed()) ?? []
                 s.albums = (try? libraryStore.albums()) ?? []
+                s.recentAlbums = (try? libraryStore.recentAlbums()) ?? []
                 // Not the order the table hands them back in — see `SpeakerOrder`.
                 s.artists = SpeakerOrder.byLastActivity((try? libraryStore.artists()) ?? [], tracks: s.tracks)
                 s.topics = (try? libraryStore.topics()) ?? []

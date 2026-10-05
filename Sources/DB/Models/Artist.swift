@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 
 /// A "Speaker" in the UI — real synced tracks read this from embedded artist metadata.
@@ -27,4 +28,6 @@ struct Artist: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashab
     var language: String?
     /// Only ever set by the repo-only sample seeder (`DemoData/`); nothing shipped writes it.
     var isDemo: Bool = false
+    /// See `Track.neglectedAt`.
+    var neglectedAt: Date? = nil
 }

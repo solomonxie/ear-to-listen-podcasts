@@ -19,6 +19,15 @@ struct TrackFileStore {
         }
     }
 
+    /// Every copy this source holds, keyed by path — one read for a whole listing pass
+    /// instead of one per file.
+    func byPath(providerID: String) throws -> [String: TrackFile] {
+        try dbQueue.read { db in
+            let files = try TrackFile.filter(Column("providerID") == providerID).fetchAll(db)
+            return Dictionary(files.map { ($0.filePath, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+
     /// What a sync pass asks before deciding a listed file is new: the answer covers
     /// second and third copies, which the `tracks` row alone never knew about.
     func find(providerID: String, filePath: String) throws -> TrackFile? {
