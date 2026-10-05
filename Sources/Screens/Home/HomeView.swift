@@ -151,6 +151,17 @@ struct HomeView: View {
             }
         }
 
+        if !homeData.recentAlbums.isEmpty {
+            shelf("Albums") {
+                ForEach(homeData.recentAlbums) { album in
+                    NavigationLink(value: HomeRoute.album(album.id)) {
+                        AlbumCard(album: album)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+
         if !homeData.artists.isEmpty {
             shelf("Speakers") {
                 ForEach(homeData.artists) { artist in
@@ -432,6 +443,21 @@ private struct PlaylistCard: View {
             Text(playlist.name).font(.subheadline.weight(.semibold)).lineLimit(1)
         }
         .frame(width: 120)
+    }
+}
+
+private struct AlbumCard: View {
+    let album: Album
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ArtworkTile(album: album, cornerRadius: 10, symbolSize: 28)
+                .frame(width: 110, height: 110)
+            Text(album.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+            if let speaker = LibraryNames.shared.speaker(album.artistID)?.name {
+                Text(speaker).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .frame(width: 110, alignment: .leading)
     }
 }
 

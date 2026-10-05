@@ -10,9 +10,11 @@ import Foundation
 /// new device).
 struct LibrarySnapshot: Codable {
     /// v2 added `transcripts`; v3 added favourites and bookmarks to each episode; v4
-    /// added the AI summary and the terms it pulled out. Older files still decode — every
+    /// added the AI summary and the terms it pulled out; v5 added every episode, not just
+    /// ones someone marked, plus the size/duration/hash a fingerprint needs to re-link one
+    /// whose bucket is gone by the time this comes back. Older files still decode — every
     /// field added after v1 defaults rather than demanding a key.
-    static let currentVersion = 4
+    static let currentVersion = 6
 
     /// Identifies a track by (providerID, filePath) rather than its local DB id,
     /// since that id is a fresh UUID per device/install — stable across a resync,
@@ -60,11 +62,11 @@ struct LibrarySnapshot: Codable {
         var photoFileName: String?
     }
 
-    /// One hand-edited episode, keyed by (providerID, filePath) like `TrackRef` — the
-    /// local id is a fresh UUID per install. Speaker and album travel by name so they
-    /// re-link against whatever those rows are called on the restoring device. Only
-    /// episodes someone actually edited are included; the rest is synced metadata
-    /// `SyncEngine` rebuilds by itself.
+    /// One episode, keyed by (providerID, filePath) like `TrackRef` — the local id is a
+    /// fresh UUID per install. Speaker and album travel by name so they re-link against
+    /// whatever those rows are called on the restoring device. Every synced episode
+    /// travels, not just ones someone marked: a bucket that's gone by the time this comes
+    /// back means nothing is left to re-derive it from, so the archive is what's left.
     struct EpisodeEntry: Codable {
         /// A moment the listener marked, and whatever they typed against it. Hand-made
         /// and unrecoverable, so it travels with the episode it belongs to.
@@ -98,11 +100,19 @@ struct LibrarySnapshot: Codable {
         /// Nil for an episode that travels only for its favourite/bookmarks — nobody
         /// edited its details.
         var editedAt: Date?
-        /// Only for video-only YouTube episodes, which a restore has to rebuild from this
-        /// entry alone — there's no file for a sync to find them by.
         var durationMs: Int?
+        /// `sizeBytes` and `durationMs` together are `FileFingerprint` — what lets a
+        /// restore recognize the same recording under a different bucket or path once
+        /// this device syncs one, even though its own bucket is the one that's gone.
+        var sizeBytes: Int64?
+        /// Provider-supplied, not a content hash in the `FileFingerprint` sense (see that
+        /// type's own doc comment) — carried anyway since it costs nothing and a provider
+        /// that does make it a true hash gets an exact-match for free.
+        var contentHash: String?
         /// The YouTube video an episode is, whether it plays the video or a file.
         var youTubeVideoID: String?
+        /// When the listener neglected it — see `Track.neglectedAt`.
+        var neglectedAt: Date?
 
         /// Hand-written for the same reason `LibrarySnapshot`'s is: a synthesized decoder
         /// demands every key, so an archive written before favourites and bookmarks
@@ -124,7 +134,10 @@ struct LibrarySnapshot: Codable {
             bookmarks = try container.decodeIfPresent([BookmarkEntry].self, forKey: .bookmarks) ?? []
             editedAt = try container.decodeIfPresent(Date.self, forKey: .editedAt)
             durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
+            sizeBytes = try container.decodeIfPresent(Int64.self, forKey: .sizeBytes)
+            contentHash = try container.decodeIfPresent(String.self, forKey: .contentHash)
             youTubeVideoID = try container.decodeIfPresent(String.self, forKey: .youTubeVideoID)
+            neglectedAt = try container.decodeIfPresent(Date.self, forKey: .neglectedAt)
         }
 
         init(
@@ -132,7 +145,8 @@ struct LibrarySnapshot: Codable {
             year: Int?, notes: String?, summary: String? = nil,
             terms: [String: Int] = [:], artworkFileName: String?,
             isFavorite: Bool = false, listenedAt: Date? = nil, bookmarks: [BookmarkEntry] = [], editedAt: Date?,
-            durationMs: Int? = nil, youTubeVideoID: String? = nil
+            durationMs: Int? = nil, sizeBytes: Int64? = nil, contentHash: String? = nil, youTubeVideoID: String? = nil,
+            neglectedAt: Date? = nil
         ) {
             self.providerID = providerID
             self.filePath = filePath
@@ -149,7 +163,10 @@ struct LibrarySnapshot: Codable {
             self.bookmarks = bookmarks
             self.editedAt = editedAt
             self.durationMs = durationMs
+            self.sizeBytes = sizeBytes
+            self.contentHash = contentHash
             self.youTubeVideoID = youTubeVideoID
+            self.neglectedAt = neglectedAt
         }
     }
 

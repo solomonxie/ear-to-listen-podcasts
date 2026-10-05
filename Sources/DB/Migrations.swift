@@ -686,6 +686,59 @@ enum Migrations {
             }
         }
 
+        // The row an orphaned episode belongs to — see `OrphanedEpisodes.providerID`.
+        // Deleting a bucket cascades `tracks`/`trackFiles` on `providerID`; an episode with
+        // no copy left anywhere is repointed here first, so the cascade never reaches it.
+        migrator.registerMigration("v41_orphaned_episodes_source") { db in
+            try db.execute(
+                sql: """
+                    INSERT OR IGNORE INTO providers (id, type, label, configJSON, isActive, createdAt)
+                    VALUES (?, ?, 'Lost Episodes', '{}', 0, ?)
+                    """,
+                arguments: [OrphanedEpisodes.providerID, OrphanedEpisodes.providerType, Date()]
+            )
+        }
+
+        // Neglect hides an episode, album or speaker without deleting it or its source.
+        migrator.registerMigration("v42_neglected") { db in
+            for table in ["tracks", "albums", "artists"] {
+                try db.alter(table: table) { $0.add(column: "neglectedAt", .datetime) }
+            }
+        }
+
+        migrator.registerMigration("v43_fix_history") { db in
+            try db.create(table: "fixHistory") { t in
+                t.column("id", .text).primaryKey()
+                t.column("at", .datetime).notNull().indexed()
+                t.column("action", .text).notNull()
+                t.column("count", .integer).notNull()
+                t.column("detail", .text)
+            }
+        }
+
+        // Set for an entry made from a bucket listing alone; cleared once its tags are read.
+        migrator.registerMigration("v44_needs_tags") { db in
+            try db.alter(table: "tracks") { $0.add(column: "needsTags", .boolean).notNull().defaults(to: false) }
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_tracks_needs_tags ON tracks(needsTags) WHERE needsTags = 1")
+        }
+
+        // Tag reads and bucket listings run in the same queue as imports.
+        migrator.registerMigration("v45_sync_job_kind") { db in
+            try db.alter(table: "syncJobs") { t in
+                t.add(column: "kind", .text).notNull().defaults(to: "import")
+                t.add(column: "trackID", .text)
+            }
+        }
+
+        // Listening to an episode's transcript spoken, and deleting its original for it.
+        migrator.registerMigration("v46_voice_track") { db in
+            try db.alter(table: "tracks") { t in
+                t.add(column: "prefersVoice", .boolean).notNull().defaults(to: false)
+                t.add(column: "originalDeletedAt", .datetime)
+            }
+        }
+
+
         return migrator
     }
 }

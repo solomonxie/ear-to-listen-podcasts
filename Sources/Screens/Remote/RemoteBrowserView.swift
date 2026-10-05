@@ -202,6 +202,7 @@ struct RemoteBrowserView: View {
         }
         .task { await load() }
         .onAppear { loadStats() }
+        .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in loadStats() }
         .onChange(of: isProviderSyncQueueActive) { wasActive, isActive in
             // The listing is live and owes the queue nothing — except after an upload,
             // where what the queue just finished is a new row in this very folder.
@@ -434,8 +435,9 @@ struct RemoteBrowserView: View {
         isSyncing = true
         defer { isSyncing = false }
         do {
-            syncMessage = try await SyncQueueManager.shared.sync(providerRecord: record).summary
-            record.lastSyncedAt = Date()
+            let result = try await SyncQueueManager.shared.sync(providerRecord: record)
+            syncMessage = result.summary
+            if !result.stoppedAtQueueLimit { record.lastSyncedAt = Date() }
             // Anything new the sync just pulled in is now local, so redraw this level.
             await load()
             loadStats()

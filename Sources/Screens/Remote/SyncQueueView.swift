@@ -1,35 +1,27 @@
 import SwiftUI
 
-/// Overall sync queue across every provider — pause/resume, clear, and tune concurrency
-/// live on the "Queue" header itself rather than as a separate settings block, since
-/// they act on the same list right below them.
+/// Every provider's sync work in one list: imports, bucket scans and tag reads. A status
+/// card on top (state, what's left, pause, speed); the list below, with its two clean-up
+/// actions on its own header.
 struct SyncQueueView: View {
     @ObservedObject private var manager = SyncQueueManager.shared
+    @State private var confirmingRemoveAll = false
 
     var body: some View {
         List {
-            if manager.isPaused || manager.isFull || manager.notice != nil {
-                Section {
-                    if manager.isPaused {
-                        Label(
-                            "Paused. Nothing is being added to the queue and nothing is being processed.",
-                            systemImage: "pause.circle.fill"
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    } else if manager.isFull {
-                        Label(
-                            "Queue full (\(manager.capacity)). Files past this point come in as room frees up.",
-                            systemImage: "exclamationmark.circle.fill"
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                    }
-                    if let notice = manager.notice {
-                        Text(notice).font(.footnote).foregroundStyle(.secondary)
-                    }
+            Section {
+                statusCard
+                HStack {
+                    Label("Speed", systemImage: "gauge.with.dots.needle.33percent")
+                    Spacer()
+                    Text("\(manager.concurrency) at a time").foregroundStyle(.secondary).monospacedDigit()
+                    Stepper("Speed", value: $manager.concurrency, in: 1...8).labelsHidden()
+                }
+                if let notice = manager.notice {
+                    Text(notice).font(.footnote).foregroundStyle(.secondary)
                 }
             }
+
             Section {
                 if manager.jobs.isEmpty {
                     Text("Nothing queued. Sync a folder, or upload episodes to one, to add files here.")
@@ -40,42 +32,66 @@ struct SyncQueueView: View {
                             manager.retry(job)
                         }
                     }
-                    if manager.hasMore {
-                        Button {
-                            manager.loadMore()
-                        } label: {
-                            Text("Load \(manager.totalCount - manager.jobs.count) more…")
-                                .font(.subheadline)
-                        }
-                    }
                 }
             } header: {
-                HStack {
-                    // Waiting-vs-ceiling rather than the total: the cap is on unfinished
-                    // work, and a pile of finished rows shouldn't read as nearly full.
-                    Text("Queue (\(manager.activeCount)/\(manager.capacity))")
+                HStack(spacing: 16) {
+                    Text("Latest \(manager.jobs.count)")
                     Spacer()
-                    Button {
-                        manager.setPaused(!manager.isPaused)
-                    } label: {
-                        Label(manager.isPaused ? "Resume" : "Pause", systemImage: manager.isPaused ? "play.fill" : "pause.fill")
-                            .labelStyle(.iconOnly)
-                    }
-                    Menu {
-                        Stepper("Speed: \(manager.concurrency) at a time", value: $manager.concurrency, in: 1...8)
-                        Divider()
-                        Button("Clear Synced") { manager.clearSynced() }
-                        Button("Clear Queue", role: .destructive) { manager.clearQueue() }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
+                    Button("Remove done") { manager.clearSynced() }
+                    Button("Remove all", role: .destructive) { confirmingRemoveAll = true }
+                        .foregroundStyle(.red)
                 }
+                .font(.footnote)
                 .textCase(nil)
+                .disabled(manager.jobs.isEmpty)
             }
         }
         .navigationTitle("Queue")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Remove every row from the queue?", isPresented: $confirmingRemoveAll, titleVisibility: .visible) {
+            Button("Remove all", role: .destructive) { manager.clearQueue() }
+        } message: {
+            Text("Entries still waiting for their tags come back as room frees up. Pause first to stop everything.")
+        }
         .onAppear { manager.refresh() }
+    }
+
+    private var state: (title: String, symbol: String, tint: Color) {
+        if manager.isPaused { return ("Paused", "pause.circle.fill", .orange) }
+        if manager.activeCount > 0 { return ("Syncing", "arrow.triangle.2.circlepath.circle.fill", .accentColor) }
+        return ("Up to date", "checkmark.circle.fill", .green)
+    }
+
+    private var statusCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: state.symbol)
+                .font(.title)
+                .foregroundStyle(state.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(state.title).font(.headline)
+                Text(summary).font(.footnote).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button {
+                manager.setPaused(!manager.isPaused)
+            } label: {
+                Image(systemName: manager.isPaused ? "play.fill" : "pause.fill")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.accentColor.opacity(0.15)))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            .accessibilityLabel(manager.isPaused ? "Resume" : "Pause")
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var summary: String {
+        var parts: [String] = []
+        parts.append("\(manager.activeCount) in queue")
+        if manager.tagsRemaining > 0 { parts.append("\(manager.tagsRemaining) awaiting tags") }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -122,3 +138,4 @@ private struct SyncJobRow: View {
         }
     }
 }
+

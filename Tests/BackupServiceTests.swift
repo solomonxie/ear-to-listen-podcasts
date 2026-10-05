@@ -232,11 +232,56 @@ final class BackupServiceTests: XCTestCase {
         XCTAssertNotNil(restored.metadataEditedAt)
     }
 
-    func testSnapshotSkipsEpisodesNobodyEdited() throws {
+    /// Every synced episode travels, not just ones someone marked — the only way an
+    /// untouched episode survives its bucket being deleted.
+    func testSnapshotKeepsEveryEpisodeEvenOnesNobodyTouched() throws {
         let dbQueue = try makeDatabase()
         _ = try makeTrack(providerID: "p1", filePath: "untouched.mp3", dbQueue: dbQueue)
 
-        XCTAssertTrue(try BackupService(dbQueue: dbQueue).makeSnapshot().episodes.isEmpty)
+        XCTAssertEqual(try BackupService(dbQueue: dbQueue).makeSnapshot().episodes.map(\.filePath), ["untouched.mp3"])
+    }
+
+    /// The real shape this takes: the bucket was deleted on this device first (so the row
+    /// is already parked on the orphaned source, same as `SameFileTests` covers), then a
+    /// backup of that state restored somewhere that never had "p1" at all — a new phone,
+    /// say. There's no sync that could ever produce a live row for it, so the archive
+    /// fabricates one directly, marks and all.
+    func testAnOrphanedEpisodeSurvivesBeingBackedUpAndRestoredElsewhere() throws {
+        let source = try makeDatabase()
+        let track = try makeTrack(providerID: "p1", filePath: "ep1.mp3", dbQueue: source)
+        try BookmarkStore(dbQueue: source).add(trackID: track.id, positionMs: 1_000, transcriptText: "a note")
+        try TrackStore(dbQueue: source).deleteAll(forProvider: "p1")
+        let snapshot = try BackupService(dbQueue: source).makeSnapshot()
+
+        let restored = try makeDatabase()
+        let result = try BackupService(dbQueue: restored).apply(snapshot)
+
+        XCTAssertEqual(result.editsAwaitingSync, 0)
+        let episode = try XCTUnwrap(try TrackStore(dbQueue: restored).all(includingLost: true).first)
+        XCTAssertTrue(episode.isLost)
+        XCTAssertEqual(episode.providerID, OrphanedEpisodes.providerID)
+        XCTAssertEqual(try BookmarkStore(dbQueue: restored).all(forTrack: episode.id).count, 1)
+    }
+
+    /// Two live sources sharing a path is still the one case a guess is worse than
+    /// waiting — fabricating a stand-in would just be a second, wrong guess.
+    func testAnAmbiguousPathIsNeverFabricatedEvenWithNoMatchingSource() throws {
+        let dbQueue = try makeDatabase()
+        _ = try makeTrack(providerID: "bucket-a", filePath: "ep.mp3", dbQueue: dbQueue)
+        _ = try makeTrack(providerID: "bucket-b", filePath: "ep.mp3", dbQueue: dbQueue)
+        let snapshot = LibrarySnapshot(
+            exportedAt: Date(), playlists: [],
+            providers: [], importSources: [],
+            episodes: [LibrarySnapshot.EpisodeEntry(
+                providerID: "old-id", filePath: "ep.mp3", title: "Renamed", artistName: nil, albumName: nil,
+                year: nil, notes: nil, artworkFileName: nil, editedAt: Date()
+            )]
+        )
+
+        let result = try BackupService(dbQueue: dbQueue).apply(snapshot)
+
+        XCTAssertEqual(result.editsAwaitingSync, 1)
+        XCTAssertFalse(try TrackStore(dbQueue: dbQueue).all(includingLost: true).contains { $0.title == "Renamed" })
     }
 
     func testDecodeRejectsFutureVersion() throws {
@@ -334,6 +379,27 @@ final class BackupServiceTests: XCTestCase {
 
         let providers = try ProviderStore(dbQueue: dbQueue).all()
         XCTAssertEqual(providers.map(\.label), ["Local Label"])
+        XCTAssertEqual(providers.map(\.isActive), [false])
+    }
+
+    /// A provider named in the backup but not present locally — the bucket it deleted,
+    /// say — comes back as a credential-less placeholder. It must land inactive even
+    /// though the snapshot still calls it active: nothing reconnected its credentials,
+    /// and the sync scheduler and the cloud-backup destination both loop over `isActive`
+    /// providers, so an active-but-keyless one would just fail every pass until someone
+    /// visits Settings — which is also where it gets switched back on.
+    func testARestoredProviderComesBackInactiveUntilReconnected() throws {
+        let dbQueue = try makeDatabase()
+        let snapshot = LibrarySnapshot(
+            exportedAt: Date(), playlists: [],
+            providers: [LibrarySnapshot.ProviderEntry(id: "p1", type: "s3", label: "My Bucket", isActive: true, syncFrequencyMinutes: nil, createdAt: Date())],
+            importSources: []
+        )
+
+        try BackupService(dbQueue: dbQueue).apply(snapshot)
+
+        let providers = try ProviderStore(dbQueue: dbQueue).all()
+        XCTAssertEqual(providers.map(\.label), ["My Bucket"])
         XCTAssertEqual(providers.map(\.isActive), [false])
     }
 }

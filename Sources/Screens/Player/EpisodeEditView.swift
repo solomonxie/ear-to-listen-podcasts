@@ -25,6 +25,9 @@ struct EpisodeEditView: View {
     @State private var readiness: EpisodeMetadataSuggester.Readiness = .noTranscript
     @State private var length: String
     @State private var isConfirmingDelete = false
+    @State private var removalChoice: RemovalChoice?
+    @State private var isRefreshing = false
+    @State private var refreshMessage: String?
 
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let libraryStore = LibraryStore(dbQueue: DatabaseManager.shared.dbQueue)
@@ -145,19 +148,52 @@ struct EpisodeEditView: View {
                     }
                 }
                 if !track.isVideoOnly {
+                    EpisodeAudioSection(track: track)
                     Section("File") {
                         Text(track.filePath)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
+                        // No bucket owns this row any more — nothing will ever sync over
+                        // it or bring the audio back, so unlike an ordinary episode,
+                        // deleting it isn't undone by the next sync finding the file again.
+                        if track.providerID != OrphanedEpisodes.providerID {
+                            Button(isRefreshing ? "Refreshing…" : "Refresh from Source", systemImage: "arrow.clockwise") {
+                                Task {
+                                    isRefreshing = true
+                                    refreshMessage = await SourceRefresh().refresh(trackIDs: [track.id]).first
+                                        ?? "Latest ETag read — tags are being read again in the queue."
+                                    isRefreshing = false
+                                }
+                            }
+                            .disabled(isRefreshing)
+                            if let refreshMessage {
+                                Text(refreshMessage).font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Button("Neglect Episode", systemImage: "eye.slash") { removalChoice = .neglect }
+                            Button("Delete Episode and File…", systemImage: "trash", role: .destructive) {
+                                removalChoice = .delete
+                            }
+                        }
+                        if track.providerID == OrphanedEpisodes.providerID {
+                            Text("Its bucket is gone — there's nothing left to play.")
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                            Button("Delete Episode", role: .destructive) { isConfirmingDelete = true }
+                        }
                     }
                 }
             }
             .confirmationDialog("Delete this episode?", isPresented: $isConfirmingDelete) {
                 Button("Delete", role: .destructive) { deleteEpisode() }
             } message: {
-                Text("Its marks, notes and transcript go with it. The video on YouTube isn't touched.")
+                Text(
+                    track.providerID == OrphanedEpisodes.providerID
+                        ? "Its marks, notes and transcript go with it."
+                        : "Its marks, notes and transcript go with it. The video on YouTube isn't touched."
+                )
             }
+            .removalDialogs(.episode(track), choice: $removalChoice) { dismiss() }
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Episode")
             .navigationBarTitleDisplayMode(.inline)

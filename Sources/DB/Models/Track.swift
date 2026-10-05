@@ -69,4 +69,16 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendabl
     /// from: a video-only episode plays from the `youtube` source, and one with an audio
     /// file in a connected bucket plays that file like any other episode.
     var youTubeVideoID: String? = nil
+    /// Set when the listener neglects it: hidden from the library and skipped by sync, but
+    /// the row and its remote file stay. Albums and speakers neglected as a whole stamp
+    /// every one of their episodes.
+    var neglectedAt: Date? = nil
+    /// Made from a listing alone — the title is the filename and nothing has been read
+    /// from the file yet. See `SyncEngine.enrich`.
+    var needsTags: Bool = false
+    /// Plays the spoken transcript (`VoiceTrack`) rather than the original audio.
+    var prefersVoice: Bool = false
+    /// The listener deleted the original from its bucket on purpose; the voice track is
+    /// what plays. Not lost — nothing went missing.
+    var originalDeletedAt: Date? = nil
 }

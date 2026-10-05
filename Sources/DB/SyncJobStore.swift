@@ -60,10 +60,86 @@ struct SyncJobStore {
         }
     }
 
+    /// Listing rows don't take a slot: they stand for the scan, not a file waiting.
     private static func unfinishedCount(_ db: Database) throws -> Int {
         try SyncJob
             .filter([SyncJobStatus.pending.rawValue, SyncJobStatus.running.rawValue].contains(Column("status")))
+            .filter(Column("kind") != SyncJobKind.listing.rawValue)
             .fetchCount(db)
+    }
+
+    /// Fills the queue's free slots with tag reads for entries the scan made, oldest first.
+    /// The work itself is recorded on the entries (`Track.needsTags`), so this can always
+    /// pick up where it left off — after a quit too. Entries with a failed read are left
+    /// for a Retry rather than queued again forever.
+    @discardableResult
+    func fillTagReads(capacity: Int = SyncQueuePolicy.capacity) throws -> Int {
+        try dbQueue.write { db in
+            let room = capacity - (try Self.unfinishedCount(db))
+            guard room > 0 else { return 0 }
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, providerID, filePath, sizeBytes FROM tracks
+                WHERE needsTags = 1 AND isLost = 0 AND neglectedAt IS NULL
+                  AND id NOT IN (
+                    SELECT trackID FROM syncJobs
+                    WHERE kind = 'readTags' AND trackID IS NOT NULL AND status IN ('pending', 'running', 'failed')
+                  )
+                ORDER BY rowid LIMIT ?
+                """, arguments: [room])
+            let now = Date()
+            for (offset, row) in rows.enumerated() {
+                let path: String = row["filePath"]
+                try SyncJob(
+                    id: UUID().uuidString, providerID: row["providerID"], filePath: path,
+                    displayName: (path as NSString).lastPathComponent, sizeBytes: row["sizeBytes"],
+                    status: .pending, stage: .queued, createdAt: now.addingTimeInterval(Double(offset) / 1000),
+                    updatedAt: now, kind: .readTags, trackID: row["id"]
+                ).insert(db)
+            }
+            return rows.count
+        }
+    }
+
+    /// A row for a bucket scan, running from the moment it's made.
+    func startListing(providerID: String, label: String) throws -> SyncJob {
+        try dbQueue.write { db in
+            try SyncJob.filter(Column("providerID") == providerID && Column("kind") == SyncJobKind.listing.rawValue)
+                .filter(Column("status") == SyncJobStatus.running.rawValue)
+                .deleteAll(db)
+            let job = SyncJob(
+                id: UUID().uuidString, providerID: providerID, filePath: "", displayName: "Listing \(label)",
+                status: .running, stage: .listing, createdAt: Date(), updatedAt: Date(), kind: .listing
+            )
+            try job.insert(db)
+            return job
+        }
+    }
+
+    func finishListing(id: String, summary: String) throws {
+        try update(id: id) { $0.status = .done; $0.displayName = summary }
+    }
+
+    /// Scans the app was closed in the middle of: their rows go, and the caller runs them again.
+    func takeOrphanedListings() throws -> Set<String> {
+        try dbQueue.write { db in
+            let request = SyncJob.filter(Column("kind") == SyncJobKind.listing.rawValue)
+                .filter(Column("status") == SyncJobStatus.running.rawValue)
+            let ids = Set(try request.fetchAll(db).map(\.providerID))
+            try request.deleteAll(db)
+            return ids
+        }
+    }
+
+    /// Finished rows past the newest `keeping` — a 10k-file scan would otherwise leave
+    /// 10k done rows behind.
+    func pruneDone(keeping: Int) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                DELETE FROM syncJobs WHERE status = 'done' AND id NOT IN (
+                    SELECT id FROM syncJobs WHERE status = 'done' ORDER BY updatedAt DESC LIMIT ?
+                )
+                """, arguments: [keeping])
+        }
     }
 
     private static func unfinished(providerID: String, filePath: String) -> QueryInterfaceRequest<SyncJob> {
@@ -79,7 +155,7 @@ struct SyncJobStore {
     /// newest-first, since the interesting end of a completed pile is what just landed.
     ///
     /// `limit` keeps a bucket with thousands of queued files from loading in one go — see
-    /// `SyncQueueManager.loadMore`. Counting is `counts()`, which never loads rows.
+    /// `SyncQueueManager.visibleLimit`. Counting is `counts()`, which never loads rows.
     func page(limit: Int) throws -> [SyncJob] {
         try dbQueue.read { db in
             try SyncJob
@@ -127,6 +203,7 @@ struct SyncJobStore {
         try dbQueue.write { db in
             guard var job = try SyncJob
                 .filter(Column("status") == SyncJobStatus.pending.rawValue)
+                .filter(Column("kind") != SyncJobKind.listing.rawValue)
                 .order(Column("createdAt"))
                 .fetchOne(db)
             else { return nil }
@@ -150,6 +227,7 @@ struct SyncJobStore {
         try dbQueue.write { db in
             try SyncJob
                 .filter(Column("status") == SyncJobStatus.running.rawValue)
+                .filter(Column("kind") != SyncJobKind.listing.rawValue)
                 .updateAll(db, Column("status").set(to: SyncJobStatus.pending.rawValue), Column("updatedAt").set(to: Date()))
         }
     }

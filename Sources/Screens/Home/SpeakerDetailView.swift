@@ -30,6 +30,8 @@ struct SpeakerDetailView: View {
     @State private var isSuggesting = false
     @State private var suggestionError: String?
     @State private var bookmarks: [Bookmark] = []
+    @State private var removalChoice: RemovalChoice?
+    @Environment(\.dismiss) private var dismiss
     /// Which unfolding picker is open — one at a time, across the whole form.
     @State private var openPicker: String?
     @FocusState private var focusedField: SpeakerField?
@@ -214,6 +216,17 @@ struct SpeakerDetailView: View {
         .onChange(of: language) { _, _ in save() }
         .navigationTitle(currentSpeaker.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Neglect Speaker…", systemImage: "eye.slash") { removalChoice = .neglect }
+                    Button("Delete Speaker and Files…", systemImage: "trash", role: .destructive) { removalChoice = .delete }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .removalDialogs(.speaker(currentSpeaker), choice: $removalChoice) { dismiss() }
         .onReceive(NotificationCenter.default.publisher(for: .bookmarksDidChange)) { _ in
             refreshBookmarks()
         }
@@ -355,7 +368,7 @@ struct SpeakerDetailView: View {
     private func load() async {
         currentSpeaker = (try? libraryStore.artist(id: speaker.id)) ?? currentSpeaker
         albums = (try? libraryStore.albums(forArtist: speaker.id)) ?? []
-        tracks = (try? trackStore.tracks(forArtist: speaker.id)) ?? []
+        tracks = (try? trackStore.tracks(forArtist: speaker.id, includingLost: true)) ?? []
         refreshBookmarks()
         seedFields()
     }

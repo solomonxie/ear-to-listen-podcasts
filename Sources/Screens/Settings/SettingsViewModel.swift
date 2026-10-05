@@ -182,12 +182,17 @@ final class SettingsViewModel: ObservableObject {
 
     func delete(_ record: ProviderRecord) {
         do {
+            // Before the provider row goes (and `tracks.providerID` cascades with it):
+            // move every episode that also lives elsewhere onto that copy, and park
+            // anything with no copy left on the standing "orphaned" row instead, so its
+            // history and notes outlive this bucket.
+            try TrackStore(dbQueue: DatabaseManager.shared.dbQueue).deleteAll(forProvider: record.id)
             try providerStore.delete(id: record.id)
             try ProviderManager.shared.deleteSettings(forProviderID: record.id)
-            // Its episodes went with it (the rows cascade), so titles that were only
-            // numbered to tell them apart from *those* have nothing left to disambiguate.
-            // Nothing else runs this pass on a delete, which is why a disconnected source
-            // used to leave "(2)" on every episode it had collided with.
+            // Titles that were only numbered to tell them apart from this source's
+            // episodes have nothing left to disambiguate, now that those moved or were
+            // orphaned. Nothing else runs this pass on a delete, which is why a
+            // disconnected source used to leave "(2)" on every episode it had collided with.
             if (try? TrackStore(dbQueue: DatabaseManager.shared.dbQueue).numberDuplicateTitles()) ?? 0 > 0 {
                 NotificationCenter.default.post(name: .libraryDidChange, object: nil)
             }

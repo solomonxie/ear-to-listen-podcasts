@@ -69,24 +69,6 @@ struct SettingsSectionView: View {
         return "\(short) (\(build))"
     }
 
-    /// Said as what's missing, not as a fault: these are things the files never carried,
-    /// not things anyone did wrong.
-    private func flaggedLabel(_ reason: FlaggedEpisodes.Reason) -> LocalizedStringKey {
-        switch reason {
-        case .noTranscript: return "Not transcribed"
-        case .unplaced: return "No speaker or collection"
-        case .filenameTitle: return "Titled after its file"
-        }
-    }
-
-    private func flaggedSymbol(_ reason: FlaggedEpisodes.Reason) -> String {
-        switch reason {
-        case .noTranscript: return "text.badge.xmark"
-        case .unplaced: return "person.crop.circle.badge.questionmark"
-        case .filenameTitle: return "doc.text"
-        }
-    }
-
     var body: some View {
         // Rows inherit `.sectionRow()`; headings and hints opt out explicitly. Without it
         // every Label falls back to `.body`, dwarfing its own section heading.
@@ -249,36 +231,12 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeading(
                     title: "FLAGGED",
-                    info: "Episodes the library can't say enough about yet. A file with no tags arrives titled after itself, belonging to nobody, in no collection, with nothing in it searchable \u{2014} each one obvious on its own page and invisible as a group. This is the group. Counted as episodes, not as problems: one untagged file is usually several of these at once. Every one of them can be put right by hand today \u{2014} open the episode and fill in what's missing, or transcribe it \u{2014} and doing the lot in one tap is coming."
+                    info: "Episodes the library can't say enough about yet \u{2014} no audio left, titled after their file, no speaker or collection, not transcribed. Each one shows what's wrong and a Fix button; select several to apply one fix to all. Neglected items and the history of fixes are in there too."
                 )
-                if viewModel.flagged.isEmpty {
-                    Text("Nothing flagged. Every episode has a name of its own, a place in the library, and a transcript.")
-                        .sectionHint()
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    HStack {
-                        Text("Episodes needing a look")
-                        Spacer()
-                        Text("\(viewModel.flagged.total)").foregroundStyle(.secondary)
-                    }
-                    ForEach(FlaggedEpisodes.Reason.allCases) { reason in
-                        let count = viewModel.flagged.count(reason)
-                        if count > 0 {
-                            HStack {
-                                Label(flaggedLabel(reason), systemImage: flaggedSymbol(reason))
-                                    .sectionRowSecondary()
-                                Spacer()
-                                Text("\(count)").sectionRowSecondary()
-                            }
-                        }
-                    }
-                    // Disabled, and says why on the row rather than in a dialog after the
-                    // tap: a button that explains itself only once pressed is a button
-                    // that wasted the press.
-                    Button {} label: {
-                        Label("Fix All \u{2014} coming soon", systemImage: "wand.and.stars")
-                    }
-                    .disabled(true)
+                NavigationLink {
+                    FlaggedItemsView()
+                } label: {
+                    Label("Flagged items (\(viewModel.flagged.total))", systemImage: "flag")
                 }
             }
             .padding(.horizontal)
