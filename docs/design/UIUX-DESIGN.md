@@ -65,7 +65,7 @@ subfolder. No separate detail screen, no per-level difference.
 
 ```
 ┌─────────────────────────────────────────┐
-│ ‹ Back        slmx-archives2        (⋯) │
+│ ‹ Back        archives2        (⋯) │
 ├─────────────────────────────────────────┤
 │ 📁  bible-audio                     ›   │ → push, same screen, deeper prefix
 │ 〰  ep-004.mp3              24.1 MB  ⓘ  │ → plays; ⓘ opens file info

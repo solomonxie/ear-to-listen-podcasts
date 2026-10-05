@@ -12,14 +12,14 @@ connection. Reached from a source's `Queue (N)` pill, the browser footer's
  <notice>                                    ← manager.notice, secondary
  ┌ Queue (87/100) ──────────────────── ⏸  ⋯ ┐ ← unfinished vs the ceiling,
  │ ep-004.mp3                                │   not the total
- │ slmx-archives2         Reading tags   ⟳   │ ← says WHICH slow thing
+ │ archives2         Reading tags   ⟳   │ ← says WHICH slow thing
  │ ep-005.mp3                                │
- │ slmx-archives2              Waiting       │
+ │ archives2              Waiting       │
  │ ep-002.mp3                                │
- │ slmx-archives2                        ↻   │ ← failed keeps its row and a
+ │ archives2                        ↻   │ ← failed keeps its row and a
  │ 403 SignatureDoesNotMatch                 │   retry: it needs a decision
  │ ep-003.mp3                                │
- │ slmx-archives2                        ✓   │
+ │ archives2                        ✓   │
  │            Load 1,184 more…               │ ← 100 per page
  └───────────────────────────────────────────┘
 
