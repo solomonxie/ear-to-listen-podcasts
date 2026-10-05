@@ -191,6 +191,11 @@ struct LocalFilesProvider: CloudProvider {
         try data.write(to: url, options: .atomic)
     }
 
+    func deleteFile(atPath path: String) async throws {
+        guard case .folder(let baseURL) = source else { throw CloudProviderError.readOnly(type) }
+        try FileManager.default.removeItem(at: baseURL.appendingPathComponent(path))
+    }
+
     func testConnection() async -> ConnectionTestResult {
         switch source {
         case .folder(let baseURL):

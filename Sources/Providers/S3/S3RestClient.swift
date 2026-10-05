@@ -85,6 +85,10 @@ struct S3RestClient {
         try check(http, body: body)
     }
 
+    func deleteObject(key: String) async throws {
+        _ = try await send(method: "DELETE", url: url(key: key))
+    }
+
     func presignedGetURL(key: String, expiresIn: Int = 3600) -> URL? {
         SigV4.presignedURL(url: url(key: key), credentials: credentials, expiresIn: expiresIn)
     }

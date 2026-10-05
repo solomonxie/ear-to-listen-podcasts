@@ -84,6 +84,11 @@ protocol CloudProvider: Sendable {
     /// never-overwrite-audio rule is one piece of code rather than a habit five providers
     /// have to keep.
     func write(_ data: Data, toPath path: String, contentType: String) async throws
+
+    /// Removes one file from the source itself. Only ever called for an episode the
+    /// listener chose to delete for good; declared here for the same dispatch reason as
+    /// `write`.
+    func deleteFile(atPath path: String) async throws
 }
 
 enum CloudProviderError: LocalizedError {
@@ -126,6 +131,10 @@ extension CloudProvider {
     }
 
     func write(_ data: Data, toPath path: String, contentType: String) async throws {
+        throw CloudProviderError.readOnly(type)
+    }
+
+    func deleteFile(atPath path: String) async throws {
         throw CloudProviderError.readOnly(type)
     }
 

@@ -133,6 +133,14 @@ struct GoogleCloudStorageProvider: CloudProvider {
         try check(response, body: body)
     }
 
+    func deleteFile(atPath path: String) async throws {
+        var request = URLRequest(url: url(base: Self.apiBase, path: "/b/\(bucket)/o/\(RFC3986.encode(path))"))
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(try await GoogleAccessTokens.shared.token(for: account))", forHTTPHeaderField: "Authorization")
+        let (body, response) = try await URLSession.shared.data(for: request)
+        try check(response, body: body)
+    }
+
     /// Google stamps objects in RFC 3339 with fractional seconds. One pair of formatters
     /// per listing, not per object: a formatter isn't `Sendable`, so it can't be a shared
     /// static, and building one for each of a few thousand files is work for nothing.

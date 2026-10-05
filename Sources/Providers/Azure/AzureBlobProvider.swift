@@ -153,6 +153,14 @@ struct AzureBlobProvider: CloudProvider {
         try check(response, body: body)
     }
 
+    func deleteFile(atPath path: String) async throws {
+        var request = URLRequest(url: url(blob: path))
+        request.httpMethod = "DELETE"
+        AzureSharedKey.sign(&request, account: account)
+        let (body, response) = try await URLSession.shared.data(for: request)
+        try check(response, body: body)
+    }
+
     private func check(_ response: URLResponse, body: Data) throws {
         guard let http = response as? HTTPURLResponse else { throw AzureError.malformedResponse }
         guard !(200..<300).contains(http.statusCode) else { return }
