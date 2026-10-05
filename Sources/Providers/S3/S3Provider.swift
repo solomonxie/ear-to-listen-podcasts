@@ -165,4 +165,8 @@ struct S3Provider: CloudProvider {
     func write(_ data: Data, toPath path: String, contentType: String) async throws {
         try await client.putObject(key: path, data: data, contentType: contentType)
     }
+
+    func deleteFile(atPath path: String) async throws {
+        try await client.deleteObject(key: path)
+    }
 }
