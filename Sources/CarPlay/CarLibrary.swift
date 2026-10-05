@@ -44,7 +44,7 @@ struct CarLibrary: Sendable {
             var s = Snapshot()
             s.cachedKeys = cachedKeys
             s.onDeviceProviderIDs = Set(((try? this.providers.all()) ?? [])
-                .filter { [LocalFilesProvider.providerType, DemoProvider.providerType].contains($0.type) }
+                .filter { [LocalFilesProvider.providerType, DemoProvider.providerType].contains($0.type) || $0.id == DemoProvider.providerID }
                 .map(\.id))
             // A video has nothing to play in the car.
             let all = ((try? this.tracks.all()) ?? []).filter { !$0.isVideoOnly }
