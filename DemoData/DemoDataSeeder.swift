@@ -12,8 +12,8 @@ enum DemoDataSeeder {
         let days: (Int?) -> Date? = { $0.map { now.addingTimeInterval(-Double($0) * 86_400 - 3_600) } }
 
         let provider = ProviderRecord(
-            id: UUID().uuidString, type: DemoProvider.providerType, label: "Sample Library",
-            configJSON: "", isActive: false, createdAt: now, lastSyncedAt: now
+            id: DemoProvider.providerID, type: "s3", label: DemoProvider.bucketName,
+            configJSON: "", isActive: true, createdAt: now, lastSyncedAt: now
         )
         let artists = Dictionary(uniqueKeysWithValues: library.speakers.map { speaker in
             (speaker.key, Artist(
@@ -56,7 +56,7 @@ enum DemoDataSeeder {
                 let artist = episode.speaker.flatMap { artists[$0] } ?? speaker
                 let track = Track(
                     id: UUID().uuidString, providerID: provider.id, artistID: artist?.id, albumID: album.id,
-                    filePath: DemoProvider.fileName(for: episode.key), title: episode.title,
+                    filePath: DemoProvider.path(for: episode.key, album: seed.name), title: episode.title,
                     durationMs: timing.durationMs, year: seed.year,
                     sizeBytes: timing.sizeBytes, contentHash: nil, language: seed.language,
                     updatedAt: now, notes: episode.notes,

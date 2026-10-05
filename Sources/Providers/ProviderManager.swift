@@ -29,6 +29,11 @@ final class ProviderManager: @unchecked Sendable {
         if let cached = lock.withLock({ cache[record.id] }) {
             return cached
         }
+        if record.id == DemoProvider.providerID {
+            let demo = DemoProvider()
+            lock.withLock { cache[record.id] = demo }
+            return demo
+        }
         let settings = try credentials.getJSON([String: String].self, forKey: Self.settingsKey(providerID: record.id)) ?? [:]
         let config = CloudProviderConfig(id: record.id, type: record.type, label: record.label, settings: settings)
         guard let provider = try CloudProviderRegistry.shared.makeProvider(for: config) else {
@@ -70,6 +75,7 @@ final class ProviderManager: @unchecked Sendable {
     /// apart in a list. A folder on this device gets the same treatment under `files://`,
     /// with enough of the path to tell two folders of the same name apart.
     func displayPath(for record: ProviderRecord) -> String? {
+        if record.id == DemoProvider.providerID { return "s3://\(DemoProvider.bucketName)/" }
         if record.type == LocalFilesProvider.providerType {
             guard let path = settings(for: record.id)?[LocalFilesProvider.folderPathKey],
                   !path.isEmpty else { return nil }

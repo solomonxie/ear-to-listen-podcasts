@@ -11,7 +11,7 @@ final class DemoDataSeederTests: XCTestCase {
         let tracks = try TrackStore(dbQueue: dbQueue).all(includingLost: true)
         XCTAssertEqual(tracks.count, 12)
         XCTAssertEqual(Set(tracks.compactMap(\.fingerprint)).count, 12, "no two episodes may fold into one")
-        XCTAssertTrue(tracks.allSatisfy { Bundle.main.url(forResource: $0.filePath, withExtension: nil) != nil })
+        XCTAssertTrue(tracks.allSatisfy { Bundle.main.url(forResource: ($0.filePath as NSString).lastPathComponent, withExtension: nil) != nil })
         XCTAssertTrue(tracks.contains { $0.listenedAt != nil })
         XCTAssertTrue(tracks.contains { ($0.positionMs ?? 0) > 0 && $0.listenedAt == nil })
 
