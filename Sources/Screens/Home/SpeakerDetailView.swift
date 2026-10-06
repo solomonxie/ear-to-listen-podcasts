@@ -76,6 +76,28 @@ struct SpeakerDetailView: View {
                 .task(id: photoItem) { await handlePick() }
             }
 
+            Section { ContinuePlayButton(tracks: tracks) }
+
+            FoldedSection(title: "Albums", count: albums.count) {
+                ForEach(albums) { album in
+                    NavigationLink { AlbumDetailView(album: album) } label: {
+                        AlbumRow(album: album)
+                    }
+                }
+            }
+
+            FoldedSection(title: "Episodes", count: tracks.count) {
+                ForEach(tracks) { track in
+                    Button {
+                        // Everything of theirs is the queue.
+                        PlaybackEngine.shared.open(track: track, queue: tracks)
+                    } label: {
+                        TrackRow(track: track)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
             Section {
                 StackedField("Bio", placeholder: "One line — what they're known for", text: $bio)
                     .focused($focusedField, equals: .bio)
@@ -164,17 +186,6 @@ struct SpeakerDetailView: View {
             }
             .listRowSeparator(.hidden)
 
-            Section("Albums") {
-                if albums.isEmpty {
-                    Text("No albums yet").foregroundStyle(.secondary)
-                }
-                ShowMoreList(items: albums) { album in
-                    NavigationLink { AlbumDetailView(album: album) } label: {
-                        AlbumRow(album: album)
-                    }
-                }
-            }
-
             // Every mark made anywhere in this speaker's episodes, newest first — the
             // thing you remember about a speaker is something they said, not which file
             // it was in.
@@ -192,17 +203,6 @@ struct SpeakerDetailView: View {
                 .listRowSeparator(.hidden)
             }
 
-            Section("Episodes") {
-                ShowMoreList(items: tracks) { track in
-                    Button {
-                        // Everything of theirs is the queue, however few rows are shown.
-                        PlaybackEngine.shared.open(track: track, queue: [track])
-                    } label: {
-                        TrackRow(track: track)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
         }
         .listStyle(.plain)
         // Room to scroll "Show all" clear of the docked now-playing bar, which otherwise

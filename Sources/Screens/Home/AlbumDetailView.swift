@@ -59,6 +59,20 @@ struct AlbumDetailView: View {
                     .listRowSeparator(.hidden)
             }
 
+            Section { ContinuePlayButton(tracks: tracks) }
+
+            FoldedSection(title: "Episodes", count: tracks.count) {
+                ForEach(tracks) { track in
+                    Button {
+                        // The whole collection is the queue.
+                        PlaybackEngine.shared.open(track: track, queue: tracks)
+                    } label: {
+                        TrackRow(track: track)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
             Section {
                 // Picked, not typed: a speaker already exists as a row with a page of
                 // their own, and typing their name again by hand is how you end up with
@@ -203,17 +217,6 @@ struct AlbumDetailView: View {
                 .listRowSeparator(.hidden)
             }
 
-            Section("Episodes") {
-                ShowMoreList(items: tracks) { track in
-                    Button {
-                        // The whole collection is the queue, however few rows are shown.
-                        PlaybackEngine.shared.open(track: track, queue: tracks)
-                    } label: {
-                        TrackRow(track: track)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
         }
         .listStyle(.plain)
         // Room to scroll "Show all" clear of the docked now-playing bar, which otherwise
