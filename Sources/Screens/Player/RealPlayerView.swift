@@ -677,6 +677,7 @@ struct RealPlayerView: View {
                 duration: engine.duration,
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
+                onSkipForward: { engine.skip(by: 10) },
                 onTogglePlay: { engine.togglePlayPause() },
                 bookmarkCount: bookmarks.count,
                 onBookmark: { if let track = engine.currentTrack { markMoment(track) } },
@@ -686,10 +687,6 @@ struct RealPlayerView: View {
                 },
                 onTapBar: { path.removeAll() },
                 onSeek: { engine.seek(to: $0) },
-                onTop: {
-                    path.removeAll()
-                    topRequests += 1
-                },
                 onFollow: {
                     path.removeAll()
                     followRequests += 1
@@ -706,6 +703,7 @@ struct RealPlayerView: View {
                 duration: engine.duration,
                 isPlaying: engine.isPlaying,
                 onSkipBack: { engine.skip(by: -10) },
+                onSkipForward: { engine.skip(by: 10) },
                 onTogglePlay: { engine.togglePlayPause() },
                 bookmarkCount: bookmarks.count,
                 onBookmark: { if let track = engine.currentTrack { markMoment(track) } },
@@ -721,7 +719,6 @@ struct RealPlayerView: View {
                 },
                 onSeek: { engine.seek(to: $0) },
                 seekArea: $barSeekArea,
-                onTop: { scrollToTop(proxy) },
                 isFollowing: isFollowingTranscript,
                 onFollow: { if isFollowingTranscript { isFollowingTranscript = false } else { follow(proxy) } }
             )
@@ -732,7 +729,7 @@ struct RealPlayerView: View {
 /// The bar at the bottom of the screen, wherever it appears: over Home as the way into
 /// whatever is playing, and docked on the player itself as the way back to the top.
 ///
-/// Controls only — rewind, play/pause, mark — centred, with play in the middle where the
+/// Controls only — mark, back 10s, play/pause, forward 10s, transcript — with play in the middle where the
 /// thumb finds it without looking. What's playing is named in the player's top bar, not
 /// repeated here. Tapping anywhere else on the bar does the page's `onTapBar`.
 /// Where the episode page lands when something outside it opens it.
@@ -756,14 +753,26 @@ private struct BarSeekLine: View {
         return min(max((isDragging ? dragTime : currentTime) / duration, 0), 1)
     }
 
+    /// The hairline sits this far down a taller strip, so a finger landing just above it —
+    /// where a finger aimed at a line on a bar's edge usually lands — still catches it.
+    private static let reachAbove: CGFloat = 14
+
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Rectangle().fill(.quaternary)
                 Rectangle().fill(Color.accentColor).frame(width: geo.size.width * progress)
             }
-            .frame(height: isDragging ? 6 : 2)
+            .frame(height: isDragging ? 6 : 3)
+            // A knob says the line can be moved.
+            .overlay(alignment: .leading) {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: isDragging ? 16 : 10, height: isDragging ? 16 : 10)
+                    .offset(x: geo.size.width * progress - (isDragging ? 8 : 5))
+            }
             .animation(.easeOut(duration: 0.12), value: isDragging)
+            .padding(.top, Self.reachAbove)
             .frame(maxHeight: .infinity, alignment: .top)
             // The whole strip catches the finger, not just the hairline.
             .contentShape(Rectangle())
@@ -781,14 +790,16 @@ private struct BarSeekLine: View {
             }
             .onChange(of: geo.frame(in: .global), initial: true) { area?.wrappedValue = $1 }
         }
-        .frame(height: 18)
+        .frame(height: 18 + Self.reachAbove)
+        // Drawn up over the page above, so the line stays on the bar's edge.
+        .padding(.top, -Self.reachAbove)
         .accessibilityElement()
         .accessibilityLabel("Position")
         .accessibilityValue("\(SeekBar.formatted(currentTime)) of \(SeekBar.formatted(duration))")
     }
 
     private func drag(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 4)
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
                 if !isDragging {
                     isDragging = true
@@ -815,6 +826,7 @@ struct NowPlayingBarContent: View {
     let duration: TimeInterval
     let isPlaying: Bool
     let onSkipBack: () -> Void
+    let onSkipForward: () -> Void
     let onTogglePlay: () -> Void
     let bookmarkCount: Int
     let onBookmark: () -> Void
@@ -824,10 +836,6 @@ struct NowPlayingBarContent: View {
     let onSeek: (TimeInterval) -> Void
     /// Where the bar's seek line is, for a back swipe to stand off.
     var seekArea: Binding<CGRect>? = nil
-    /// The two at the ends: the top of the playing episode's page, from wherever the bar
-    /// is, and the transcript following playback. On every bar, so the bar is the same
-    /// five wherever it is.
-    let onTop: () -> Void
     var isFollowing = false
     let onFollow: () -> Void
 
@@ -845,11 +853,11 @@ struct NowPlayingBarContent: View {
                 // being dragged it says so in numbers. Each button takes an equal share of
                 // the width, so they sit as far apart as the bar allows.
                 HStack(spacing: 0) {
-                    sideButton("arrow.up.to.line", label: "Top of the page", action: onTop)
+                    bookmarkButton
                     barButton("gobackward.10", size: min(glyphSize + 2, 40), label: "Back ten seconds", action: onSkipBack)
                     barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 24, 60),
                               label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
-                    bookmarkButton
+                    barButton("goforward.10", size: min(glyphSize + 2, 40), label: "Forward ten seconds", action: onSkipForward)
                     sideButton(
                         isFollowing ? "captions.bubble.fill" : "captions.bubble",
                         label: isFollowing ? "Stop following the transcript" : "Follow the transcript",
