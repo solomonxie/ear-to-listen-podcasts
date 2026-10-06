@@ -32,9 +32,12 @@ struct SourcesSectionView: View {
 
     var body: some View {
         // Rows inherit `.sectionRow()`; headings and hints opt out explicitly.
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Sources").sectionTitle()
+                SectionHeading(
+                    title: "MY CLOUD",
+                    info: "Where your episodes live: buckets in your own cloud storage, and folders on this device. Sync reads only the file list and tags; audio downloads when you listen."
+                )
                 Spacer()
                 // A menu rather than a second button: adding is one idea with two answers,
                 // and the picked folder needs no screen of its own to fill in.
@@ -53,53 +56,53 @@ struct SourcesSectionView: View {
                     Image(systemName: "plus.circle.fill")
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 20)
 
-            // Syncing only reads file listings/metadata — the audio itself downloads on
-            // demand when you actually listen, not during a sync.
-            Text("Sync only fetches metadata — episodes download when you listen.")
-                .sectionHint()
-                .padding(.horizontal)
-
-            if let addFolderError {
-                Text(addFolderError).sectionHint().foregroundStyle(.orange).padding(.horizontal)
-            }
-
-            if sources.isEmpty {
-                Text("No sources yet. Add a bucket — S3, Tencent COS, Alibaba OSS, Azure or Google Cloud — or a folder off this device, to browse and sync episodes from.")
+            VStack(alignment: .leading, spacing: 10) {
+                // Syncing only reads file listings/metadata — the audio itself downloads on
+                // demand when you actually listen, not during a sync.
+                Text("Sync only fetches metadata — episodes download when you listen.")
                     .sectionHint()
-                    .padding(.horizontal)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(sources) { record in
-                        VStack(alignment: .leading, spacing: 8) {
-                            NavigationLink {
-                                RemoteBrowserView(record: record, viewModel: viewModel)
-                            } label: {
-                                RemoteSourceRow(record: record)
-                            }
-                            .buttonStyle(.plain)
-                            // Deleting lives in the bucket's own settings menu (inside
-                            // RemoteBrowserView) instead of a second tap target right next
-                            // to the disclosure chevron, where it's too easy to hit by mistake.
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    viewModel.delete(record)
+
+                if let addFolderError {
+                    Text(addFolderError).sectionHint().foregroundStyle(.orange)
+                }
+
+                if sources.isEmpty {
+                    Text("Nothing connected yet. Add a bucket — S3, Tencent COS, Alibaba OSS, Azure or Google Cloud — or a folder off this device, to browse and sync episodes from.")
+                        .sectionHint()
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(sources) { record in
+                            VStack(alignment: .leading, spacing: 8) {
+                                NavigationLink {
+                                    RemoteBrowserView(record: record, viewModel: viewModel)
                                 } label: {
-                                    Label("Delete", systemImage: "trash")
+                                    RemoteSourceRow(record: record)
                                 }
+                                .buttonStyle(.plain)
+                                // Deleting lives in the bucket's own settings menu (inside
+                                // RemoteBrowserView) instead of a second tap target right next
+                                // to the disclosure chevron, where it's too easy to hit by mistake.
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        viewModel.delete(record)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                syncControls(for: record)
                             }
-                            syncControls(for: record)
-                        }
-                        .padding(.bottom, 6)
-                        if record.id != sources.last?.id {
-                            Divider().padding(.leading, 68)
+                            .padding(.bottom, 6)
+                            if record.id != sources.last?.id {
+                                Divider().padding(.leading, 68)
+                            }
                         }
                     }
                 }
-                .padding(.horizontal)
-
             }
+            .padding(.vertical, 8)
+            .settingsCard()
         }
         .sheet(isPresented: $showingAddSource) {
             NavigationStack { AddCloudSourceView(viewModel: viewModel) }

@@ -13,6 +13,16 @@ import SwiftUI
 /// SwiftUI's own default a label renders at `.body` (17pt) — larger than the 12pt heading
 /// above it, which is what made these screens read as randomly sized.
 extension View {
+    /// One Settings group: its own rounded panel, so groups read as separate things
+    /// rather than one long column of rows.
+    func settingsCard() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal)
+    }
+
     func sectionTitle() -> some View {
         font(.title3.bold())
     }

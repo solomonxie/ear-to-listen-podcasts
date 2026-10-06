@@ -1,6 +1,46 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "MY CLOUD": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的云端"
+          }
+        }
+      }
+    },
+    "LIBRARY": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "媒体库"
+          }
+        }
+      }
+    },
+    "Where your episodes live: buckets in your own cloud storage, and folders on this device. Sync reads only the file list and tags; audio downloads when you listen.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的节目存放在这里：你自己云存储中的存储桶，以及这台设备上的文件夹。同步只读取文件列表和标签；音频在收听时才下载。"
+          }
+        }
+      }
+    },
+    "Nothing connected yet. Add a bucket — S3, Tencent COS, Alibaba OSS, Azure or Google Cloud — or a folder off this device, to browse and sync episodes from.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有连接任何存储。添加一个存储桶（S3、腾讯云 COS、阿里云 OSS、Azure 或 Google Cloud），或这台设备上的一个文件夹，即可浏览并同步节目。"
+          }
+        }
+      }
+    },
     "": {},
     " ": {},
     "Add": {
