@@ -107,9 +107,8 @@ struct HomeView: View {
             }
         case .settings:
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 28) {
+                LazyVStack(alignment: .leading, spacing: 16) {
                     SourcesSectionView(viewModel: settings)
-                    Divider().padding(.horizontal)
                     SettingsSectionView(viewModel: settings)
                 }
                 .padding(.vertical)
