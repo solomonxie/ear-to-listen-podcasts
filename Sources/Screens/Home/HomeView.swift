@@ -47,7 +47,7 @@ struct HomeView: View {
         .navigationDestination(for: HomeRoute.self) { destination($0) }
         .navigationTitle("Good listening")
         .sheet(item: $addingYouTubeLink) { AddYouTubeEpisodeView(link: $0.link) }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your podcasts")
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search titles and what was said")
         .onSubmit(of: .search) {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
@@ -140,6 +140,10 @@ struct HomeView: View {
 
     @ViewBuilder
     private var homeShelves: some View {
+        if homeData.hasLoaded, homeData.tracks.isEmpty, !AppMode.isDemo {
+            WelcomeCard()
+        }
+
         if !homeData.recentTracks.isEmpty {
             shelf("Continue Listening") {
                 ForEach(homeData.recentTracks) { track in
