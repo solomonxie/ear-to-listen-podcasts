@@ -6,8 +6,7 @@ Bundle ID `com.example.eartolisten` · iOS 17+ · iPhone only, portrait · Free.
   ready to paste
 - [`privacy-policy.md`](privacy-policy.md) — the policy; its GitHub URL is the Privacy
   Policy URL in the listing
-- `screenshots/` — upload-ready, from
-  `scripts/store-screenshots.sh`
+- `screenshots/` — upload-ready, captioned by `scripts/store-captions.py`
 
 ```sh
 echo 'DEVELOPMENT_TEAM=YOURTEAMID' > .env.local   # gitignored; never commit a team id
