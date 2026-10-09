@@ -5073,6 +5073,26 @@
           }
         }
       }
+    },
+    "Not downloaded to this phone": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未下载到这台手机"
+          }
+        }
+      }
+    },
+    "No audio left for this episode.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这一集已经没有可播放的音频了。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
