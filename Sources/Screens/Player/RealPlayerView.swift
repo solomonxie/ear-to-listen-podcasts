@@ -729,7 +729,7 @@ struct RealPlayerView: View {
 /// The bar at the bottom of the screen, wherever it appears: over Home as the way into
 /// whatever is playing, and docked on the player itself as the way back to the top.
 ///
-/// Controls only — mark, back 10s, play/pause, forward 10s, transcript — with play in the middle where the
+/// Controls only — transcript, back 10s, play/pause, forward 10s, mark — with play in the middle where the
 /// thumb finds it without looking. What's playing is named in the player's top bar, not
 /// repeated here. Tapping anywhere else on the bar does the page's `onTapBar`.
 /// Where the episode page lands when something outside it opens it.
@@ -853,16 +853,16 @@ struct NowPlayingBarContent: View {
                 // being dragged it says so in numbers. Each button takes an equal share of
                 // the width, so they sit as far apart as the bar allows.
                 HStack(spacing: 0) {
-                    bookmarkButton
-                    barButton("gobackward.10", size: min(glyphSize + 2, 40), label: "Back ten seconds", action: onSkipBack)
-                    barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 24, 60),
-                              label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
-                    barButton("goforward.10", size: min(glyphSize + 2, 40), label: "Forward ten seconds", action: onSkipForward)
                     sideButton(
                         isFollowing ? "captions.bubble.fill" : "captions.bubble",
                         label: isFollowing ? "Stop following the transcript" : "Follow the transcript",
                         isOn: isFollowing, action: onFollow
                     )
+                    barButton("gobackward.10", size: min(glyphSize + 2, 40), label: "Back ten seconds", action: onSkipBack)
+                    barButton(isPlaying ? "pause.circle.fill" : "play.circle.fill", size: min(glyphSize + 24, 60),
+                              label: isPlaying ? "Pause" : "Play", action: onTogglePlay)
+                    barButton("goforward.10", size: min(glyphSize + 2, 40), label: "Forward ten seconds", action: onSkipForward)
+                    bookmarkButton
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, -4)
@@ -903,8 +903,8 @@ struct NowPlayingBarContent: View {
             .accessibilityAction(named: "Show bookmarks", onShowBookmarks)
     }
 
-    /// The quieter pair at the ends — page moves rather than playback, so they sit back in
-    /// grey at one size and weight, and only Follow lights up, while it's on.
+    /// Follow, at the left end — a page move rather than playback, so it sits back in grey
+    /// and lights up only while it's on.
     private func sideButton(
         _ systemImage: String, label: LocalizedStringKey, isOn: Bool = false, action: @escaping () -> Void
     ) -> some View {
