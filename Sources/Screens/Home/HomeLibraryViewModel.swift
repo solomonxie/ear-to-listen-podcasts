@@ -27,6 +27,8 @@ final class HomeLibraryViewModel: ObservableObject {
     @Published private(set) var history: [Track] = []
     /// Folded once here rather than rebuilt per keystroke — see `LibrarySearch`.
     @Published private(set) var searchIndex = LibrarySearch.Index()
+    /// False until the first full read, so an empty library isn't announced before it's known.
+    @Published private(set) var hasLoaded = false
     /// Bookmarks as Home shows them: per episode, in episode order.
     @Published private(set) var bookmarkGroups: [BookmarkGroup] = []
 
@@ -69,6 +71,7 @@ final class HomeLibraryViewModel: ObservableObject {
         downloadedTracks = snapshot.downloadedTracks
         bookmarkGroups = snapshot.bookmarkGroups
         searchIndex = snapshot.searchIndex
+        hasLoaded = true
     }
 
     /// The top of Home — Continue Listening and the speakers — from a few small queries,

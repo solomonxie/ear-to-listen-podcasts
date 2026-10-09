@@ -3444,23 +3444,6 @@
         }
       }
     },
-    "Search your podcasts": {
-      "extractionState": "stale",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search your podcasts"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "搜索播客"
-          }
-        }
-      }
-    },
     "Secret Access Key": {
       "extractionState": "stale",
       "localizations": {
@@ -5007,6 +4990,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld 分钟"
+          }
+        }
+      }
+    },
+    "Your audio, searchable by what was said": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的音频，按说过的话就能搜到"
+          }
+        }
+      }
+    },
+    "Plays straight from your own storage — S3, COS, OSS, Azure, Google Cloud, or a folder in Files.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "直接从你自己的存储播放——S3、COS、OSS、Azure、Google Cloud，或“文件”App 里的一个文件夹。"
+          }
+        }
+      }
+    },
+    "Transcribes on the phone, and lets you fix any line in place.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在手机上转写成文字记录，哪一句不对就原地改。"
+          }
+        }
+      }
+    },
+    "Search finds the moment something was said, and plays from that second.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索能找到某句话说出口的那一刻，并从那一秒开始播放。"
+          }
+        }
+      }
+    },
+    "Try the sample library": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "试试示例资料库"
+          }
+        }
+      }
+    },
+    "Connect your storage": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接入你的存储"
+          }
+        }
+      }
+    },
+    "The sample library is kept apart from yours. Turn it off any time in Settings → Demo mode.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "示例资料库和你自己的资料库互不影响。随时可在 设置 → 演示模式 里关掉。"
+          }
+        }
+      }
+    },
+    "Search titles and what was said": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索标题和说过的话"
           }
         }
       }
