@@ -132,8 +132,8 @@ English + Simplified Chinese from the start, via a String Catalog
 
 ## Screenshots
 
-| Home | Browse by speaker, year & topic |
+| Search what was said | Fix any line |
 |:---:|:---:|
-| <img src="docs/release/screenshots/01-home.jpg" alt="Home" width="200"> | <img src="docs/release/screenshots/02-terms.jpg" alt="Browse by speaker, year and topic" width="200"> |
-| **Sources & Settings** | **Now Playing** |
-| <img src="docs/release/screenshots/07-settings.jpg" alt="Sources and Settings" width="200"> | <img src="docs/release/screenshots/06-player.jpg" alt="Now Playing" width="200"> |
+| <img src="docs/release/screenshots/01-search.jpg" alt="Search what was said" width="200"> | <img src="docs/release/screenshots/02-transcript.jpg" alt="Transcript" width="200"> |
+| **First run** | **Home** |
+| <img src="docs/release/screenshots/03-welcome.jpg" alt="First run" width="200"> | <img src="docs/release/screenshots/06-home.jpg" alt="Home" width="200"> |

@@ -158,6 +158,10 @@ struct RealPlayerView: View {
                                 // Longer: the transcript may still be loading on a fresh open.
                                 try? await Task.sleep(for: .milliseconds(600))
                                 follow(proxy)
+                                #if SCREENSHOTS
+                                try? await Task.sleep(for: .seconds(3))
+                                follow(proxy)
+                                #endif
                             }
                     } else {
                         ContentUnavailableView("Nothing playing", systemImage: "mic.slash")

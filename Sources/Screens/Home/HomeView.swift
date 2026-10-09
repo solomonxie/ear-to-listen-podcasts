@@ -65,6 +65,12 @@ struct HomeView: View {
             transcriptMatches = await homeData.transcriptMatches(for: query)
         }
         .task { await homeData.refresh() }
+        #if SCREENSHOTS
+        .task {
+            try? await Task.sleep(for: .seconds(7))
+            query = UserDefaults.standard.string(forKey: "query") ?? ""
+        }
+        #endif
         .onChange(of: PlaybackEngine.shared.isPresentingPlayer) { _, isShowing in
             if !isShowing { Task { await homeData.refresh() } }
         }
