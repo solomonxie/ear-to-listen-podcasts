@@ -57,8 +57,7 @@ enum FlaggedEpisodes {
 
     static func reasons(for track: Track, hasTranscript: Bool) -> Set<Reason> {
         // Nothing else can be filled in for an episode with nothing left to play.
-        // A transcript can still be listened to, spoken — see `VoiceTrack`.
-        if track.isLost { return hasTranscript ? [] : [.noAudio] }
+        if track.isLost { return [.noAudio] }
         var reasons: Set<Reason> = []
         if !hasTranscript { reasons.insert(.noTranscript) }
         if track.artistID == nil || track.albumID == nil { reasons.insert(.unplaced) }

@@ -168,24 +168,6 @@ struct TrackStore {
         }
     }
 
-    func setPrefersVoice(id: String, _ prefersVoice: Bool) throws {
-        try dbQueue.write { db in
-            try db.execute(sql: "UPDATE tracks SET prefersVoice = ? WHERE id = ?", arguments: [prefersVoice, id])
-        }
-    }
-
-    /// After its file was deleted from the bucket by the listener: no copies left to sync,
-    /// and the voice track plays from now on.
-    func markOriginalDeleted(id: String) throws {
-        try dbQueue.write { db in
-            try TrackFile.filter(Column("trackID") == id).deleteAll(db)
-            try db.execute(
-                sql: "UPDATE tracks SET originalDeletedAt = ?, prefersVoice = 1, isLost = 0 WHERE id = ?",
-                arguments: [Date(), id]
-            )
-        }
-    }
-
     /// Asks for these entries' tags to be read again (`SourceRefresh`).
     func markNeedsTags(ids: [String]) throws {
         guard !ids.isEmpty else { return }

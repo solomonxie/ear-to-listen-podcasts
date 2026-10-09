@@ -180,15 +180,12 @@ final class PlaybackEngine: ObservableObject {
         if track.isVideoOnly, let id = track.youTubeID { return loadYouTube(id, track: track) }
         youTube.stop()
         stopVirtualClock()
-        if let voice = VoiceTrack.playableURL(for: track) {
-            return start(url: voice, track: track)
-        }
         if track.isLost || track.originalDeletedAt != nil {
             // Gone from the bucket, but a copy played earlier may still be on the phone.
             if let cached = await AudioCache.shared.cachedURL(providerID: track.providerID, filePath: track.filePath) {
                 return start(url: cached, track: track)
             }
-            lastError = "No audio left for this episode. Make its voice track from the episode page to listen to its transcript."
+            lastError = "No audio left for this episode."
             return
         }
         do {

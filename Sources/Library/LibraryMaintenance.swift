@@ -6,8 +6,11 @@ import Foundation
 enum LibraryMaintenance {
     private static let doneKey = "maintenance.foldedScannedDuplicates"
 
+    private static let voiceTracksRemovedKey = "maintenance.removedVoiceTracks"
+
     @MainActor
     static func runOnce() {
+        removeVoiceTracksOnce()
         guard !UserDefaults.standard.bool(forKey: doneKey) else { return }
         UserDefaults.standard.set(true, forKey: doneKey)
         let dbQueue = DatabaseManager.shared.dbQueue
@@ -22,5 +25,14 @@ enum LibraryMaintenance {
                 await MainActor.run { NotificationCenter.default.post(name: .libraryDidChange, object: nil) }
             }
         }
+    }
+
+    /// Spoken-transcript files from the voice-track feature, which is gone.
+    @MainActor
+    private static func removeVoiceTracksOnce() {
+        guard !UserDefaults.standard.bool(forKey: voiceTracksRemovedKey) else { return }
+        UserDefaults.standard.set(true, forKey: voiceTracksRemovedKey)
+        let directory = URL.applicationSupportDirectory.appending(path: "voice", directoryHint: .isDirectory)
+        Task.detached(priority: .utility) { try? FileManager.default.removeItem(at: directory) }
     }
 }

@@ -76,9 +76,7 @@ struct Track: Codable, FetchableRecord, PersistableRecord, Identifiable, Sendabl
     /// Made from a listing alone — the title is the filename and nothing has been read
     /// from the file yet. See `SyncEngine.enrich`.
     var needsTags: Bool = false
-    /// Plays the spoken transcript (`VoiceTrack`) rather than the original audio.
-    var prefersVoice: Bool = false
-    /// The listener deleted the original from its bucket on purpose; the voice track is
-    /// what plays. Not lost — nothing went missing.
+    /// The listener deleted the original from its bucket on purpose (a feature since
+    /// removed). Not lost — nothing went missing.
     var originalDeletedAt: Date? = nil
 }

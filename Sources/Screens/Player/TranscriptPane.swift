@@ -15,7 +15,6 @@ import UniformTypeIdentifiers
 struct TranscriptPane: View {
     @ObservedObject var transcript = TranscriptRunner.shared
     @ObservedObject private var engine = PlaybackEngine.shared
-    @ObservedObject private var voiceRenderer = VoiceRenderer.shared
     /// The line being spoken, not the second it is: the page's clock ticks twice a second
     /// and the list below is a `ForEach` over every line of a forty-minute transcript, so
     /// handing it the raw time made SwiftUI walk all of them twice a second — while the
@@ -209,18 +208,6 @@ struct TranscriptPane: View {
                         isOn: transcript.isUploading
                     ) { isConfirmingUpload = true }
                         .disabled(transcript.lines.isEmpty || transcript.isRunning || transcript.isUploading)
-                }
-
-                // Listening to this transcript spoken instead of the original — `VoiceTrack`.
-                // Following the playing line is on the bottom bar.
-                if let playing = engine.currentTrack, playing.id == transcript.track?.id, !playing.isVideoOnly {
-                    let voiceOn = playing.prefersVoice || playing.isLost || playing.originalDeletedAt != nil
-                    TranscriptControlButton(
-                        title: voiceRenderer.progress[playing.id].map { "Voice \(Int($0 * 100))%" } ?? "Voice",
-                        systemImage: voiceOn ? "person.wave.2.fill" : "person.wave.2",
-                        isOn: voiceOn
-                    ) { voiceRenderer.setListening(voice: !playing.prefersVoice, track: playing) }
-                        .disabled(transcript.lines.isEmpty || voiceRenderer.isRendering(playing.id))
                 }
 
                 Spacer(minLength: 0)
