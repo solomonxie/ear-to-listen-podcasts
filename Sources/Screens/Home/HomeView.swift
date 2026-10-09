@@ -279,7 +279,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal)
-        } else if results.isEmpty {
+        } else if results.isEmpty, transcriptMatches.isEmpty {
             ContentUnavailableView.search(text: query)
                 .padding(.top, 40)
         } else {
