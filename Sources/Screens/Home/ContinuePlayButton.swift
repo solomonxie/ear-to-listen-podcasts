@@ -37,32 +37,21 @@ struct ContinuePlayButton: View {
     }
 }
 
-/// A list section that starts folded: its header is the switch, and says how many rows
-/// are behind it.
-struct FoldedSection<Content: View>: View {
+/// A list section showing its first few rows, the rest behind "Show all" (`ShowMoreList`).
+/// The header says how many there are.
+struct FoldedSection<Item: Identifiable, Row: View>: View {
     let title: LocalizedStringKey
-    let count: Int
-    @ViewBuilder let content: () -> Content
-    @State private var isExpanded = false
+    let items: [Item]
+    @ViewBuilder let row: (Item) -> Row
 
     var body: some View {
         Section {
-            if isExpanded { content() }
+            ShowMoreList(items: items, row: row)
         } header: {
-            Button {
-                withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() }
-            } label: {
-                HStack {
-                    Text(title)
-                    Text("\(count)").foregroundStyle(.secondary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .font(.footnote.weight(.semibold))
-                }
-                .contentShape(Rectangle())
+            HStack {
+                Text(title)
+                Text("\(items.count)").foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
         }
     }
 }

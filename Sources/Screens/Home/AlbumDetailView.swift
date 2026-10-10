@@ -61,16 +61,14 @@ struct AlbumDetailView: View {
 
             Section { ContinuePlayButton(tracks: tracks) }
 
-            FoldedSection(title: "Episodes", count: tracks.count) {
-                ForEach(tracks) { track in
-                    Button {
-                        // The whole collection is the queue.
-                        PlaybackEngine.shared.open(track: track, queue: tracks)
-                    } label: {
-                        TrackRow(track: track)
-                    }
-                    .buttonStyle(.plain)
+            FoldedSection(title: "Episodes", items: tracks) { track in
+                Button {
+                    // The whole collection is the queue.
+                    PlaybackEngine.shared.open(track: track, queue: tracks)
+                } label: {
+                    TrackRow(track: track)
                 }
+                .buttonStyle(.plain)
             }
 
             Section {
