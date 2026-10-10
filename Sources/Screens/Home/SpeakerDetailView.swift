@@ -78,24 +78,20 @@ struct SpeakerDetailView: View {
 
             Section { ContinuePlayButton(tracks: tracks) }
 
-            FoldedSection(title: "Albums", count: albums.count) {
-                ForEach(albums) { album in
-                    NavigationLink { AlbumDetailView(album: album) } label: {
-                        AlbumRow(album: album)
-                    }
+            FoldedSection(title: "Albums", items: albums) { album in
+                NavigationLink { AlbumDetailView(album: album) } label: {
+                    AlbumRow(album: album)
                 }
             }
 
-            FoldedSection(title: "Episodes", count: tracks.count) {
-                ForEach(tracks) { track in
-                    Button {
-                        // Everything of theirs is the queue.
-                        PlaybackEngine.shared.open(track: track, queue: tracks)
-                    } label: {
-                        TrackRow(track: track)
-                    }
-                    .buttonStyle(.plain)
+            FoldedSection(title: "Episodes", items: tracks) { track in
+                Button {
+                    // Everything of theirs is the queue.
+                    PlaybackEngine.shared.open(track: track, queue: tracks)
+                } label: {
+                    TrackRow(track: track)
                 }
+                .buttonStyle(.plain)
             }
 
             Section {
