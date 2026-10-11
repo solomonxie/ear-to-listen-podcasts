@@ -255,18 +255,17 @@ struct RealPlayerView: View {
                 if let lastError = engine.lastError {
                     Text(lastError).font(.footnote).foregroundStyle(.orange).padding(.horizontal)
                 }
-                EpisodeDetailsPane(playingTrack: track)
-
-                NotesPane(
-                    bookmarks: bookmarks,
-                    youTubeID: { _ in track.youTubeID },
-                    highlighted: highlightedBookmark,
-                    onAdd: { addBookmark(to: track, proxy: proxy) },
-                    onPlay: { engine.seek(to: $0.position) },
-                    onChange: { refreshBookmarks(track) }
-                )
-                .padding(.horizontal)
-                .id(Self.notesAnchor)
+                EpisodeDetailsPane(playingTrack: track) {
+                    NotesPane(
+                        bookmarks: bookmarks,
+                        title: "BOOKMARKS",
+                        youTubeID: { _ in track.youTubeID },
+                        highlighted: highlightedBookmark,
+                        onPlay: { engine.seek(to: $0.position) },
+                        onChange: { refreshBookmarks(track) }
+                    )
+                    .id(Self.notesAnchor)
+                }
 
                 Divider()
                     .padding(.horizontal)
@@ -606,16 +605,6 @@ struct RealPlayerView: View {
             withAnimation(.easeInOut(duration: 0.4)) { highlightedBookmark = nil }
         }
         return saved
-    }
-
-    /// Saves the mark and then shows it: the page goes to Notes, the new row lights up,
-    /// and its pencil is the way in to saying why. Only for the button that already lives
-    /// in Notes — pressed from deep inside the transcript, going to the mark means leaving
-    /// the line that was worth marking.
-    private func addBookmark(to track: Track, proxy: ScrollViewProxy) {
-        guard let saved = markMoment(track) else { return }
-        isFollowingTranscript = false
-        withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(saved.id, anchor: .center) }
     }
 
     private func refreshBookmarks(_ track: Track) {

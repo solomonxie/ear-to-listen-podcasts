@@ -38,9 +38,19 @@ struct EpisodeSummaryView: View {
     private let trackStore = TrackStore(dbQueue: DatabaseManager.shared.dbQueue)
     private let summarizer = EpisodeSummarizer()
 
-    init(track: Track, analyzeRequest: Int = 0, onAnalyzed: (() -> Void)? = nil) {
+    /// The page's one ✨: reads the episode for its details, then writes this summary.
+    /// Nil while there's no complete transcript to read.
+    var onSuggest: (() -> Void)?
+    var isSuggesting = false
+
+    init(
+        track: Track, analyzeRequest: Int = 0, isSuggesting: Bool = false,
+        onSuggest: (() -> Void)? = nil, onAnalyzed: (() -> Void)? = nil
+    ) {
         self.track = track
         self.analyzeRequest = analyzeRequest
+        self.isSuggesting = isSuggesting
+        self.onSuggest = onSuggest
         self.onAnalyzed = onAnalyzed
         _summary = State(initialValue: track.summary ?? "")
     }
@@ -62,12 +72,14 @@ struct EpisodeSummaryView: View {
             if isEditing {
                 editor
             } else if summary.isEmpty {
-                Text(hasTranscript
-                     ? "Nothing yet. ✨ above writes one from the transcript — what it is, the moments worth going back to, and where it lands."
-                     : "Nothing yet. Transcribe this episode and ✨ above will write one; or write your own.")
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
-                    .onTapGesture { beginEditing() }
+                if let onSuggest, !isBusy {
+                    Button(action: onSuggest) {
+                        Label("Summarize from transcript", systemImage: "sparkles")
+                            .font(.footnote.weight(.medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                }
             } else {
                 text
             }
@@ -103,19 +115,33 @@ struct EpisodeSummaryView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 18) {
             Text("SUMMARY").sectionHeading()
             Spacer()
-            if isRunning {
+            if isBusy {
                 ProgressView().controlSize(.mini)
-            } else if isOpen, !isEditing, !summary.isEmpty {
-                Button("Edit") { beginEditing() }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
+            } else if isEditing {
+                // Up here rather than under the field: below it they sat behind the keyboard.
+                Button("Cancel") {
+                    isEditing = false
+                    isTyping = false
+                }
+                Button("Save") { save() }.fontWeight(.semibold)
+            } else {
+                if let onSuggest {
+                    Button(action: onSuggest) { Image(systemName: "sparkles") }
+                        .accessibilityLabel("Read with AI")
+                }
+                Button { beginEditing() } label: { Image(systemName: "pencil") }
+                    .accessibilityLabel("Edit summary")
             }
         }
+        .font(.subheadline)
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.accentColor)
     }
+
+    private var isBusy: Bool { isRunning || isSuggesting }
 
     private var text: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -162,18 +188,6 @@ struct EpisodeSummaryView: View {
                 .font(.footnote)
                 .lineLimit(4...20)
                 .focused($isTyping)
-            HStack(spacing: 12) {
-                Button("Cancel") {
-                    isEditing = false
-                    isTyping = false
-                }
-                .font(.caption)
-                Spacer(minLength: 0)
-                Button("Save") { save() }
-                    .font(.caption.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
             // Times keep working in what you typed, so a hand-written summary can point
             // at moments too.
             Text("[12:34] anywhere in the text plays from there.")

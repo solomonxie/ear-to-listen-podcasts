@@ -1,13 +1,12 @@
 import PhotosUI
 import SwiftUI
 
-/// What the episode is about, under the transport: one line of facts, the summary, the
-/// terms it keeps coming back to, and the listener's own impressions — the things read
-/// while listening. Title, speaker and album are already under the cover, and changing any
-/// of it is Edit's sheet; the file, its size, its playlists and its picture fold away
-/// under More details, unfolding in place.
-struct EpisodeDetailsPane: View {
+/// What the episode is about, under the transport: one line of facts, the summary and
+/// what it mentions, the bookmarks, and the rarely needed file details folded at
+/// the end. Sections with nothing in them aren't drawn.
+struct EpisodeDetailsPane<Bookmarks: View>: View {
     let playingTrack: Track
+    @ViewBuilder let bookmarksSection: () -> Bookmarks
 
     /// Re-read rather than taken from `PlaybackEngine`, whose copy was loaded before
     /// playback started — "Stopped at" would otherwise show where the last session ended.
@@ -19,7 +18,7 @@ struct EpisodeDetailsPane: View {
     @State private var terms: [TermCount] = []
     @State private var showingAddToPlaylist = false
     @State private var showingEdit = false
-    @State private var showsMore = false
+    @State private var showsInfo = false
     @State private var isAddingTerm = false
     @State private var newTerm = ""
     /// Every place this episode's audio is — usually one, more when the same recording
@@ -38,11 +37,10 @@ struct EpisodeDetailsPane: View {
     /// Which track the fields are currently holding. Playback can move on mid-edit, and
     /// without this the half-typed year would be saved onto whatever came next.
     @State private var draftTrackID = ""
-    @FocusState private var focusedField: EpisodeField?
 
     @State private var artworkItem: PhotosPickerItem?
     @State private var isSuggesting = false
-    /// Bumped to set the summary card going once the fields are in — see `suggestButton`.
+    /// Bumped to set the summary card going once the fields are in — see `suggest`.
     @State private var analyzeRequest = 0
     @State private var suggestionError: String?
     @State private var readiness: EpisodeMetadataSuggester.Readiness = .noTranscript
@@ -55,50 +53,40 @@ struct EpisodeDetailsPane: View {
 
     private var track: Track { latest ?? playingTrack }
 
+    /// A blank summary is only worth a section when ✨ can write one.
+    private var showsSummary: Bool {
+        !(track.summary ?? "").isEmpty || readiness.isReady || isSuggesting
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             if track.isLost {
                 Label("Missing from the last sync — the file wasn't in the bucket listing.", systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: 14) {
-                Text("ABOUT").sectionHeading()
-                Spacer(minLength: 8)
-                suggestButton
-                Button("Edit") { showingEdit = true }
-                    .font(.caption)
-            }
-            if let suggestionError {
-                Text(suggestionError).font(.caption).foregroundStyle(.orange)
-            } else if let blockedReason = readiness.blockedReason {
-                Text(blockedReason).font(.caption2).foregroundStyle(.tertiary)
-            }
+            factsLine
 
-            // The title, speaker and album are under the cover already; what's left fits
-            // on one line, and changing any of it is what Edit is for.
-            if let facts {
-                Text(facts).font(.footnote).foregroundStyle(.secondary)
+            if showsSummary {
+                VStack(alignment: .leading, spacing: 8) {
+                    EpisodeSummaryView(
+                        track: track, analyzeRequest: analyzeRequest,
+                        isSuggesting: isSuggesting,
+                        onSuggest: readiness.isReady ? { Task { await suggest() } } : nil,
+                        onAnalyzed: { loadTerms() }
+                    )
+                    if let suggestionError {
+                        Text(suggestionError).font(.caption).foregroundStyle(.orange)
+                    }
+                }
             }
 
-            moreDetails
+            if !terms.isEmpty { termsRow }
 
-            EpisodeSummaryView(track: track, analyzeRequest: analyzeRequest, onAnalyzed: { loadTerms() })
+            bookmarksSection()
 
-            termsRow
-
-            VStack(alignment: .leading, spacing: 6) {
-                // Named for whose words these are: the only text on the page nobody but
-                // the listener can write.
-                Text("MY IMPRESSIONS").sectionHeading()
-                TextField("What you made of it", text: $notes, axis: .vertical)
-                    .font(.footnote)
-                    .lineLimit(1...8)
-                    .focused($focusedField, equals: .notes)
-                    .padding(10)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-            }
+            episodeInfo
         }
         .padding(.horizontal)
         // The sheet posts nothing when it adds to a hand-made list, so the row reloads
@@ -120,18 +108,14 @@ struct EpisodeDetailsPane: View {
         }
         .task(id: playingTrack.id) { await load() }
         // Off the main actor: it reads every timed line of the transcript to work out how
-        // much of the episode is covered, which is not something to do on the thread
-        // drawing the page it sits on.
+        // much of the episode is covered.
         .task(id: playingTrack.id) {
             let episode = track
             readiness = await Task.detached(priority: .utility) {
                 EpisodeMetadataSuggester().readiness(track: episode)
             }.value
         }
-        // Sync and the other editors hold their own copies of these rows; this is what
-        // puts their changes on screen without waiting for the next track change.
-        // Coalesced: a sync posts one of these per imported file, and each reload redraws
-        // the card on the page being read.
+        // Coalesced: a sync posts one of these per imported file.
         .onReceive(NotificationCenter.default.publisher(for: .libraryDidChange)) { _ in
             reloadTask?.cancel()
             reloadTask = Task {
@@ -140,74 +124,95 @@ struct EpisodeDetailsPane: View {
                 await load()
             }
         }
-        // Leaving a field is the commit. Scrolling away, or the page closing, counts too.
-        .onChange(of: focusedField) { previous, _ in
-            if previous != nil { save() }
-        }
         .onChange(of: artworkItem) { _, item in
             Task { await handleArtworkPick(item) }
         }
-        .onDisappear { save() }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField = nil }
+    }
+
+    /// Year · length · language, then the playlists it's on — which is also the way onto one.
+    private var factsLine: some View {
+        HStack(spacing: 6) {
+            if let facts {
+                Text(facts).foregroundStyle(.secondary)
+                Text("·").foregroundStyle(.tertiary)
             }
+            Button { showingAddToPlaylist = true } label: {
+                Text(playlistLabel)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            Spacer(minLength: 0)
+        }
+        .font(.footnote)
+        .lineLimit(1)
+    }
+
+    private var playlistLabel: LocalizedStringKey {
+        switch playlistNames.count {
+        case 0: "Add to playlist"
+        case 1: "In \(playlistNames[0])"
+        default: "In \(playlistNames.count) playlists"
         }
     }
 
-    /// Year · length · size · language, whichever are known. Nil when none are.
+    /// Year · length · language, whichever are known. Nil when none are.
     private var facts: String? {
         let language = (track.language ?? album?.language ?? artist?.language)
             .map { TranscriptPane.languageName(Locale(identifier: $0)) }
         let parts = [
             (track.year ?? album?.year).map(String.init),
             track.durationMs.map(TrackRow.formattedDuration),
-            track.sizeBytes.map { $0.formatted(.byteCount(style: .file)) },
             language,
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// One line, scrolled sideways: the names the episode keeps coming back to, most-said
-    /// first. A wrapping wall of two dozen chips was most of the old card's height.
+    /// first.
     private var termsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(terms) { term in
-                    NavigationLink(value: PlayerRoute.term(term.term)) {
-                        TermChip(term: term)
+        HStack(spacing: 8) {
+            Text("Mentioned").sectionRowSecondary()
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(terms) { term in
+                        NavigationLink(value: PlayerRoute.term(term.term)) {
+                            TermChip(term: term)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Delete", systemImage: "trash", role: .destructive) { removeTerm(term) }
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button("Delete", systemImage: "trash", role: .destructive) { removeTerm(term) }
-                    }
+                    addTermButton
                 }
-                Button { isAddingTerm = true } label: {
-                    Image(systemName: "plus")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.quaternary, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Add a term")
             }
         }
     }
 
-    /// What's looked up now and then — the file, the lists it's on, the
-    /// picture — folded away, unfolding in place when asked for.
+    private var addTermButton: some View {
+        Button { isAddingTerm = true } label: {
+            Image(systemName: "plus")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.quaternary, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a term")
+    }
+
+    /// The file, its size, its picture and its tags — looked up now and then, so folded
+    /// at the end of the page's details rather than ahead of them.
     @ViewBuilder
-    private var moreDetails: some View {
+    private var episodeInfo: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) { showsMore.toggle() }
+            withAnimation(.easeInOut(duration: 0.2)) { showsInfo.toggle() }
         } label: {
             HStack(spacing: 4) {
-                Text("More details")
+                Text("Episode info")
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
-                    .rotationEffect(.degrees(showsMore ? 90 : 0))
+                    .rotationEffect(.degrees(showsInfo ? 90 : 0))
                 Spacer()
             }
             .font(.footnote)
@@ -216,14 +221,23 @@ struct EpisodeDetailsPane: View {
         }
         .buttonStyle(.plain)
 
-        if showsMore {
+        if showsInfo {
             VStack(alignment: .leading, spacing: 4) {
+                Button { showingEdit = true } label: {
+                    Label("Edit title, speaker and album", systemImage: "pencil")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, minHeight: DetailLayout.rowHeight, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                if let size = track.sizeBytes {
+                    DetailRow(label: "Size", value: size.formatted(.byteCount(style: .file)))
+                }
                 // One row per copy: the same recording in two buckets is one episode with
                 // two addresses, not two episodes.
                 ForEach(Array(copies.enumerated()), id: \.element.id) { index, copy in
                     FilePathRow(label: index == 0 ? "File" : "Also at", location: copy)
                 }
-                PlaylistsRow(names: playlistNames, onAdd: { showingAddToPlaylist = true })
                 ArtworkSourceRow(
                     subject: artworkSubject,
                     hasArtwork: track.artworkFileName != nil,
@@ -235,55 +249,21 @@ struct EpisodeDetailsPane: View {
                     onUse: { data in Task { await saveArtwork(data) } },
                     onRemove: { setArtwork(nil) }
                 )
+                if terms.isEmpty {
+                    Button { isAddingTerm = true } label: {
+                        Label("Add a term", systemImage: "tag")
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity, minHeight: DetailLayout.rowHeight, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                }
             }
             .padding(12)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
             .transition(.opacity)
         }
     }
-
-    /// **The page's one ✨.** It used to be two — this one for the fields, another in the
-    /// summary's own heading — which asked the reader to know which half of "read this
-    /// episode and tell me about it" each sparkle did. They are one pass now: the details,
-    /// then the summary and the terms under it.
-    ///
-    /// Up in the card's heading rather than at the foot of the fields it fills in. Down
-    /// there it sat a few points under the row of artwork buttons, which made one more
-    /// capsule in a row of capsules — and it isn't an artwork control at all.
-    private var suggestButton: some View {
-        Button {
-            Task { await suggest() }
-        } label: {
-            HStack(spacing: 5) {
-                Label("Read with AI", systemImage: "sparkles")
-                if isSuggesting { ProgressView().controlSize(.mini) }
-            }
-            .font(.caption)
-        }
-        .disabled(isSuggesting || !readiness.isReady)
-    }
-
-    /// One listing of the sources, not one per copy: an episode with three addresses
-    /// otherwise asked the same question three times.
-    private nonisolated static func copies(of track: Track, providers records: [ProviderRecord]) -> [FileLocation] {
-        let files = (try? TrackFileStore(dbQueue: DatabaseManager.shared.dbQueue).all(forTrack: track.id)) ?? []
-        // The copy it plays from reads first, whatever order they were found in.
-        let ordered = files.sorted { left, _ in
-            left.providerID == track.providerID && left.filePath == track.filePath
-        }
-        return ordered.compactMap { file in
-            guard let record = records.first(where: { $0.id == file.providerID }) else { return nil }
-            let uri = ProviderManager.shared.fileURI(for: record, filePath: file.filePath)
-                ?? "\(record.label)/\(file.filePath)"
-            return FileLocation(
-                id: file.id, providerID: file.providerID, filePath: file.filePath,
-                // Said on the row rather than left to be discovered by tapping it: a link
-                // to a file that isn't there any more is worse than a plain line of text.
-                label: file.isLost ? "\(uri) — missing" : uri
-            )
-        }
-    }
-
 
     /// Everything this card shows, read in one pass off the main actor and put on screen
     /// together. Eight queries and a keychain read for the file's bucket is not much, but
@@ -304,7 +284,7 @@ struct EpisodeDetailsPane: View {
                 playlistNames: (track.listenLater ? ["Listen Later"] : [])
                     + ((try? playlistStore.playlists(containingTrack: track.id)) ?? []).map(\.name),
                 terms: (try? termStore.terms(forTrack: track.id)) ?? [],
-                copies: Self.copies(of: track, providers: (try? providerStore.all()) ?? [])
+                copies: EpisodeCopies.all(of: track, providers: (try? providerStore.all()) ?? [])
             )
         }.value
         guard playingTrack.id == loaded.track.id else { return }
@@ -315,11 +295,6 @@ struct EpisodeDetailsPane: View {
         playlistNames = loaded.playlistNames
         terms = loaded.terms
         copies = loaded.copies
-        // Half-typed words outrank whatever the database says — a sync landing mid-edit
-        // must not pull the text out from under the cursor. A different track is the one
-        // exception: those words have nowhere left to go.
-        guard draftTrackID != track.id || (focusedField == nil && snapshot == savedSnapshot) else { return }
-        if draftTrackID != track.id { focusedField = nil }
         fillFields()
     }
 
@@ -451,7 +426,6 @@ struct EpisodeDetailsPane: View {
             if let suggested = suggestion.artist { artistName = suggested }
             if let suggested = suggestion.album { albumName = suggested }
             if let suggested = suggestion.year { year = String(suggested) }
-            if let suggested = suggestion.notes { notes = suggested }
             save()
         } catch {
             suggestionError = error.localizedDescription
@@ -468,11 +442,6 @@ struct EpisodeDetailsPane: View {
     }
 }
 
-/// The one field typed into on the card.
-private enum EpisodeField: Hashable {
-    case notes
-}
-
 /// How wide the label column is. Fixed, so every value in a card starts at the same
 /// place and sits next to the word that names it. Pushing labels left and values right
 /// put a hand's width of nothing between "Size" and "24.1 MB", and made a card of short
@@ -485,41 +454,43 @@ private enum DetailLayout {
     static let rowHeight: CGFloat = 44
 }
 
-/// Which lists this episode is on, and the way onto another one. Chips rather than a
-/// line of text: an episode is on none or a few, and "none" has to still be a control —
-/// a row that only appears once it has something in it can't be used to put the first
-/// thing in. Taking it off a list stays on the list's own page, where the rest of that
-/// list is visible to take it out of.
-private struct PlaylistsRow: View {
-    let names: [String]
-    let onAdd: () -> Void
+private struct DetailRow: View {
+    let label: LocalizedStringKey
+    let value: String
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Playlists")
+            Text(label)
                 .sectionRowSecondary()
                 .frame(width: DetailLayout.labelWidth, alignment: .leading)
-            FlowLayout(spacing: 6) {
-                ForEach(names, id: \.self) { name in
-                    Text(name)
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.quaternary, in: Capsule())
-                }
-                Button(action: onAdd) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.quaternary, in: Capsule())
-                        .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(.plain)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(value)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(minHeight: DetailLayout.rowHeight)
+    }
+}
+
+private enum EpisodeCopies {
+    /// One listing of the sources, not one per copy: an episode with three addresses
+    /// otherwise asked the same question three times.
+    nonisolated static func all(of track: Track, providers records: [ProviderRecord]) -> [FileLocation] {
+        let files = (try? TrackFileStore(dbQueue: DatabaseManager.shared.dbQueue).all(forTrack: track.id)) ?? []
+        // The copy it plays from reads first, whatever order they were found in.
+        let ordered = files.sorted { left, _ in
+            left.providerID == track.providerID && left.filePath == track.filePath
+        }
+        return ordered.compactMap { file in
+            guard let record = records.first(where: { $0.id == file.providerID }) else { return nil }
+            let uri = ProviderManager.shared.fileURI(for: record, filePath: file.filePath)
+                ?? "\(record.label)/\(file.filePath)"
+            return FileLocation(
+                id: file.id, providerID: file.providerID, filePath: file.filePath,
+                // Said on the row rather than left to be discovered by tapping it: a link
+                // to a file that isn't there any more is worse than a plain line of text.
+                label: file.isLost ? "\(uri) — missing" : uri
+            )
+        }
     }
 }
 

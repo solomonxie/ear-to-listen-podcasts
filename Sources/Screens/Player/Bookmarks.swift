@@ -107,6 +107,7 @@ struct BookmarkRow: View {
 /// mark gets made too late — and the note is written afterwards, in the row itself.
 struct NotesPane: View {
     let bookmarks: [Bookmark]
+    var title: LocalizedStringKey = "BOOKMARKS AND NOTES"
     /// Shown per row where the list spans more than one episode.
     var episodeTitle: (Bookmark) -> String? = { _ in nil }
     /// The video a mark's episode is, where it's a YouTube one.
@@ -136,10 +137,17 @@ struct NotesPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("BOOKMARKS AND NOTES").sectionHeading()
+                Text(title).sectionHeading()
                 Spacer()
                 if !bookmarks.isEmpty {
                     Text(countLabel).font(.caption).foregroundStyle(.secondary)
+                    Button { showingInsights = true } label: {
+                        Image(systemName: "sparkles").font(.subheadline)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.leading, 10)
+                    .accessibilityLabel("AI insights from these notes")
                 }
             }
             if bookmarks.isEmpty {
@@ -161,16 +169,6 @@ struct NotesPane: View {
             if let onAdd {
                 Button(action: onAdd) {
                     Label("Add a bookmark at current time", systemImage: "bookmark.fill")
-                        .font(.footnote.weight(.medium))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.regular)
-            }
-            if !bookmarks.isEmpty {
-                Button { showingInsights = true } label: {
-                    Label("AI insights from these notes", systemImage: "sparkles")
                         .font(.footnote.weight(.medium))
                         .frame(maxWidth: .infinity)
                 }
