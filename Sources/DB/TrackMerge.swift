@@ -177,7 +177,6 @@ enum TrackMerge {
             try db.execute(sql: "UPDATE transcripts SET trackID = ? WHERE trackID = ?", arguments: [keeper.id, duplicate.id])
         }
 
-        try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [duplicate.id])
         // Cascades take whatever the moves above left behind. Gone before the keeper is
         // saved: the keeper may be taking over the duplicate's file path.
         _ = try Track.deleteOne(db, key: duplicate.id)

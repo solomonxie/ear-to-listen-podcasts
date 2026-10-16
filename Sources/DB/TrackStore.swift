@@ -52,11 +52,6 @@ struct TrackStore {
             if row.neglectedAt == nil, try Self.parentIsNeglected(row, in: db) { row.neglectedAt = Date() }
             try row.save(db)
             try Self.link(row, toTrack: row.id, in: db)
-            try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [row.id])
-            try db.execute(
-                sql: "INSERT INTO trackSearchIndex(trackID, title, artist, album) VALUES (?, ?, ?, ?)",
-                arguments: [row.id, row.title, artistName ?? "", albumName ?? ""]
-            )
         }
     }
 
@@ -142,10 +137,6 @@ struct TrackStore {
                 )
                 try track.insert(db)
                 try Self.link(track, toTrack: track.id, in: db)
-                try db.execute(
-                    sql: "INSERT INTO trackSearchIndex(trackID, title, artist, album) VALUES (?, ?, '', '')",
-                    arguments: [track.id, track.title]
-                )
                 added += 1
             }
             return added
@@ -218,11 +209,6 @@ struct TrackStore {
             if track.neglectedAt == nil, try Self.parentIsNeglected(track, in: db) { track.neglectedAt = Date() }
             track.updatedAt = Date()
             try track.update(db)
-            try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [id])
-            try db.execute(
-                sql: "INSERT INTO trackSearchIndex(trackID, title, artist, album) VALUES (?, ?, ?, ?)",
-                arguments: [id, track.title, artist?.name ?? "", album?.name ?? ""]
-            )
             // Now that its length is known, it may turn out to be an episode already here.
             try TrackMerge.foldArrival(id, in: db)
         }
@@ -302,7 +288,6 @@ struct TrackStore {
     }
 
     private static func forget(_ trackID: String, in db: Database) throws {
-        try db.execute(sql: "DELETE FROM trackSearchIndex WHERE trackID = ?", arguments: [trackID])
         _ = try Track.deleteOne(db, key: trackID)
     }
 
@@ -857,18 +842,6 @@ struct TrackStore {
                 .order(Column("lastPlayedAt").desc)
                 .limit(limit)
                 .fetchAll(db)
-        }
-    }
-
-    func search(_ query: String) throws -> [Track] {
-        guard !query.isEmpty else { return [] }
-        return try dbQueue.read { db in
-            try Track.fetchAll(db, sql: """
-                SELECT tracks.* FROM tracks
-                JOIN trackSearchIndex ON trackSearchIndex.trackID = tracks.id
-                WHERE trackSearchIndex MATCH ? AND tracks.neglectedAt IS NULL
-                ORDER BY rank
-                """, arguments: ["\(query)*"])
         }
     }
 }

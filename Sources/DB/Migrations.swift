@@ -738,6 +738,11 @@ enum Migrations {
             }
         }
 
+        // Never read, and every write to it scanned the whole index.
+        migrator.registerMigration("v47_drop_track_search_index") { db in
+            try db.execute(sql: "DROP TABLE IF EXISTS trackSearchIndex")
+        }
+
 
         return migrator
     }
