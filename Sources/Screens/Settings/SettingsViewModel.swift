@@ -4,7 +4,6 @@ import Foundation
 final class SettingsViewModel: ObservableObject {
     @Published var providers: [ProviderRecord] = []
     @Published var testResults: [String: ConnectionTestResult] = [:]
-    @Published var spotifyClientID: String = ""
     @Published var aiKeys: [AiKey] = []
     @Published var aiKeyStrategy: AiKeyStrategy = .sequential
     @Published var errorMessage: String?
@@ -33,7 +32,6 @@ final class SettingsViewModel: ObservableObject {
     func load() {
         do {
             providers = try providerStore.all()
-            spotifyClientID = try credentials.get(SpotifyImportSource.clientIDKey) ?? ""
             aiKeys = try aiKeyStore.all()
             aiKeyStrategy = AiRouter.strategy
         } catch {
@@ -222,14 +220,6 @@ final class SettingsViewModel: ObservableObject {
             } catch {
                 testResults[record.id] = ConnectionTestResult(isSuccess: false, message: error.localizedDescription)
             }
-        }
-    }
-
-    func saveSpotifyClientID() {
-        do {
-            try credentials.set(spotifyClientID, forKey: SpotifyImportSource.clientIDKey)
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 

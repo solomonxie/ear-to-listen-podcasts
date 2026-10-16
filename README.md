@@ -22,7 +22,7 @@ local sources, per-source sync frequency + manual "Sync Now", and a foreground
 
 ```
 EarToListenApp.swift:init()
-  registers CloudProviders (S3/COS/OSS, Azure, GCS, Local) + SpotifyImportSource
+  registers CloudProviders (S3/COS/OSS, Azure, GCS, Local)
         │
         ▼
 ContentView.swift
