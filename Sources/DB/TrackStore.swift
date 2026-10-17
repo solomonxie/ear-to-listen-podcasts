@@ -628,6 +628,23 @@ struct TrackStore {
         }
     }
 
+    /// One episode's sidecars, as found by listing its own folder.
+    func updateTranscriptPaths(providerID: String, filePath: String, paths: [String]?) throws {
+        try dbQueue.write { db in
+            let matches = Column("providerID") == providerID && Column("filePath") == filePath
+            for var file in try TrackFile.filter(matches).fetchAll(db) where file.transcriptPaths != paths {
+                file.transcriptPath = paths?.first
+                file.transcriptPaths = paths
+                try file.update(db)
+            }
+            for var track in try Track.filter(matches).fetchAll(db) where track.transcriptPaths != paths {
+                track.transcriptPath = paths?.first
+                track.transcriptPaths = paths
+                try track.update(db)
+            }
+        }
+    }
+
     /// Numbers apart episodes that share a title, one album at a time. Returns how many
     /// were renamed.
     ///

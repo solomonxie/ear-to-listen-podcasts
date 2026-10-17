@@ -238,14 +238,34 @@ final class TranscriptRunner: ObservableObject {
             guard let self, track?.id == newTrack.id else { return }
             segments = stored.segments
             edits = stored.edits
+            await discoverSidecars(track: newTrack)
 
             // A transcript already sitting beside the audio is the cheapest one there is,
             // so look before spending anything. Always, whenever nothing is stored — a
             // recorded path makes it one request instead of a few, but its absence is not
             // evidence there's no transcript.
-            guard segments.isEmpty else { return }
-            await importSidecar(track: newTrack)
+            guard segments.isEmpty, let track else { return }
+            await importSidecar(track: track)
         }
+    }
+
+    /// Lists the episode's own folder for transcript files, so language chips don't wait
+    /// on the next sync — one listing per episode opened, not a probe per language.
+    private func discoverSidecars(track: Track) async {
+        guard track.youTubeID == nil,
+              let record = try? providerStore.all().first(where: { $0.id == track.providerID }),
+              let provider = try? ProviderManager.shared.provider(for: record) else { return }
+        let folder = (track.filePath as NSString).deletingLastPathComponent
+        guard let listing = try? await provider.listDirectory(atFolder: folder.isEmpty ? nil : folder),
+              self.track?.id == track.id else { return }
+        let found = TranscriptFile.sidecarSetsByAudioPath(in: listing.files)[track.filePath]
+        guard found != track.transcriptPaths else { return }
+        try? trackStore.updateTranscriptPaths(providerID: track.providerID, filePath: track.filePath, paths: found)
+        var updated = track
+        updated.transcriptPath = found?.first
+        updated.transcriptPaths = found
+        self.track = updated
+        sidecarLanguages = TranscriptSidecar.languages(for: updated)
     }
 
     private nonisolated static func stored(
