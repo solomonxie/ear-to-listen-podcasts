@@ -171,7 +171,32 @@ targets:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
 
+  EarToListenUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: EarToListen
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).uitests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: EarToListen
+
 schemes:
+  ReviewWalkthrough:
+    build:
+      targets:
+        EarToListen: all
+        EarToListenUITests: [test]
+    test:
+      targets:
+        - EarToListenUITests
   EarToListen:
     build:
       targets:
