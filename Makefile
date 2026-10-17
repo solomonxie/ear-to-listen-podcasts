@@ -61,8 +61,8 @@ screenshots:
 # Release, never Debug: a Debug build carries a ~50 MB .debug.dylib and means nothing.
 size: gen
 	$(XCB) -configuration Release -destination 'generic/platform=iOS' \
-	  -derivedDataPath build/dd-release CODE_SIGNING_ALLOWED=NO build
-	@du -sh build/dd-release/Build/Products/Release-iphoneos/EarToListen.app
+	  -derivedDataPath /tmp/eartolisten-build/dd-release CODE_SIGNING_ALLOWED=NO build
+	@du -sh /tmp/eartolisten-build/dd-release/Build/Products/Release-iphoneos/EarToListen.app
 
 clean:
-	rm -rf build
+	rm -rf /tmp/eartolisten-build

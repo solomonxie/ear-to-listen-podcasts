@@ -10,9 +10,9 @@ don't fall back to a simulator.
 xcodegen generate   # after adding/removing any file under Sources/ or Tests/
 xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
   -destination 'id=<device-udid>' -skipPackagePluginValidation \
-  -skipMacroValidation -allowProvisioningUpdates -derivedDataPath build/dd-install build
+  -skipMacroValidation -allowProvisioningUpdates -derivedDataPath /tmp/eartolisten-build/dd-install build
 xcrun devicectl device install app --device <device-udid> \
-  build/dd-install/Build/Products/Debug-iphoneos/EarToListen.app
+  /tmp/eartolisten-build/dd-install/Build/Products/Debug-iphoneos/EarToListen.app
 ```
 
 `xcrun devicectl list devices` finds the UDID. `make ios` does all of the above, picking
@@ -41,8 +41,8 @@ nothing):
 ```sh
 xcodebuild -project EarToListen.xcodeproj -scheme EarToListen \
   -configuration Release -destination 'generic/platform=iOS' \
-  -skipPackagePluginValidation -derivedDataPath build/dd-release build
-du -sh build/dd-release/Build/Products/Release-iphoneos/EarToListen.app
+  -skipPackagePluginValidation -derivedDataPath /tmp/eartolisten-build/dd-release build
+du -sh /tmp/eartolisten-build/dd-release/Build/Products/Release-iphoneos/EarToListen.app
 ```
 
 **Dependencies are the size.** Almost the entire binary is third-party. Before
