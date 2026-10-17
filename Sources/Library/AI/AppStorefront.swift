@@ -4,8 +4,8 @@ import StoreKit
 /// Which App Store the app was installed from — the China storefront may only offer AI
 /// vendors licensed there, so everything that lists or calls a vendor asks this first.
 ///
-/// Release reads StoreKit's answer, cached from the last `refresh()`; before the first
-/// one lands, the device region stands in. Debug builds act as the storefront picked at
+/// Release reads StoreKit's answer, cached from the last `refresh()`. Until the first one
+/// lands, vendor gating fails closed (`restrictsVendors`). Debug builds act as the storefront picked at
 /// install time (`make ios STOREFRONT=CHN`), or a launch argument's. Nothing on screen
 /// changes it, in any build.
 enum AppStorefront {
@@ -25,10 +25,12 @@ enum AppStorefront {
         }
         #endif
         return UserDefaults.standard.string(forKey: lastKnownKey)
-            ?? (Locale.current.region?.identifier == "CN" ? chinaCode : nil)
     }
 
     static var isChina: Bool { countryCode == chinaCode }
+
+    /// China's vendor rules, also while the storefront is still unknown.
+    static var restrictsVendors: Bool { countryCode.map { $0 == chinaCode } ?? true }
 
     static func refresh() async {
         guard let code = await Storefront.current?.countryCode else { return }

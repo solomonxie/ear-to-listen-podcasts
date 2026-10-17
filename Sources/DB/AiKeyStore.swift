@@ -9,7 +9,7 @@ struct AiKeyStore {
 
     /// Only keys whose vendor this storefront offers — a hidden vendor's key stays saved
     /// but is neither listed nor called.
-    func all(inChina china: Bool = AppStorefront.isChina) throws -> [AiKey] {
+    func all(inChina china: Bool = AppStorefront.restrictsVendors) throws -> [AiKey] {
         try migrateLegacyKeyIfNeeded()
         return try dbQueue.read { db in try AiKey.order(Column("position")).fetchAll(db) }
             .filter { $0.vendor.isOffered(inChina: china) }
@@ -47,7 +47,7 @@ struct AiKeyStore {
     /// Swaps a key with its neighbor — order defines both sequential's first-try key
     /// and round-robin's cycle order.
     func move(id: String, direction: Int) throws {
-        let china = AppStorefront.isChina
+        let china = AppStorefront.restrictsVendors
         try dbQueue.write { db in
             var keys = try AiKey.order(Column("position")).fetchAll(db)
             // Neighbours as listed — a hidden vendor's key keeps its place at the end.

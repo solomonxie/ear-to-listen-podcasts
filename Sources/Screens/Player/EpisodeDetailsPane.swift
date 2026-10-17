@@ -16,8 +16,9 @@ struct EpisodeDetailsPane<Bookmarks: View>: View {
     @State private var topics: [Topic] = []
     @State private var playlistNames: [String] = []
     @State private var terms: [TermCount] = []
-    @State private var showingAddToPlaylist = false
-    @State private var showingEdit = false
+    // Snapshots, so a sheet stays on its episode when playback moves to the next.
+    @State private var addingToPlaylist: Track?
+    @State private var editing: Track?
     @State private var showsInfo = false
     @State private var isAddingTerm = false
     @State private var newTerm = ""
@@ -91,10 +92,10 @@ struct EpisodeDetailsPane<Bookmarks: View>: View {
         .padding(.horizontal)
         // The sheet posts nothing when it adds to a hand-made list, so the row reloads
         // on the way out rather than waiting for the next `libraryDidChange`.
-        .sheet(isPresented: $showingAddToPlaylist, onDismiss: { loadPlaylists() }) {
-            AddToPlaylistSheet(track: track)
+        .sheet(item: $addingToPlaylist, onDismiss: { loadPlaylists() }) {
+            AddToPlaylistSheet(track: $0)
         }
-        .sheet(isPresented: $showingEdit) { EpisodeEditView(track: track) }
+        .sheet(item: $editing) { EpisodeEditView(track: $0) }
         .alert("Add a term", isPresented: $isAddingTerm) {
             TextField("Name", text: $newTerm)
             Button("Add") {
@@ -136,7 +137,7 @@ struct EpisodeDetailsPane<Bookmarks: View>: View {
                 Text(facts).foregroundStyle(.secondary)
                 Text("·").foregroundStyle(.tertiary)
             }
-            Button { showingAddToPlaylist = true } label: {
+            Button { addingToPlaylist = track } label: {
                 Text(playlistLabel)
             }
             .buttonStyle(.plain)
@@ -223,7 +224,7 @@ struct EpisodeDetailsPane<Bookmarks: View>: View {
 
         if showsInfo {
             VStack(alignment: .leading, spacing: 4) {
-                Button { showingEdit = true } label: {
+                Button { editing = track } label: {
                     Label("Edit title, speaker and album", systemImage: "pencil")
                         .font(.subheadline)
                         .frame(maxWidth: .infinity, minHeight: DetailLayout.rowHeight, alignment: .leading)

@@ -24,7 +24,7 @@ enum FixedPlaylist: String, CaseIterable, Identifiable {
 
     /// What Home shows — YouTube's left out where YouTube doesn't reach.
     static var shown: [FixedPlaylist] {
-        AppStorefront.isChina ? allCases.filter { $0 != .youTube } : allCases
+        AppStorefront.restrictsVendors ? allCases.filter { $0 != .youTube } : allCases
     }
 
     var id: String { rawValue }

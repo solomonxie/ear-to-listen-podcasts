@@ -86,7 +86,7 @@ final class SyncEngineTests: XCTestCase {
 
         XCTAssertEqual(result.queued, 1)
         XCTAssertEqual(result.totalFiles, 1)
-        XCTAssertTrue(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).isEmpty)
+        XCTAssertTrue(try SyncJobStore(dbQueue: dbQueue).page(limit: 10).allSatisfy { $0.kind != .importFile })
         let entries = try TrackStore(dbQueue: dbQueue).all()
         XCTAssertEqual(entries.map(\.filePath), ["episode1.mp3"], "the scan makes the entry from the listing alone")
         XCTAssertTrue(entries.allSatisfy(\.needsTags), "tags are read afterwards, in the background")

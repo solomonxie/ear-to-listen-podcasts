@@ -26,7 +26,7 @@ enum AiVendor: String, Codable, CaseIterable {
 
     func isOffered(inChina china: Bool) -> Bool { !china || isChinaApproved }
 
-    var isOffered: Bool { isOffered(inChina: AppStorefront.isChina) }
+    var isOffered: Bool { isOffered(inChina: AppStorefront.restrictsVendors) }
 
     static var offered: [AiVendor] { allCases.filter(\.isOffered) }
 

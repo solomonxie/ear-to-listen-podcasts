@@ -17,8 +17,29 @@ final class DatabaseManager: @unchecked Sendable {
     private init() {
         try? FileManager.default.createDirectory(at: URL.applicationSupportDirectory, withIntermediateDirectories: true)
         Self.adoptLegacyDatabase()
-        dbQueue = try! DatabaseQueue(path: Self.databaseURL.path)
-        try! Migrations.migrator().migrate(dbQueue)
+        if let opened = try? Self.openMigrated() {
+            dbQueue = opened
+        } else {
+            // Kept aside, not deleted, and never a crash on every launch.
+            Self.moveAsideUnopenable()
+            dbQueue = try! Self.openMigrated()
+        }
+    }
+
+    private static func openMigrated() throws -> DatabaseQueue {
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        try Migrations.migrator().migrate(queue)
+        return queue
+    }
+
+    private static func moveAsideUnopenable() {
+        let stamp = Int(Date().timeIntervalSince1970)
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.moveItem(
+                at: URL(fileURLWithPath: databaseURL.path + suffix),
+                to: URL(fileURLWithPath: databaseURL.path + ".unopenable-\(stamp)" + suffix)
+            )
+        }
     }
 
     /// Takes over the database the app wrote under its old name, sidecars included — a

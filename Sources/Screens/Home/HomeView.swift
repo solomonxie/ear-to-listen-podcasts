@@ -283,7 +283,7 @@ struct HomeView: View {
     private var searchResults: some View {
         // A YouTube link pasted into search is a video to add, not words to look for.
         // Not on the China storefront, which YouTube doesn't reach.
-        if !AppStorefront.isChina, YouTubeVideo.id(from: query) != nil {
+        if !AppStorefront.restrictsVendors, YouTubeVideo.id(from: query) != nil {
             Button { addingYouTubeLink = YouTubeLink(link: query) } label: {
                 resultRow(symbol: "play.rectangle.fill", color: .red, title: String(localized: "Add YouTube video"), subtitle: query)
             }

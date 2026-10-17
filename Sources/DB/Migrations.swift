@@ -541,11 +541,12 @@ enum Migrations {
             // has actually hit. The rare episode genuinely named "Encore (2)" loses its
             // number the next time it's alone in its album — and renaming it back by hand
             // marks it edited, which puts it beyond this pass for good.
-            for var track in try Track.filter(sql: "metadataEditedAt IS NULL").fetchAll(db) {
-                let base = DuplicateTitles.base(of: track.title)
-                guard base != track.title else { continue }
-                track.numberedFrom = base
-                try track.update(db)
+            // Rows, never models: today's `Track` has columns this schema doesn't yet.
+            for row in try Row.fetchAll(db, sql: "SELECT id, title FROM tracks WHERE metadataEditedAt IS NULL") {
+                let id: String = row["id"], title: String = row["title"]
+                let base = DuplicateTitles.base(of: title)
+                guard base != title else { continue }
+                try db.execute(sql: "UPDATE tracks SET numberedFrom = ? WHERE id = ?", arguments: [base, id])
             }
         }
 
@@ -578,12 +579,21 @@ enum Migrations {
             )
 
             // Every episode already knows one place it lives.
-            for var track in try Track.fetchAll(db) {
-                track.fingerprint = FileFingerprint.of(track)
-                try track.update(db)
-                try TrackFile(primaryOf: track).insert(db)
-            }
-            try TrackMerge.foldDuplicates(in: db)
+            // Plain SQL for the same reason as v31. Folding the duplicates this exposes is
+            // left to `LibraryMaintenance`, which runs with foreign keys on.
+            try db.execute(sql: """
+                UPDATE tracks SET fingerprint = sizeBytes || '-' || (durationMs / 1000)
+                WHERE sizeBytes > 0 AND durationMs > 0
+                """)
+            try db.execute(sql: """
+                INSERT INTO trackFiles (id, trackID, providerID, filePath, sizeBytes, contentHash,
+                                        transcriptPath, remoteModifiedAt, isLost, addedAt)
+                SELECT upper(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(2))
+                             || '-' || hex(randomblob(2)) || '-' || hex(randomblob(6))),
+                       id, providerID, filePath, sizeBytes, contentHash,
+                       transcriptPath, remoteModifiedAt, isLost, strftime('%Y-%m-%d %H:%M:%f', 'now')
+                FROM tracks
+                """)
         }
 
         // Transcripts in more than one language beside an episode (`ep1.zh.vtt`,
